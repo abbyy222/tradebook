@@ -1,0 +1,81 @@
+"use strict";
+// src/app.ts
+// We separate app setup (app.ts) from server startup (server.ts).
+// Why? So we can import the app in tests without starting a real server.
+// This is a standard pattern in production Node.js codebases.
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.app = void 0;
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
+const helmet_1 = __importDefault(require("helmet"));
+const compression_1 = __importDefault(require("compression"));
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
+const env_1 = require("./config/env");
+const errorHandler_1 = require("./middleware/errorHandler");
+const requestLogger_1 = require("./middleware/requestLogger");
+// Route imports (we'll create these next)
+const auth_route_1 = require("./modules/auth/auth.route");
+const sales_route_1 = require("./modules/sales/sales.route");
+const expenses_route_1 = require("./modules/expenses/expenses.route");
+const debtors_route_1 = require("./modules/debtors/debtors.route");
+const stock_route_1 = require("./modules/stock/stock.route");
+const app = (0, express_1.default)();
+exports.app = app;
+// --- Security middleware ---
+// helmet sets 11 security headers automatically
+app.use((0, helmet_1.default)());
+// cors only allows requests from our frontend URL
+app.use((0, cors_1.default)({
+    origin: env_1.env.FRONTEND_URL,
+    credentials: true,
+}));
+// --- Performance middleware ---
+// compress all responses — critical for slow mobile networks
+app.use((0, compression_1.default)());
+// parse JSON bodies — limit size to prevent payload attacks
+app.use(express_1.default.json({ limit: '10kb' }));
+// --- Rate limiting ---
+// Global limiter: 100 requests per 15 minutes per IP
+// This protects against brute force and DDoS
+const isDevelopment = env_1.env.NODE_ENV === 'development';
+const globalLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    max: isDevelopment ? 1000 : 100,
+    message: { error: 'Too many requests, please try again later' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+app.use('/api', globalLimiter);
+// Stricter limiter for auth routes — prevent PIN brute force
+const authLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    max: isDevelopment ? 50 : 10,
+    message: { error: 'Too many login attempts, please try again later' },
+});
+// --- Logging ---
+app.use(requestLogger_1.requestLogger);
+// --- Health check ---
+// Always have this. Load balancers, Railway, and monitoring tools
+// ping this to know if your app is alive.
+app.get('/health', (_, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+// --- Routes — all versioned under /api/v1 ---
+// Versioning from day one means you can ship /api/v2 later
+// without breaking existing mobile clients still on v1
+app.use('/api/v1/auth', authLimiter, auth_route_1.authRouter);
+app.use('/api/v1/sales', sales_route_1.salesRouter);
+app.use('/api/v1/expenses', expenses_route_1.expensesRouter);
+app.use('/api/v1/debtors', debtors_route_1.debtorsRouter);
+app.use('/api/v1/stock', stock_route_1.stockRouter);
+// --- 404 handler ---
+// Express 5's path matcher no longer accepts bare "*".
+// A final middleware with no path still catches every unmatched request.
+app.use((_, res) => {
+    res.status(404).json({ error: 'Route not found' });
+});
+// --- Global error handler — MUST be last ---
+app.use(errorHandler_1.errorHandler);

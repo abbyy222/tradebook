@@ -1,0 +1,85 @@
+"use strict";
+// src/modules/debtors/debtors.service.ts
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.debtorsService = void 0;
+const debtors_repository_1 = require("./debtors.repository");
+const errorHandler_1 = require("../../middleware/errorHandler");
+const logger_1 = require("../../utils/logger");
+const toDebtorDTO = (debtor) => ({
+    ...debtor,
+    totalOwed: Number(debtor.totalOwed),
+    totalPaid: Number(debtor.totalPaid),
+    // balance is computed on the fly — always accurate,
+    // never out of sync with totalOwed and totalPaid
+    balance: Number(debtor.totalOwed) - Number(debtor.totalPaid),
+    dueDate: debtor.dueDate?.toISOString() ?? null,
+    createdAt: debtor.createdAt.toISOString(),
+    updatedAt: debtor.updatedAt.toISOString(),
+});
+exports.debtorsService = {
+    async createDebtor(traderId, input) {
+        const debtor = await debtors_repository_1.debtorsRepository.upsert(traderId, input);
+        return toDebtorDTO(debtor);
+    },
+    async recordPayment(debtorId, traderId, input) {
+        try {
+            const updatedDebtor = await debtors_repository_1.debtorsRepository.recordPayment(debtorId, traderId, input);
+            // Log every payment for audit trail
+            logger_1.logger.info({
+                event: 'payment_recorded',
+                traderId,
+                debtorId,
+                amount: input.amount,
+                newStatus: updatedDebtor.status,
+            });
+            return toDebtorDTO(updatedDebtor);
+        }
+        catch (err) {
+            // Parse the errors thrown inside the transaction
+            // and convert them to proper AppErrors with HTTP codes
+            if (err.message === 'DEBTOR_NOT_FOUND') {
+                throw new errorHandler_1.AppError('Debtor not found', 404, 'NOT_FOUND');
+            }
+            if (err.message?.startsWith('OVERPAYMENT:')) {
+                const remaining = err.message.split(':')[1];
+                throw new errorHandler_1.AppError(`Payment exceeds remaining balance of ₦${Number(remaining).toLocaleString()}`, 400, 'OVERPAYMENT');
+            }
+            throw err;
+        }
+    },
+    async listDebtors(traderId, query) {
+        const result = await debtors_repository_1.debtorsRepository.findMany(traderId, query);
+        return {
+            data: result.debtors.map(toDebtorDTO),
+            meta: {
+                nextCursor: result.nextCursor,
+                hasNextPage: result.hasNextPage,
+                pageSize: query.pageSize,
+            },
+            error: null,
+        };
+    },
+    async getPaymentHistory(debtorId, traderId) {
+        const payments = await debtors_repository_1.debtorsRepository.getPaymentHistory(debtorId, traderId);
+        if (!payments)
+            throw new errorHandler_1.AppError('Debtor not found', 404, 'NOT_FOUND');
+        return payments.map(p => ({
+            ...p,
+            amount: Number(p.amount),
+            paidAt: p.paidAt.toISOString(),
+            createdAt: p.createdAt.toISOString(),
+        }));
+    },
+    async getDebtor(id, traderId) {
+        const debtor = await debtors_repository_1.debtorsRepository.findById(id, traderId);
+        if (!debtor)
+            throw new errorHandler_1.AppError('Debtor not found', 404, 'NOT_FOUND');
+        return toDebtorDTO(debtor);
+    },
+    async deleteDebtor(id, traderId) {
+        const result = await debtors_repository_1.debtorsRepository.delete(id, traderId);
+        if (result.count === 0)
+            throw new errorHandler_1.AppError('Debtor not found', 404, 'NOT_FOUND');
+        return { deleted: true };
+    },
+};

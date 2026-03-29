@@ -1,0 +1,348 @@
+/* src/index.css */
+/* ─── FONTS ──────────────────────────────────────────────────────────────── */
+/* Fraunces: luxury variable serif with "wonky" optical axis — unforgettable  */
+/* Epilogue: geometric variable sans — sharp, modern, premium                 */
+/* Instrument Sans: warm humanist — readable, friendly body text              */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Epilogue:wght@400;600;700;800&family=Instrument+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;600&display=swap');
+@config "../tailwind.config.js";
+@import "tailwindcss";
+
+/* ─── BASE RESET ─────────────────────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html {
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    /* Deep earth — the colour of Lagos red soil at midnight */
+    background-color: #1a0f0a;
+    color: #f5ede0;
+    font-family: 'Instrument Sans', system-ui, sans-serif;
+    font-weight: 400;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Beautiful scrollbar — terracotta on dark */
+  ::-webkit-scrollbar { width: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: #c4622d;
+    border-radius: 99px;
+  }
+
+  /* Focus ring — gold, never invisible */
+  :focus-visible {
+    outline: 2px solid #e8a838;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Remove tap highlight on mobile */
+  * { -webkit-tap-highlight-color: transparent; }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+/* ─── COMPONENT LAYER ────────────────────────────────────────────────────── */
+@layer components {
+
+  /* ── SURFACE CARDS ──────────────────────────────────────────────────────── */
+  /* The three surface levels — like depth layers in the market */
+  .surface-0 { background-color: #1a0f0a; }  /* Ground — deep earth       */
+  .surface-1 { background-color: #231510; }  /* Platform — raised earth   */
+  .surface-2 { background-color: #2e1c14; }  /* Counter — vendor's table  */
+  .surface-3 { background-color: #3a2319; }  /* Elevated — showcase shelf */
+
+  /* ── CARD BASE ──────────────────────────────────────────────────────────── */
+  .card {
+    background-color: #231510;
+    border-radius: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .card-elevated {
+    background-color: #2e1c14;
+    border-radius: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* ── TYPOGRAPHY CLASSES ─────────────────────────────────────────────────── */
+  .font-display { font-family: 'Fraunces', Georgia, serif; }
+  .font-ui      { font-family: 'Epilogue', system-ui, sans-serif; }
+  .font-body    { font-family: 'Instrument Sans', system-ui, sans-serif; }
+  .font-mono    { font-family: 'JetBrains Mono', monospace; }
+
+  /* Fraunces variable axes: WONK=1 makes it more characterful */
+  .wonky { font-variation-settings: 'WONK' 1; }
+
+  /* ── TEXT COLOURS ───────────────────────────────────────────────────────── */
+  .text-primary   { color: #f5ede0; }  /* Warm cream white */
+  .text-secondary { color: rgba(245, 237, 224, 0.6); }
+  .text-muted     { color: rgba(245, 237, 224, 0.35); }
+  .text-terra     { color: #e08b5a; }
+  .text-gold      { color: #e8a838; }
+
+  /* ── GRADIENT TEXT ──────────────────────────────────────────────────────── */
+  .text-gradient-terra {
+    background: linear-gradient(135deg, #e8a838 0%, #c4622d 60%, #9e3a14 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-gradient-gold {
+    background: linear-gradient(90deg, #e8a838, #f5ce7e, #e8a838);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* ── BUTTONS ────────────────────────────────────────────────────────────── */
+  /* Primary: terracotta-to-gold gradient — the colour of Lagos sunsets */
+  .btn-primary {
+    @apply inline-flex items-center justify-center;
+    @apply font-ui font-bold text-base tracking-wide;
+    @apply rounded-xl px-6 py-4 min-h-[52px];
+    background: linear-gradient(135deg, #c04818 0%, #c4622d 50%, #e8a838 100%);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    box-shadow: 0 4px 24px rgba(196, 98, 45, 0.35);
+    letter-spacing: 0.01em;
+  }
+
+  .btn-primary::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 32px rgba(196, 98, 45, 0.5);
+  }
+
+  .btn-primary:active:not(:disabled) {
+    transform: scale(0.97);
+    box-shadow: 0 2px 12px rgba(196, 98, 45, 0.3);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Ghost button */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center;
+    @apply font-ui font-semibold text-sm;
+    @apply rounded-xl px-5 py-4 min-h-[52px];
+    background: transparent;
+    color: rgba(245, 237, 224, 0.6);
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  }
+
+  .btn-ghost:hover { border-color: rgba(232, 168, 56, 0.4); color: #e8a838; }
+  .btn-ghost:active { transform: scale(0.97); }
+
+  /* ── INPUTS ─────────────────────────────────────────────────────────────── */
+  .input-base {
+    @apply w-full rounded-xl px-5 py-4 text-base;
+    background: #2e1c14;
+    border: 1.5px solid rgba(255, 255, 255, 0.08);
+    color: #f5ede0;
+    font-family: 'Instrument Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    -webkit-appearance: none;
+  }
+
+  .input-base::placeholder { color: rgba(245, 237, 224, 0.25); }
+
+  .input-base:focus {
+    border-color: #c4622d;
+    box-shadow: 0 0 0 3px rgba(196, 98, 45, 0.18);
+  }
+
+  .input-base.error {
+    border-color: #e24b4a;
+  }
+
+  .input-base.error:focus {
+    box-shadow: 0 0 0 3px rgba(226, 75, 74, 0.15);
+  }
+
+  /* ── LABELS ─────────────────────────────────────────────────────────────── */
+  .label-base {
+    @apply font-ui font-bold text-xs tracking-widest uppercase;
+    color: rgba(245, 237, 224, 0.4);
+    letter-spacing: 0.1em;
+  }
+
+  /* ── SKELETON ────────────────────────────────────────────────────────────── */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgba(255,255,255,0.03) 25%,
+      rgba(255,255,255,0.07) 50%,
+      rgba(255,255,255,0.03) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s infinite;
+    border-radius: 8px;
+  }
+
+  /* ── DECORATIVE BORDER ───────────────────────────────────────────────────── */
+  /* Thin top accent — terracotta or gold glow on card top edge */
+  .accent-top {
+    position: relative;
+  }
+  .accent-top::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 20%; right: 20%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(232, 168, 56, 0.5), transparent);
+    border-radius: 99px;
+    pointer-events: none;
+  }
+
+  /* ── PATTERN OVERLAY ─────────────────────────────────────────────────────── */
+  /* Subtle kente-inspired dot grid — doesn't overwhelm, just adds texture */
+  .pattern-dots {
+    background-image: radial-gradient(rgba(232,168,56,0.07) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  /* ── SECTION DIVIDER ─────────────────────────────────────────────────────── */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent);
+  }
+
+  /* ── BADGE ───────────────────────────────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center font-ui font-bold text-xs tracking-wide;
+    @apply rounded-full px-3 py-1;
+    letter-spacing: 0.05em;
+  }
+
+  .badge-terra {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-family: 'Epilogue', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    background: rgba(196, 98, 45, 0.15);
+    color: #e08b5a;
+    border: 1px solid rgba(196, 98, 45, 0.25);
+  }
+
+  .badge-gold {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-family: 'Epilogue', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    background: rgba(232, 168, 56, 0.12);
+    color: #f0bc5a;
+    border: 1px solid rgba(232, 168, 56, 0.2);
+  }
+
+  .badge-danger {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-family: 'Epilogue', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    background: rgba(226, 75, 74, 0.12);
+    color: #f87171;
+    border: 1px solid rgba(226, 75, 74, 0.2);
+  }
+
+  .badge-success {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-family: 'Epilogue', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    background: rgba(29, 158, 117, 0.12);
+    color: #4ecca3;
+    border: 1px solid rgba(29, 158, 117, 0.2);
+  }
+
+  /* ── NAIRA AMOUNT ─────────────────────────────────────────────────────────── */
+  /* Used everywhere money is shown — Fraunces makes numbers beautiful */
+  .amount {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-variation-settings: 'WONK' 1;
+    letter-spacing: -0.02em;
+    color: #f5ede0;
+  }
+
+  .amount-large {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-variation-settings: 'WONK' 1;
+    letter-spacing: -0.02em;
+    color: #f5ede0;
+    font-size: 2.2rem;
+    line-height: 1;
+  }
+
+  /* ── SCROLL REVEAL ────────────────────────────────────────────────────────── */
+  /* Applied via JS IntersectionObserver for page sections */
+  .reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.5s ease, transform 0.5s ease; }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── UTILITY LAYER ──────────────────────────────────────────────────────── */
+@layer utilities {
+  /* Accessibility */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0,0,0,0); border: 0;
+  }
+
+  /* Safe area helpers */
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+
+  /* Backdrop blur variants */
+  .backdrop-earth { backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); }
+}
