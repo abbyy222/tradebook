@@ -1,0 +1,11 @@
+[build]
+command = "npm install && npm run build --workspace=apps/frontend"
+publish = "apps/frontend/dist"
+
+[build.environment]
+NODE_VERSION = "22"
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200
