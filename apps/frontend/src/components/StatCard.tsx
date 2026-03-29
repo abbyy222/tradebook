@@ -1,12 +1,4 @@
-// src/components/StatCard.tsx
-// The four hero numbers on the dashboard.
-// Uses Fraunces (with WONK optical axis) for the number â€” it makes â‚¦84,500
-// look like a luxury item price tag rather than a spreadsheet cell.
-//
-// The "accent" prop changes the top glow colour â€” emerald for positive,
-// gold for totals, red for warnings.
-
-interface StatCardProps {
+﻿interface StatCardProps {
   label: string
   value: string
   subtext?: string
@@ -70,7 +62,6 @@ export const StatCard = ({
         el.style.transform = 'scale(1)'
       } : undefined}
     >
-      {/* Top accent glow line */}
       <div
         className="absolute top-0 left-6 right-6 rounded-full pointer-events-none"
         style={{
@@ -79,7 +70,6 @@ export const StatCard = ({
         }}
       />
 
-      {/* Label */}
       <p
         className="font-ui font-bold uppercase tracking-widest"
         style={{ fontSize: '0.65rem', color: 'rgba(245,237,224,0.4)', letterSpacing: '0.1em' }}
@@ -87,33 +77,35 @@ export const StatCard = ({
         {label}
       </p>
 
-      {/* Value â€” the star of the show */}
       {isLoading ? (
         <div className="skeleton h-8 w-3/4 rounded-lg" />
       ) : (
         <p
-          className="font-display font-bold leading-none"
+          className="font-display font-bold leading-none min-w-0"
           style={{
-            fontSize: '1.75rem',
+            // Keep dashboard figures compact enough to stay inside mobile cards.
+            fontSize: 'clamp(0.98rem, 4.15vw, 1.45rem)',
             letterSpacing: '-0.02em',
             color: '#f5ede0',
             fontVariationSettings: "'WONK' 1, 'opsz' 30",
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}
         >
           {value}
         </p>
       )}
 
-      {/* Subtext / trend */}
       {!isLoading && (trend || subtext) && (
-        <div className="flex items-center gap-1.5 mt-0.5">
+        <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
           {trend && (
             <>
               <span style={{ color: trend.positive ? '#4ecca3' : '#f87171', fontSize: '0.75rem' }}>
-                {trend.positive ? 'â†‘' : 'â†“'}
+                {trend.positive ? '↑' : '↓'}
               </span>
               <span
-                className="font-ui font-semibold"
+                className="font-ui font-semibold truncate"
                 style={{
                   fontSize: '0.7rem',
                   color: trend.positive ? '#4ecca3' : '#f87171',
@@ -125,7 +117,7 @@ export const StatCard = ({
           )}
           {subtext && !trend && (
             <span
-              className="font-body"
+              className="font-body truncate"
               style={{ fontSize: '0.72rem', color: 'rgba(245,237,224,0.35)' }}
             >
               {subtext}
