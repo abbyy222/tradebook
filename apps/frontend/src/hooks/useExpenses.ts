@@ -1,4 +1,4 @@
-﻿import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { v4 as uuidv4 } from 'uuid'
 import { db, type LocalExpense } from '@/db'
 import { expensesApi } from '@/api/expenses.api'

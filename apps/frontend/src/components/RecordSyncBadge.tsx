@@ -1,4 +1,4 @@
-﻿import type { CSSProperties } from 'react'
+import type { CSSProperties } from 'react'
 
 type SyncStatus = 'PENDING' | 'SYNCED' | 'FAILED'
 
@@ -33,10 +33,10 @@ export const RecordSyncBadge = ({
   syncStatus,
   onRetry,
 }: {
-  syncStatus: SyncStatus
+  syncStatus?: SyncStatus
   onRetry?: () => void
 }) => {
-  const theme = THEMES[syncStatus]
+  const theme = THEMES[syncStatus ?? 'SYNCED']
 
   return (
     <div className="flex items-center gap-2 flex-wrap justify-end">

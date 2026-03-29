@@ -1,4 +1,4 @@
-﻿import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { v4 as uuidv4 } from 'uuid'
 import { db, type LocalDebtor } from '@/db'
 import { debtorsApi } from '@/api/debtors.api'
@@ -154,17 +154,17 @@ const mergeServerAndLocalDebtors = async (
     .filter((debtor) => locallyMutatedIds.has(debtor.id))
     .toArray()
 
-  const merged = new Map<string, DebtorDTO>()
+  const merged = new Map<string, DebtorDTO & { syncStatus?: 'PENDING' | 'SYNCED' | 'FAILED' }>()
 
   for (const debtor of serverDebtors) {
     if (matchesDebtorFilters(debtor, filters)) {
-      merged.set(debtor.id, debtor)
+      merged.set(debtor.id, { ...debtor, syncStatus: 'SYNCED' })
     }
   }
 
   for (const debtor of [...localUnsynced, ...locallyMutatedDebtors]) {
     if (matchesDebtorFilters(debtor, filters)) {
-      merged.set(debtor.id, debtor)
+      merged.set(debtor.id, { ...debtor, syncStatus: 'SYNCED' })
     }
   }
 

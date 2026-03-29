@@ -1,4 +1,4 @@
-﻿import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { v4 as uuidv4 } from 'uuid'
 import { db, type LocalStockItem } from '@/db'
 import { stockApi } from '@/api/stock.api'
@@ -18,6 +18,54 @@ export const stockKeys = {
 
 const STOCK_PAGE_SIZE = 20
 export type StockAdjustmentReason = 'restock' | 'sale_adjustment' | 'damage' | 'correction'
+
+type StockListFilters = { lowStockOnly?: boolean; search?: string }
+
+type StockListQueryData = {
+  pages: CursorPaginatedResponse<StockItemDTO>[]
+  pageParams: Array<string | undefined>
+}
+
+const upsertStockItemInQueryData = (
+  current: StockListQueryData | undefined,
+  item: StockItemDTO,
+  filters: StockListFilters
+) => {
+  if (!current || !matchesStockFilters(item, filters) || current.pages.length === 0) {
+    return current
+  }
+
+  const [firstPage, ...restPages] = current.pages
+  const nextFirstPage = {
+    ...firstPage,
+    data: [item, ...firstPage.data.filter((existing) => existing.id !== item.id)]
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .slice(0, STOCK_PAGE_SIZE),
+  }
+
+  return {
+    ...current,
+    pages: [nextFirstPage, ...restPages],
+  }
+}
+
+const updateCachedStockLists = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  item: StockItemDTO
+) => {
+  const matchingQueries = queryClient.getQueriesData<StockListQueryData>({
+    queryKey: stockKeys.lists(),
+  })
+
+  for (const [queryKey, current] of matchingQueries) {
+    const filters = (Array.isArray(queryKey) ? queryKey[queryKey.length - 1] : {}) as StockListFilters
+    const next = upsertStockItemInQueryData(current, item, filters)
+
+    if (next && next !== current) {
+      queryClient.setQueryData(queryKey, next)
+    }
+  }
+}
 
 const matchesStockFilters = (
   item: Pick<StockItemDTO, 'itemName' | 'quantity' | 'lowStockThreshold'>,
@@ -83,13 +131,13 @@ const mergeServerAndLocalStockItems = async (
 
   for (const item of serverItems) {
     if (matchesStockFilters(item, filters)) {
-      merged.set(item.id, item)
+      merged.set(item.id, { ...item, syncStatus: 'SYNCED' })
     }
   }
 
   for (const item of localUnsynced) {
     if (matchesStockFilters(item, filters)) {
-      merged.set(item.id, item)
+      merged.set(item.id, { ...item, syncStatus: 'SYNCED' })
     }
   }
 
@@ -193,9 +241,10 @@ export const useStockList = (filters: { lowStockOnly?: boolean; search?: string 
       const cursor = pageParam as string | undefined
 
       if (navigator.onLine) {
+        void syncPendingStockItems()
+        void syncPendingStockAdjustments()
+
         try {
-          await syncPendingStockItems()
-          await syncPendingStockAdjustments()
           const serverPage = await stockApi.list({
             cursor,
             pageSize: STOCK_PAGE_SIZE,
@@ -253,9 +302,12 @@ export const useCreateStockItem = () => {
       return {
         ...item,
         updatedAt: timestamp,
+        syncStatus: 'PENDING' as const,
       }
     },
-    onSuccess: () => {
+    onSuccess: (createdItem) => {
+      // Show the new stock row immediately from local Dexie state instead of waiting on a refetch.
+      updateCachedStockLists(queryClient, createdItem)
       queryClient.invalidateQueries({ queryKey: stockKeys.all })
       queryClient.invalidateQueries({ queryKey: dashboardKeys.overview() })
     },

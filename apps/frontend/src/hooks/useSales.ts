@@ -1,4 +1,4 @@
-﻿// src/hooks/useSales.ts
+// src/hooks/useSales.ts
 // Custom hooks are the public API of our data layer.
 // Components import these hooks â€” they never import api or db directly.
 // This means we can completely change the data layer without
@@ -88,13 +88,13 @@ const mergeServerAndLocalSales = async (
 
   for (const sale of serverSales) {
     if (matchesSaleFilters(sale, filters)) {
-      merged.set(sale.id, sale)
+      merged.set(sale.id, { ...sale, syncStatus: 'SYNCED' })
     }
   }
 
   for (const sale of localUnsynced) {
     if (matchesSaleFilters(sale, filters)) {
-      merged.set(sale.id, sale)
+      merged.set(sale.id, { ...sale, syncStatus: 'SYNCED' })
     }
   }
 
