@@ -1,8 +1,8 @@
 // src/hooks/useSales.ts
 // Custom hooks are the public API of our data layer.
-// Components import these hooks â€” they never import api or db directly.
+// Components import these hooks ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â they never import api or db directly.
 // This means we can completely change the data layer without
-// touching a single component â€” just update the hooks.
+// touching a single component ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â just update the hooks.
 
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { v4 as uuidv4 } from 'uuid'
@@ -10,7 +10,7 @@ import { db, type LocalSale } from '@/db'
 import { salesApi } from '@/api/sales.api'
 import type { CreateSaleDTO, CursorPaginatedResponse, SaleDTO } from '@tradebook/shared-types'
 
-// Query keys â€” centralised as constants.
+// Query keys ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â centralised as constants.
 // A query key is how TanStack Query identifies a piece of cached data.
 // Using string literals everywhere leads to typos and cache misses.
 // Using constants means you can refactor without fear.
@@ -23,6 +23,58 @@ export const salesKeys = {
 }
 
 const SALES_PAGE_SIZE = 20
+
+type SalesListFilters = {
+  from?: string
+  to?: string
+  paymentType?: 'CASH' | 'TRANSFER' | 'DEBT'
+}
+
+type SalesListQueryData = {
+  pages: CursorPaginatedResponse<SaleDTO>[]
+  pageParams: Array<string | undefined>
+}
+
+const upsertSaleInQueryData = (
+  current: SalesListQueryData | undefined,
+  sale: SaleDTO,
+  filters: SalesListFilters
+) => {
+  if (!current || !matchesSaleFilters(sale, filters) || current.pages.length === 0) {
+    return current
+  }
+
+  const [firstPage, ...restPages] = current.pages
+  const nextFirstPage = {
+    ...firstPage,
+    data: [sale, ...firstPage.data.filter((existing) => existing.id !== sale.id)]
+      .sort((a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime())
+      .slice(0, SALES_PAGE_SIZE),
+  }
+
+  return {
+    ...current,
+    pages: [nextFirstPage, ...restPages],
+  }
+}
+
+const updateCachedSalesLists = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  sale: SaleDTO
+) => {
+  const matchingQueries = queryClient.getQueriesData<SalesListQueryData>({
+    queryKey: salesKeys.lists(),
+  })
+
+  for (const [queryKey, current] of matchingQueries) {
+    const filters = (Array.isArray(queryKey) ? queryKey[queryKey.length - 1] : {}) as SalesListFilters
+    const next = upsertSaleInQueryData(current, sale, filters)
+
+    if (next && next !== current) {
+      queryClient.setQueryData(queryKey, next)
+    }
+  }
+}
 
 const matchesSaleFilters = (
   sale: Pick<SaleDTO, 'soldAt' | 'paymentType'>,
@@ -214,8 +266,8 @@ export const useSalesList = (filters: {
 // It implements the optimistic update pattern:
 // 1. Write to Dexie immediately (UI updates instantly)
 // 2. Try to sync to backend
-// 3. If backend succeeds â€” all good
-// 4. If offline â€” stays PENDING in Dexie, syncs later
+// 3. If backend succeeds ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â all good
+// 4. If offline ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â stays PENDING in Dexie, syncs later
 //
 // The trader never waits for network. Record a sale in 1 second,
 // whether online or on an underground market with no signal.
@@ -224,16 +276,17 @@ export const useCreateSale = () => {
 
   return useMutation({
     mutationFn: async (input: Omit<CreateSaleDTO, 'id'>) => {
-      // Generate UUID on the CLIENT â€” this is the offline-first key.
+      // Generate UUID on the CLIENT ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â this is the offline-first key.
       // The ID exists before the server ever sees this record.
       const id = uuidv4()
-      const sale = { ...input, id }
+      const createdAt = new Date().toISOString()
+      const sale = { ...input, id, createdAt }
 
       // Step 1: Write to local Dexie immediately
       await db.sales.add({
         ...sale,
         syncStatus: 'PENDING',
-        createdAt: new Date().toISOString(),
+        createdAt,
       })
 
       // Step 2: Try to sync to backend if online
@@ -246,12 +299,15 @@ export const useCreateSale = () => {
           })
       }
 
-      return sale
+      return {
+        ...sale,
+        syncStatus: 'PENDING' as const,
+      }
     },
 
-    onSuccess: () => {
-      // Invalidate the dashboard and list caches so they refetch
-      // fresh data reflecting the new sale
+    onSuccess: (createdSale) => {
+      // Show the new sale immediately from local Dexie state instead of waiting on network-driven list refresh.
+      updateCachedSalesLists(queryClient, createdSale)
       queryClient.invalidateQueries({ queryKey: salesKeys.dashboard() })
       queryClient.invalidateQueries({ queryKey: salesKeys.lists() })
     },
