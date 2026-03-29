@@ -1,13 +1,16 @@
-
-{
-  "name": "tradebook",
-  "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
-  "scripts": {
-    "dev:backend": "npm run dev --workspace=apps/backend",
-    "dev:frontend": "npm run dev --workspace=apps/frontend"
-  }
+﻿{
+    "name":  "tradebook",
+    "private":  true,
+    "workspaces":  [
+                       "apps/*",
+                       "packages/*"
+                   ],
+    "scripts":  {
+                    "dev:backend":  "npm run dev --workspace=apps/backend",
+                    "dev:frontend":  "npm run dev --workspace=apps/frontend",
+                    "build:backend":  "npm run build --workspace=apps/backend",
+                    "start:backend":  "npm run start --workspace=apps/backend",
+                    "prisma:generate:backend":  "npx prisma generate --schema apps/backend/prisma/schema.prisma",
+                    "migrate:deploy:backend":  "cd apps/backend \u0026\u0026 npx prisma migrate deploy"
+                }
 }
