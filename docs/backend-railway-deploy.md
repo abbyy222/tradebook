@@ -1,4 +1,4 @@
-﻿# Backend Deployment on Railway
+# Backend Deployment on Railway
 
 This repo is an npm-workspaces monorepo. Deploy the backend service from the repo root, not from `apps/backend` directly.
 
