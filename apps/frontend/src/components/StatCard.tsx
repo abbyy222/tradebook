@@ -1,9 +1,9 @@
 // src/components/StatCard.tsx
 // The four hero numbers on the dashboard.
-// Uses Fraunces (with WONK optical axis) for the number — it makes ₦84,500
+// Uses Fraunces (with WONK optical axis) for the number â€” it makes â‚¦84,500
 // look like a luxury item price tag rather than a spreadsheet cell.
 //
-// The "accent" prop changes the top glow colour — emerald for positive,
+// The "accent" prop changes the top glow colour â€” emerald for positive,
 // gold for totals, red for warnings.
 
 interface StatCardProps {
@@ -54,7 +54,7 @@ export const StatCard = ({
     <div
       role={onClick ? 'button' : undefined}
       onClick={onClick}
-      className="relative overflow-hidden rounded-2xl p-5 flex flex-col gap-2"
+      className="relative overflow-hidden rounded-2xl p-5 flex flex-col gap-2 min-w-0"
       style={{
         background: styles.bg,
         border: `1px solid ${styles.border}`,
@@ -87,7 +87,7 @@ export const StatCard = ({
         {label}
       </p>
 
-      {/* Value — the star of the show */}
+      {/* Value â€” the star of the show */}
       {isLoading ? (
         <div className="skeleton h-8 w-3/4 rounded-lg" />
       ) : (
@@ -110,7 +110,7 @@ export const StatCard = ({
           {trend && (
             <>
               <span style={{ color: trend.positive ? '#4ecca3' : '#f87171', fontSize: '0.75rem' }}>
-                {trend.positive ? '↑' : '↓'}
+                {trend.positive ? 'â†‘' : 'â†“'}
               </span>
               <span
                 className="font-ui font-semibold"
