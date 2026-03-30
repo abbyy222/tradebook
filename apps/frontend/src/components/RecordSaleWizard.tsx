@@ -127,7 +127,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
         <div className="rounded-full mx-auto mb-5" style={{ width: 36, height: 4, background: 'rgba(255,255,255,0.15)' }} />
         <div className="flex items-center justify-between mb-4">
           <p className="font-ui font-bold uppercase text-xs tracking-widest" style={{ color: 'rgba(245,237,224,0.35)' }}>Step {stepIndex + 1} of {STEPS.length} - {STEP_LABELS[stepIndex]}</p>
-          <button onClick={onClose} className="rounded-full flex items-center justify-center transition-opacity duration-150 hover:opacity-60" style={{ width: 30, height: 30, background: 'rgba(255,255,255,0.07)', color: 'rgba(245,237,224,0.5)', fontSize: '1rem' }}>×</button>
+          <button onClick={onClose} className="rounded-full flex items-center justify-center transition-opacity duration-150 hover:opacity-60" style={{ width: 30, height: 30, background: 'rgba(255,255,255,0.07)', color: 'rgba(245,237,224,0.5)', fontSize: '1rem' }}>Ã—</button>
         </div>
 
         <ProgressBar current={stepIndex} />
