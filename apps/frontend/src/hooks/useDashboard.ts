@@ -23,20 +23,23 @@ type DashboardOverview = {
 }
 
 const DASHBOARD_PREVIEW_LIMIT = 4
+const LAGOS_OFFSET_MS = 60 * 60 * 1000
 
 const startOfToday = () => {
   const now = new Date()
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const lagosNow = new Date(now.getTime() + LAGOS_OFFSET_MS)
+  lagosNow.setUTCHours(0, 0, 0, 0)
+  return new Date(lagosNow.getTime() - LAGOS_OFFSET_MS)
 }
 
 const startOfWeek = () => {
   const now = new Date()
-  const day = now.getDay()
+  const lagosNow = new Date(now.getTime() + LAGOS_OFFSET_MS)
+  const day = lagosNow.getUTCDay()
   const offset = day === 0 ? 6 : day - 1
-  const monday = new Date(now)
-  monday.setDate(now.getDate() - offset)
-  monday.setHours(0, 0, 0, 0)
-  return monday
+  lagosNow.setUTCDate(lagosNow.getUTCDate() - offset)
+  lagosNow.setUTCHours(0, 0, 0, 0)
+  return new Date(lagosNow.getTime() - LAGOS_OFFSET_MS)
 }
 
 const buildLocalDashboardStats = async (): Promise<DashboardStats> => {

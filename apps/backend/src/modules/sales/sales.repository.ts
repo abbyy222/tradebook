@@ -1,15 +1,32 @@
 // src/modules/sales/sales.repository.ts
 // This file is the ONLY place in the entire codebase that writes SQL
 // (via Prisma). Every query here is deliberately optimised.
-// Read every comment â€” each one explains a scale decision.
+// Read every comment Ã¢â‚¬â€ each one explains a scale decision.
 
 import { CreateSaleInput, ListSalesQuery } from './sales.schema'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../prisma/client'
 
+const LAGOS_OFFSET_MS = 60 * 60 * 1000
+
+const getStartOfTodayInLagos = (now: Date) => {
+  const lagosNow = new Date(now.getTime() + LAGOS_OFFSET_MS)
+  lagosNow.setUTCHours(0, 0, 0, 0)
+  return new Date(lagosNow.getTime() - LAGOS_OFFSET_MS)
+}
+
+const getStartOfWeekInLagos = (now: Date) => {
+  const lagosNow = new Date(now.getTime() + LAGOS_OFFSET_MS)
+  const day = lagosNow.getUTCDay()
+  const offset = day === 0 ? 6 : day - 1
+  lagosNow.setUTCDate(lagosNow.getUTCDate() - offset)
+  lagosNow.setUTCHours(0, 0, 0, 0)
+  return new Date(lagosNow.getTime() - LAGOS_OFFSET_MS)
+}
+
 // --- Field projection ---
 // We define EXACTLY which fields to return from the DB.
-// Never use findMany() without select â€” it returns every column
+// Never use findMany() without select Ã¢â‚¬â€ it returns every column
 // including ones you don't need. At scale, pulling unnecessary
 // columns wastes DB memory, network bandwidth, and serialisation time.
 // This object gets reused across all queries for consistency.
@@ -22,8 +39,8 @@ const saleSelect = {
   syncStatus: true,
   soldAt: true,
   createdAt: true,
-  // We do NOT select traderId â€” the caller already knows their own ID.
-  // We do NOT select the full debtor object â€” use a separate endpoint
+  // We do NOT select traderId Ã¢â‚¬â€ the caller already knows their own ID.
+  // We do NOT select the full debtor object Ã¢â‚¬â€ use a separate endpoint
   // if you need debtor details. Keep list queries lean.
 } satisfies Prisma.SaleSelect
 
@@ -31,25 +48,25 @@ export const salesRepository = {
 
   // --- Upsert (the sync operation) ---
   // upsert = "insert if not exists, update if exists"
-  // This is idempotent â€” calling it 10 times with the same ID
+  // This is idempotent Ã¢â‚¬â€ calling it 10 times with the same ID
   // produces the same result as calling it once.
   // Critical for offline sync where retries are common.
   async upsert(traderId: string, data: CreateSaleInput) {
     return prisma.sale.upsert({
       where: { id: data.id },
-      // If the record doesn't exist yet â€” create it fully
+      // If the record doesn't exist yet Ã¢â‚¬â€ create it fully
       create: {
         id: data.id,
         traderId,
         itemName: data.itemName,
-        // Prisma's Decimal type ensures exact arithmetic â€” no float errors
+        // Prisma's Decimal type ensures exact arithmetic Ã¢â‚¬â€ no float errors
         amount: new Prisma.Decimal(data.amount),
         paymentType: data.paymentType,
         debtorId: data.debtorId ?? null,
-        syncStatus: 'SYNCED',  // it's on the server now â€” mark it synced
+        syncStatus: 'SYNCED',  // it's on the server now Ã¢â‚¬â€ mark it synced
         soldAt: new Date(data.soldAt),
       },
-      // If it already exists â€” update only the sync status
+      // If it already exists Ã¢â‚¬â€ update only the sync status
       // We don't overwrite item name or amount on re-sync
       // because the server version is considered authoritative
       update: {
@@ -92,7 +109,7 @@ export const salesRepository = {
   // This is the most important query in the system.
   // It uses the compound index (trader_id + sold_at) we defined in the schema.
   // Postgres can answer this query by jumping directly to the right
-  // position in the index â€” no scanning, no skipping, just fast reads.
+  // position in the index Ã¢â‚¬â€ no scanning, no skipping, just fast reads.
   async findMany(traderId: string, query: ListSalesQuery) {
     const { cursor, pageSize, from, to, paymentType } = query
 
@@ -100,11 +117,11 @@ export const salesRepository = {
     // Only add conditions that are actually provided.
     // Unnecessary WHERE conditions force Postgres to do extra work.
     const where: Prisma.SaleWhereInput = {
-      traderId, // always filter by trader â€” never return another trader's data
+      traderId, // always filter by trader Ã¢â‚¬â€ never return another trader's data
 
       // Cursor: if provided, only return records OLDER than the cursor.
       // soldAt less than cursor = the next page going backwards in time.
-      // This is how the phone "loads more" â€” it sends the oldest
+      // This is how the phone "loads more" Ã¢â‚¬â€ it sends the oldest
       // soldAt it already has, and we return the next batch before it.
       ...(cursor && {
         soldAt: { lt: new Date(cursor) },
@@ -154,24 +171,18 @@ export const salesRepository = {
   // --- Dashboard aggregates ---
   // The dashboard shows: today's sales total, this week's total.
   // We use Prisma's aggregate() instead of fetching all records and
-  // summing in JavaScript. Let the DATABASE do the math â€”
+  // summing in JavaScript. Let the DATABASE do the math Ã¢â‚¬â€
   // it's orders of magnitude faster on large datasets.
   async getDashboardStats(traderId: string) {
     const now = new Date()
-
-    // Start of today in local time
-    const todayStart = new Date(now)
-    todayStart.setHours(0, 0, 0, 0)
-
-    // Start of this week (Monday)
-    const weekStart = new Date(now)
-    weekStart.setDate(now.getDate() - now.getDay() + 1)
-    weekStart.setHours(0, 0, 0, 0)
+    // Dashboard buckets follow the trader's business timezone in Lagos, not the Railway server timezone.
+    const todayStart = getStartOfTodayInLagos(now)
+    const weekStart = getStartOfWeekInLagos(now)
 
     // Run both aggregates in PARALLEL with Promise.all.
     // Sequential: 200ms + 200ms = 400ms total.
     // Parallel:   max(200ms, 200ms) = 200ms total.
-    // This pattern â€” parallelising independent async operations â€”
+    // This pattern Ã¢â‚¬â€ parallelising independent async operations Ã¢â‚¬â€
     // is one of the most impactful performance wins in Node.js.
     const [todayStats, weekStats, totalStats] = await Promise.all([
       prisma.sale.aggregate({
@@ -229,7 +240,7 @@ export const salesRepository = {
 
   // --- Delete ---
   async delete(id: string, traderId: string) {
-    // Same security pattern â€” include traderId in the where clause
+    // Same security pattern Ã¢â‚¬â€ include traderId in the where clause
     return prisma.sale.deleteMany({
       where: { id, traderId },
     })
