@@ -1,14 +1,17 @@
 "use strict";
-// src/modules/expenses/expenses.service.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.expensesService = void 0;
 const expenses_repository_1 = require("./expenses.repository");
 const errorHandler_1 = require("../../middleware/errorHandler");
 const logger_1 = require("../../utils/logger");
+const toOptionalIso = (value) => (value ? value.toISOString() : undefined);
 const toExpenseDTO = (expense) => ({
     ...expense,
     amount: Number(expense.amount),
     spentAt: expense.spentAt.toISOString(),
+    startDate: toOptionalIso(expense.startDate),
+    endDate: toOptionalIso(expense.endDate),
+    nextDueDate: toOptionalIso(expense.nextDueDate),
     createdAt: expense.createdAt.toISOString(),
 });
 exports.expensesService = {
@@ -17,11 +20,7 @@ exports.expensesService = {
         return toExpenseDTO(expense);
     },
     async syncBatch(traderId, input) {
-        logger_1.logger.info({
-            event: 'bulk_sync_expenses',
-            traderId,
-            count: input.expenses.length,
-        });
+        logger_1.logger.info({ event: 'bulk_sync_expenses', traderId, count: input.expenses.length });
         const synced = await expenses_repository_1.expensesRepository.bulkUpsert(traderId, input.expenses);
         return { synced: synced.length, expenses: synced.map(toExpenseDTO) };
     },
@@ -37,10 +36,6 @@ exports.expensesService = {
             error: null,
         };
     },
-    // --- Category breakdown for insights ---
-    // We also calculate the percentage each category represents
-    // of total spending. The frontend can use this to draw a
-    // simple bar chart without doing any maths itself.
     async getCategoryBreakdown(traderId, from, to) {
         const breakdown = await expenses_repository_1.expensesRepository.getCategoryBreakdown(traderId, from, to);
         const grandTotal = breakdown.reduce((sum, row) => sum + Number(row._sum.amount ?? 0), 0);
@@ -48,7 +43,6 @@ exports.expensesService = {
             category: row.category,
             total: Number(row._sum.amount ?? 0),
             count: row._count.id,
-            // percentage rounded to 1 decimal place
             percentage: grandTotal > 0
                 ? Math.round((Number(row._sum.amount ?? 0) / grandTotal) * 1000) / 10
                 : 0,

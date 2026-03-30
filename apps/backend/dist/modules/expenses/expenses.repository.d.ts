@@ -7,8 +7,14 @@ export declare const expensesRepository: {
         amount: Prisma.Decimal;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         description: string;
-        category: string;
+        category: import(".prisma/client").$Enums.ExpenseCategory;
+        expenseType: import(".prisma/client").$Enums.ExpenseType;
+        frequency: import(".prisma/client").$Enums.ExpenseFrequency | null;
+        note: string | null;
         spentAt: Date;
+        startDate: Date | null;
+        endDate: Date | null;
+        nextDueDate: Date | null;
     }>;
     bulkUpsert(traderId: string, expenses: CreateExpenseInput[]): Promise<{
         id: string;
@@ -16,8 +22,14 @@ export declare const expensesRepository: {
         amount: Prisma.Decimal;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         description: string;
-        category: string;
+        category: import(".prisma/client").$Enums.ExpenseCategory;
+        expenseType: import(".prisma/client").$Enums.ExpenseType;
+        frequency: import(".prisma/client").$Enums.ExpenseFrequency | null;
+        note: string | null;
         spentAt: Date;
+        startDate: Date | null;
+        endDate: Date | null;
+        nextDueDate: Date | null;
     }[]>;
     findMany(traderId: string, query: ListExpensesQuery): Promise<{
         expenses: {
@@ -26,8 +38,14 @@ export declare const expensesRepository: {
             amount: Prisma.Decimal;
             syncStatus: import(".prisma/client").$Enums.SyncStatus;
             description: string;
-            category: string;
+            category: import(".prisma/client").$Enums.ExpenseCategory;
+            expenseType: import(".prisma/client").$Enums.ExpenseType;
+            frequency: import(".prisma/client").$Enums.ExpenseFrequency | null;
+            note: string | null;
             spentAt: Date;
+            startDate: Date | null;
+            endDate: Date | null;
+            nextDueDate: Date | null;
         }[];
         nextCursor: string | null;
         hasNextPage: boolean;
@@ -40,13 +58,13 @@ export declare const expensesRepository: {
             amount: Prisma.Decimal | null;
         };
     })[]>;
-    getTotalForPeriod(traderId: string, from: Date, to: Date): Promise<Prisma.GetExpenseAggregateType<{
+    getTotalForPeriod(traderId: string, from?: Date, to?: Date): Promise<Prisma.GetExpenseAggregateType<{
         where: {
+            spentAt?: {
+                lte?: Date | undefined;
+                gte?: Date | undefined;
+            } | undefined;
             traderId: string;
-            spentAt: {
-                gte: Date;
-                lte: Date;
-            };
         };
         _sum: {
             amount: true;
@@ -61,8 +79,14 @@ export declare const expensesRepository: {
         amount: Prisma.Decimal;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         description: string;
-        category: string;
+        category: import(".prisma/client").$Enums.ExpenseCategory;
+        expenseType: import(".prisma/client").$Enums.ExpenseType;
+        frequency: import(".prisma/client").$Enums.ExpenseFrequency | null;
+        note: string | null;
         spentAt: Date;
+        startDate: Date | null;
+        endDate: Date | null;
+        nextDueDate: Date | null;
     } | null>;
     delete(id: string, traderId: string): Promise<Prisma.BatchPayload>;
 };

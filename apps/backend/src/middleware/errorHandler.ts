@@ -1,13 +1,12 @@
 // src/middleware/errorHandler.ts
 // ONE place where all errors land. Route handlers never send error
-// responses themselves — they just throw, and this catches everything.
+// responses themselves - they just throw, and this catches everything.
 // This is the global error boundary for the entire API.
 
 import { Request, Response, NextFunction } from 'express'
 import { ZodError } from 'zod'
 import { logger } from '../utils/logger'
 
-// Custom error class so we can attach HTTP status codes to errors
 export class AppError extends Error {
   constructor(
     public message: string,
@@ -25,8 +24,21 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ) => {
-  // Zod validation error — bad input from client
   if (err instanceof ZodError) {
+    logger.warn({
+      requestId: req.requestId,
+      error: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+      path: req.originalUrl,
+      details: err.flatten().fieldErrors,
+      issues: err.issues.map(issue => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+        code: issue.code,
+      })),
+      body: req.body,
+    })
+
     return res.status(400).json({
       data: null,
       error: {
@@ -37,7 +49,6 @@ export const errorHandler = (
     })
   }
 
-  // Our own known errors (not found, unauthorized, etc.)
   if (err instanceof AppError) {
     logger.warn({ requestId: req.requestId, error: err.message, code: err.code })
     return res.status(err.statusCode).json({
@@ -46,9 +57,6 @@ export const errorHandler = (
     })
   }
 
-  // Unknown error — something we didn't anticipate
-  // Log the full stack trace, but DON'T send it to the client
-  // (stack traces leak implementation details to attackers)
   logger.error({
     requestId: req.requestId,
     error: err.message,

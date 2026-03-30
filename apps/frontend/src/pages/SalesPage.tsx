@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { RecordSaleWizard } from '@/components/RecordSaleWizard'
 import { RecordSyncBadge } from '@/components/RecordSyncBadge'
@@ -89,13 +89,13 @@ export const SalesPage = () => {
   return (
     <div className="min-h-screen">
       <div className="relative overflow-hidden px-5 pt-12 pb-6" style={{ background: 'linear-gradient(180deg, rgba(45,58,124,0.18) 0%, transparent 100%)' }}>
-        <div className="relative z-10 flex items-center justify-between max-w-lg mx-auto">
+        <div className="relative z-10 flex items-center justify-between max-w-6xl mx-auto">
           <div><p className="label-base mb-0.5">Overview</p><h1 className="font-display font-bold" style={{ fontSize: '1.75rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>Sales history</h1></div>
           <button onClick={() => setWizardOpen(true)} className="rounded-xl flex items-center justify-center font-ui font-bold text-sm gap-1.5 px-4 py-2.5" style={{ background: 'linear-gradient(135deg, #c04818, #e8a838)', color: '#fff' }}>+ New</button>
         </div>
       </div>
 
-      <div className="px-5 flex flex-col gap-4 max-w-lg mx-auto">
+      <div className="px-5 flex flex-col gap-4 max-w-6xl mx-auto">
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>{(['TODAY', 'YESTERDAY', 'LAST_7_DAYS', 'ALL_TIME'] as HistoryRange[]).map((range) => <button key={range} onClick={() => { setHistoryRange(range); setSearchParams(range === 'TODAY' ? {} : { range }) }} className="rounded-full px-4 py-2 font-ui font-bold text-xs flex-shrink-0 transition-all duration-150" style={{ background: historyRange === range ? 'linear-gradient(135deg, #2d3a7c, #7585c8)' : 'rgba(255,255,255,0.05)', color: historyRange === range ? '#fff' : 'rgba(245,237,224,0.5)', border: `1px solid ${historyRange === range ? 'transparent' : 'rgba(255,255,255,0.07)'}`, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.65rem' }}>{HISTORY_LABELS[range]}</button>)}</div>
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>{(['ALL', 'CASH', 'TRANSFER', 'DEBT'] as FilterType[]).map((f) => <button key={f} onClick={() => setFilter(f)} className="rounded-full px-4 py-2 font-ui font-bold text-xs flex-shrink-0 transition-all duration-150" style={{ background: filter === f ? 'linear-gradient(135deg, #c04818, #e8a838)' : 'rgba(255,255,255,0.05)', color: filter === f ? '#fff' : 'rgba(245,237,224,0.5)', border: `1px solid ${filter === f ? 'transparent' : 'rgba(255,255,255,0.07)'}`, letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: '0.65rem' }}>{f === 'ALL' ? 'All sales' : f.charAt(0) + f.slice(1).toLowerCase()}</button>)}</div>
 
@@ -119,3 +119,4 @@ export const SalesPage = () => {
     </div>
   )
 }
+

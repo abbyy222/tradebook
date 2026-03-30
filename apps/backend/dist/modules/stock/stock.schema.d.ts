@@ -4,6 +4,7 @@ export declare const createStockItemSchema: z.ZodObject<{
     itemName: z.ZodString;
     quantity: z.ZodNumber;
     unitPrice: z.ZodNumber;
+    costPrice: z.ZodNumber;
     lowStockThreshold: z.ZodDefault<z.ZodNumber>;
 }, z.core.$strip>;
 export declare const adjustStockSchema: z.ZodObject<{
@@ -18,6 +19,7 @@ export declare const adjustStockSchema: z.ZodObject<{
 export declare const updateStockItemSchema: z.ZodObject<{
     itemName: z.ZodOptional<z.ZodString>;
     unitPrice: z.ZodOptional<z.ZodNumber>;
+    costPrice: z.ZodOptional<z.ZodNumber>;
     lowStockThreshold: z.ZodOptional<z.ZodNumber>;
 }, z.core.$strip>;
 export declare const syncStockSchema: z.ZodObject<{
@@ -26,6 +28,7 @@ export declare const syncStockSchema: z.ZodObject<{
         itemName: z.ZodString;
         quantity: z.ZodNumber;
         unitPrice: z.ZodNumber;
+        costPrice: z.ZodNumber;
         lowStockThreshold: z.ZodDefault<z.ZodNumber>;
     }, z.core.$strip>>;
 }, z.core.$strip>;

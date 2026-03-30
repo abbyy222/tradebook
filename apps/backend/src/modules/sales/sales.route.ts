@@ -1,24 +1,16 @@
-// src/modules/sales/sales.routes.ts
-// Deliberately thin. Validate → authenticate → call service → respond.
-// Notice every route is wrapped in try/catch with next(err).
-// Errors always flow to the global error handler — never handled inline.
-
 import { Router, Request, Response, NextFunction } from 'express'
 import { authenticate } from '../../middleware/authenticate'
 import {
   createSaleSchema,
   syncSalesSchema,
   listSalesQuerySchema,
+  profitLossQuerySchema,
 } from './sales.schema'
 import { salesService } from './sales.service'
 
 export const salesRouter = Router()
-
-// All sales routes require authentication — apply middleware to all
 salesRouter.use(authenticate)
 
-// POST /api/v1/sales/sync
-// Single sale sync (online mode — sale recorded while connected)
 salesRouter.post('/sync', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const traderId = req.trader!.traderId
@@ -31,8 +23,6 @@ salesRouter.post('/sync', async (req: Request, res: Response, next: NextFunction
   }
 })
 
-// POST /api/v1/sales/sync/batch
-// Bulk sync (offline mode — phone reconnects and flushes queue)
 salesRouter.post('/sync/batch', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const traderId = req.trader!.traderId
@@ -45,12 +35,9 @@ salesRouter.post('/sync/batch', async (req: Request, res: Response, next: NextFu
   }
 })
 
-// GET /api/v1/sales
-// Paginated list — cursor-based, filtered, sorted
 salesRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const traderId = req.trader!.traderId
-    // Query params come as strings — Zod transforms them to the right types
     const query = listSalesQuerySchema.parse(req.query)
     const result = await salesService.listSales(traderId, query)
 
@@ -60,8 +47,6 @@ salesRouter.get('/', async (req: Request, res: Response, next: NextFunction) => 
   }
 })
 
-// GET /api/v1/sales/dashboard
-// Dashboard stats — today's total, week's total, all time
 salesRouter.get('/dashboard', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const traderId = req.trader!.traderId
@@ -73,8 +58,18 @@ salesRouter.get('/dashboard', async (req: Request, res: Response, next: NextFunc
   }
 })
 
-// GET /api/v1/sales/:id
-// Single sale detail
+salesRouter.get('/profit-loss', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const traderId = req.trader!.traderId
+    const query = profitLossQuerySchema.parse(req.query)
+    const snapshot = await salesService.getProfitLossSummary(traderId, query)
+
+    res.status(200).json({ data: snapshot, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
 salesRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const traderId = req.trader!.traderId
@@ -87,7 +82,6 @@ salesRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) 
   }
 })
 
-// DELETE /api/v1/sales/:id
 salesRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const traderId = req.trader!.traderId

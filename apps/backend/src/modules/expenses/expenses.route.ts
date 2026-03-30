@@ -9,6 +9,7 @@ import {
 } from './expenses.schema'
 import { expensesService } from './expenses.service'
 import { z } from 'zod'
+import { logger } from '../../utils/logger'
 
 export const expensesRouter = Router()
 expensesRouter.use(authenticate)
@@ -22,6 +23,12 @@ expensesRouter.post(
       const expense = await expensesService.syncExpense(traderId, input)
       res.status(201).json({ data: expense, error: null })
     } catch (err) {
+      logger.warn({
+        requestId: req.requestId,
+        route: '/expenses/sync',
+        body: req.body,
+        error: err instanceof Error ? err.message : 'Unknown expense sync error',
+      })
       next(err)
     }
   }
@@ -36,6 +43,12 @@ expensesRouter.post(
       const result = await expensesService.syncBatch(traderId, input)
       res.status(200).json({ data: result, error: null })
     } catch (err) {
+      logger.warn({
+        requestId: req.requestId,
+        route: '/expenses/sync/batch',
+        body: req.body,
+        error: err instanceof Error ? err.message : 'Unknown batch expense sync error',
+      })
       next(err)
     }
   }
@@ -55,15 +68,11 @@ expensesRouter.get(
   }
 )
 
-// GET /api/v1/expenses/insights?from=...&to=...
-// Returns spending broken down by category for the insights screen.
 expensesRouter.get(
   '/insights',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const traderId = req.trader!.traderId
-
-      // Parse and validate the date range query params
       const { from, to } = z
         .object({
           from: z.string().datetime(),

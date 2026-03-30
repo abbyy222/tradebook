@@ -126,6 +126,21 @@ exports.debtorsRepository = {
             return updatedDebtor;
         });
     },
+    async getReceivablesSummary(traderId) {
+        const [summary] = await client_2.prisma.$queryRaw `
+      SELECT
+        COALESCE(SUM(total_owed - total_paid), 0) as "receivablesTotal",
+        COUNT(*) as "activeDebtorsCount"
+      FROM debtors
+      WHERE trader_id = ${traderId}
+        AND status IN ('ACTIVE', 'PARTIAL')
+        AND (total_owed - total_paid) > 0
+    `;
+        return {
+            receivablesTotal: Number(summary?.receivablesTotal ?? 0),
+            activeDebtorsCount: Number(summary?.activeDebtorsCount ?? 0),
+        };
+    },
     async findMany(traderId, query) {
         const { cursor, pageSize, status } = query;
         const where = {

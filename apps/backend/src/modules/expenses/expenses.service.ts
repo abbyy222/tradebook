@@ -1,34 +1,28 @@
-// src/modules/expenses/expenses.service.ts
-
 import { expensesRepository } from './expenses.repository'
-import {
-  CreateExpenseInput,
-  SyncExpensesInput,
-  ListExpensesQuery,
-} from './expenses.schema'
+import { CreateExpenseInput, ListExpensesQuery, SyncExpensesInput } from './expenses.schema'
 import { AppError } from '../../middleware/errorHandler'
 import { logger } from '../../utils/logger'
+
+const toOptionalIso = (value: Date | null | undefined) => (value ? value.toISOString() : undefined)
 
 const toExpenseDTO = (expense: any) => ({
   ...expense,
   amount: Number(expense.amount),
   spentAt: expense.spentAt.toISOString(),
+  startDate: toOptionalIso(expense.startDate),
+  endDate: toOptionalIso(expense.endDate),
+  nextDueDate: toOptionalIso(expense.nextDueDate),
   createdAt: expense.createdAt.toISOString(),
 })
 
 export const expensesService = {
-
   async syncExpense(traderId: string, input: CreateExpenseInput) {
     const expense = await expensesRepository.upsert(traderId, input)
     return toExpenseDTO(expense)
   },
 
   async syncBatch(traderId: string, input: SyncExpensesInput) {
-    logger.info({
-      event: 'bulk_sync_expenses',
-      traderId,
-      count: input.expenses.length,
-    })
+    logger.info({ event: 'bulk_sync_expenses', traderId, count: input.expenses.length })
     const synced = await expensesRepository.bulkUpsert(traderId, input.expenses)
     return { synced: synced.length, expenses: synced.map(toExpenseDTO) }
   },
@@ -46,31 +40,17 @@ export const expensesService = {
     }
   },
 
-  // --- Category breakdown for insights ---
-  // We also calculate the percentage each category represents
-  // of total spending. The frontend can use this to draw a
-  // simple bar chart without doing any maths itself.
   async getCategoryBreakdown(traderId: string, from: Date, to: Date) {
-    const breakdown = await expensesRepository.getCategoryBreakdown(
-      traderId,
-      from,
-      to
-    )
-
-    const grandTotal = breakdown.reduce(
-      (sum, row) => sum + Number(row._sum.amount ?? 0),
-      0
-    )
+    const breakdown = await expensesRepository.getCategoryBreakdown(traderId, from, to)
+    const grandTotal = breakdown.reduce((sum, row) => sum + Number(row._sum.amount ?? 0), 0)
 
     return breakdown.map(row => ({
       category: row.category,
       total: Number(row._sum.amount ?? 0),
       count: row._count.id,
-      // percentage rounded to 1 decimal place
-      percentage:
-        grandTotal > 0
-          ? Math.round((Number(row._sum.amount ?? 0) / grandTotal) * 1000) / 10
-          : 0,
+      percentage: grandTotal > 0
+        ? Math.round((Number(row._sum.amount ?? 0) / grandTotal) * 1000) / 10
+        : 0,
     }))
   },
 
@@ -82,8 +62,7 @@ export const expensesService = {
 
   async deleteExpense(id: string, traderId: string) {
     const result = await expensesRepository.delete(id, traderId)
-    if (result.count === 0)
-      throw new AppError('Expense not found', 404, 'NOT_FOUND')
+    if (result.count === 0) throw new AppError('Expense not found', 404, 'NOT_FOUND')
     return { deleted: true }
   },
 }

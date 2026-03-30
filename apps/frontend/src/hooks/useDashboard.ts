@@ -3,7 +3,7 @@ import { db, type LocalDebtor, type LocalStockItem } from '@/db'
 import { salesApi } from '@/api/sales.api'
 import { debtorsApi } from '@/api/debtors.api'
 import { stockApi } from '@/api/stock.api'
-import type { DebtorDTO, StockItemDTO } from '@tradebook/shared-types'
+import type { DebtorDTO, ProfitLossSummaryDTO, StockItemDTO } from '@tradebook/shared-types'
 
 export const dashboardKeys = {
   all: ['dashboard'] as const,
@@ -18,6 +18,7 @@ type DashboardStats = {
 
 type DashboardOverview = {
   stats: DashboardStats
+  operatingSnapshot: ProfitLossSummaryDTO
   activeDebtors: DebtorDTO[]
   stockAlerts: StockItemDTO[]
 }
@@ -38,6 +39,14 @@ const startOfWeek = () => {
   const day = lagosNow.getUTCDay()
   const offset = day === 0 ? 6 : day - 1
   lagosNow.setUTCDate(lagosNow.getUTCDate() - offset)
+  lagosNow.setUTCHours(0, 0, 0, 0)
+  return new Date(lagosNow.getTime() - LAGOS_OFFSET_MS)
+}
+
+const startOfMonth = () => {
+  const now = new Date()
+  const lagosNow = new Date(now.getTime() + LAGOS_OFFSET_MS)
+  lagosNow.setUTCDate(1)
   lagosNow.setUTCHours(0, 0, 0, 0)
   return new Date(lagosNow.getTime() - LAGOS_OFFSET_MS)
 }
@@ -72,6 +81,43 @@ const buildLocalDashboardStats = async (): Promise<DashboardStats> => {
       allTime: { total: 0, count: 0 },
     }
   )
+}
+
+const buildLocalOperatingSnapshot = async (): Promise<ProfitLossSummaryDTO> => {
+  const [sales, expenses, stockItems, debtors] = await Promise.all([
+    db.sales.toArray(),
+    db.expenses.toArray(),
+    db.stockItems.toArray(),
+    db.debtors.toArray(),
+  ])
+
+  const monthStart = startOfMonth().getTime()
+  const revenueSales = sales.filter((sale) => new Date(sale.soldAt).getTime() >= monthStart)
+  const monthExpenses = expenses.filter((expense) => new Date(expense.spentAt).getTime() >= monthStart)
+  const receivables = debtors.filter(isOwingDebtor)
+
+  const revenue = revenueSales.reduce((sum, sale) => sum + sale.amount, 0)
+  const expenseTotal = monthExpenses.reduce((sum, expense) => sum + expense.amount, 0)
+  const inventoryValue = stockItems.reduce((sum, item) => sum + item.quantity * item.costPrice, 0)
+  const retailValue = stockItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
+  const expectedMarginOnHand = stockItems.reduce((sum, item) => sum + item.quantity * (item.unitPrice - item.costPrice), 0)
+  const unitsOnHand = stockItems.reduce((sum, item) => sum + item.quantity, 0)
+  const receivablesTotal = receivables.reduce((sum, debtor) => sum + debtor.balance, 0)
+
+  return {
+    period: 'THIS_MONTH',
+    revenue,
+    expenseTotal,
+    operatingProfit: revenue - expenseTotal,
+    inventoryValue,
+    retailValue,
+    expectedMarginOnHand,
+    receivablesTotal,
+    salesCount: revenueSales.length,
+    expenseCount: monthExpenses.length,
+    unitsOnHand,
+    activeDebtorsCount: receivables.length,
+  }
 }
 
 const getLocalActiveDebtors = async () => {
@@ -117,13 +163,14 @@ const storeServerStockItems = async (items: StockItemDTO[]) => {
 }
 
 const getLocalDashboardOverview = async (): Promise<DashboardOverview> => {
-  const [stats, activeDebtors, stockAlerts] = await Promise.all([
+  const [stats, operatingSnapshot, activeDebtors, stockAlerts] = await Promise.all([
     buildLocalDashboardStats(),
+    buildLocalOperatingSnapshot(),
     getLocalActiveDebtors(),
     getLocalStockAlerts(),
   ])
 
-  return { stats, activeDebtors, stockAlerts }
+  return { stats, operatingSnapshot, activeDebtors, stockAlerts }
 }
 
 export const useDashboardOverview = () => {
@@ -132,8 +179,9 @@ export const useDashboardOverview = () => {
     queryFn: async () => {
       if (navigator.onLine) {
         try {
-          const [stats, debtorsPage, stockAlerts] = await Promise.all([
+          const [stats, operatingSnapshot, debtorsPage, stockAlerts] = await Promise.all([
             salesApi.getDashboard(),
+            salesApi.getProfitLoss('THIS_MONTH'),
             debtorsApi.list({ pageSize: DASHBOARD_PREVIEW_LIMIT * 5 }),
             stockApi.getAlerts(),
           ])
@@ -145,6 +193,7 @@ export const useDashboardOverview = () => {
 
           return {
             stats,
+            operatingSnapshot,
             activeDebtors: debtorsPage.data
               .filter(isOwingDebtor)
               .slice(0, DASHBOARD_PREVIEW_LIMIT),
@@ -161,5 +210,6 @@ export const useDashboardOverview = () => {
     refetchInterval: 5 * 60_000,
   })
 }
+
 const isOwingDebtor = (debtor: Pick<DebtorDTO, 'status' | 'balance'>) =>
   (debtor.status === 'ACTIVE' || debtor.status === 'PARTIAL') && debtor.balance > 0

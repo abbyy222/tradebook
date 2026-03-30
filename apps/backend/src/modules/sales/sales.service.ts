@@ -1,87 +1,132 @@
-// src/modules/sales/sales.service.ts
-// The service orchestrates the business rules.
-// It speaks in business language, not HTTP language.
-// Notice: no req, no res, no status codes anywhere in this file.
-// It takes plain inputs, calls repositories, applies rules, returns data.
-
 import { salesRepository } from './sales.repository'
 import { debtorsRepository } from '../debtors/debtors.repository'
-import { CreateSaleInput, SyncSalesInput, ListSalesQuery } from './sales.schema'
+import { expensesRepository } from '../expenses/expenses.repository'
+import { stockRepository } from '../stock/stock.repository'
+import { CreateSaleInput, ListSalesQuery, ProfitLossQuery, SyncSalesInput } from './sales.schema'
 import { AppError } from '../../middleware/errorHandler'
-import { Prisma } from '@prisma/client'
 import { logger } from '../../utils/logger'
 
-// Helper: convert Prisma Decimal to plain number for the API response.
-// We never expose Decimal objects to the client — they're not JSON-serialisable.
-// We always convert to number at the service boundary (the DTO layer).
+const LAGOS_OFFSET_MS = 60 * 60 * 1000
+
 const toSaleDTO = (sale: any) => ({
   ...sale,
-  amount: Number(sale.amount), // Decimal → number
+  unitPrice: Number(sale.unitPrice),
+  amount: Number(sale.amount),
   soldAt: sale.soldAt.toISOString(),
   createdAt: sale.createdAt.toISOString(),
 })
 
-export const salesService = {
+const getPeriodStartInLagos = (period: ProfitLossQuery['period'], now: Date) => {
+  const lagosNow = new Date(now.getTime() + LAGOS_OFFSET_MS)
 
-  // --- Single sale sync ---
+  switch (period) {
+    case 'TODAY':
+      lagosNow.setUTCHours(0, 0, 0, 0)
+      return new Date(lagosNow.getTime() - LAGOS_OFFSET_MS)
+    case 'THIS_WEEK': {
+      const day = lagosNow.getUTCDay()
+      const offset = day === 0 ? 6 : day - 1
+      lagosNow.setUTCDate(lagosNow.getUTCDate() - offset)
+      lagosNow.setUTCHours(0, 0, 0, 0)
+      return new Date(lagosNow.getTime() - LAGOS_OFFSET_MS)
+    }
+    case 'THIS_MONTH':
+      lagosNow.setUTCDate(1)
+      lagosNow.setUTCHours(0, 0, 0, 0)
+      return new Date(lagosNow.getTime() - LAGOS_OFFSET_MS)
+    case 'THIS_YEAR':
+      lagosNow.setUTCMonth(0, 1)
+      lagosNow.setUTCHours(0, 0, 0, 0)
+      return new Date(lagosNow.getTime() - LAGOS_OFFSET_MS)
+    case 'ALL_TIME':
+    default:
+      return undefined
+  }
+}
+
+const assertSaleAmountMatches = (input: CreateSaleInput) => {
+  const expected = Number((input.quantity * input.unitPrice).toFixed(2))
+  if (Math.abs(expected - input.amount) > 0.009) {
+    throw new AppError('Sale amount does not match quantity multiplied by the selling price', 400, 'INVALID_SALE_AMOUNT')
+  }
+}
+
+const normalizeSaleAgainstStock = async (traderId: string, input: CreateSaleInput, existingSale: Awaited<ReturnType<typeof salesRepository.findById>>) => {
+  assertSaleAmountMatches(input)
+
+  if (!input.stockItemId) {
+    return input
+  }
+
+  const stockItem = await stockRepository.findById(input.stockItemId, traderId)
+  if (!stockItem) {
+    throw new AppError('Selected stock item was not found', 400, 'STOCK_ITEM_NOT_FOUND')
+  }
+
+  const canonicalUnitPrice = Number(stockItem.unitPrice)
+  if (Math.abs(canonicalUnitPrice - input.unitPrice) > 0.009) {
+    throw new AppError('Use the current selling price saved on the stock item', 400, 'INVALID_SELLING_PRICE')
+  }
+
+  if (!existingSale && stockItem.quantity < input.quantity) {
+    throw new AppError(
+      'Not enough stock. Available: ' + stockItem.quantity + ', requested: ' + input.quantity,
+      400,
+      'INSUFFICIENT_STOCK'
+    )
+  }
+
+  return {
+    ...input,
+    itemName: stockItem.itemName,
+    unitPrice: canonicalUnitPrice,
+    amount: Number((input.quantity * canonicalUnitPrice).toFixed(2)),
+  }
+}
+
+export const salesService = {
   async syncSale(traderId: string, input: CreateSaleInput) {
-    // Business rule: if payment type is DEBT, a debtorId is required
-    if (input.paymentType === 'DEBT' && !input.debtorId) {
-      throw new AppError(
-        'A debtor must be specified for credit sales',
-        400,
-        'DEBTOR_REQUIRED'
-      )
+    const existingSale = await salesRepository.findById(input.id, traderId)
+    const normalizedInput = await normalizeSaleAgainstStock(traderId, input, existingSale)
+
+    if (normalizedInput.paymentType === 'DEBT' && !normalizedInput.debtorId) {
+      throw new AppError('A debtor must be specified for credit sales', 400, 'DEBTOR_REQUIRED')
     }
 
-    // Business rule: if a debtorId is given, it must belong to THIS trader
-    if (input.debtorId) {
-      const debtor = await debtorsRepository.findById(input.debtorId, traderId)
+    if (normalizedInput.debtorId) {
+      const debtor = await debtorsRepository.findById(normalizedInput.debtorId, traderId)
       if (!debtor) {
         throw new AppError('Debtor not found', 404, 'NOT_FOUND')
       }
-
-      // If this is a debt sale, increase the debtor's total owed amount.
-      // We do this in the service because it's a BUSINESS RULE —
-      // "recording a credit sale increases what the customer owes."
-      // The repository doesn't know or care about this rule.
-      await debtorsRepository.incrementOwed(input.debtorId, input.amount)
     }
 
-    const sale = await salesRepository.upsert(traderId, input)
+    const sale = await salesRepository.upsert(traderId, normalizedInput)
+
+    if (!existingSale && normalizedInput.stockItemId) {
+      await stockRepository.adjustQuantity(normalizedInput.stockItemId, traderId, -normalizedInput.quantity)
+    }
+
+    if (!existingSale && normalizedInput.paymentType === 'DEBT' && normalizedInput.debtorId) {
+      await debtorsRepository.incrementOwed(normalizedInput.debtorId, normalizedInput.amount)
+    }
+
     return toSaleDTO(sale)
   },
 
-  // --- Bulk sync (offline batch) ---
-  // This is called when the phone reconnects and flushes queued sales.
   async syncBatch(traderId: string, input: SyncSalesInput) {
-    // Validate business rules for every sale in the batch BEFORE
-    // writing anything to the DB. We don't want to write half a batch
-    // and then fail on the other half — that leaves data in an
-    // inconsistent state. Validate all, then write all.
-    for (const sale of input.sales) {
-      if (sale.paymentType === 'DEBT' && !sale.debtorId) {
-        throw new AppError(
-          `Sale ${sale.id}: credit sales require a debtor`,
-          400,
-          'VALIDATION_ERROR'
-        )
-      }
-    }
-
-    // Log the batch size — useful for monitoring in production.
-    // If you're seeing batches of 100 regularly, traders are going
-    // offline for long periods and you might need to investigate.
     logger.info({ event: 'bulk_sync', traderId, count: input.sales.length })
 
-    const synced = await salesRepository.bulkUpsert(traderId, input.sales)
+    const sales = []
+    for (const sale of input.sales) {
+      sales.push(await this.syncSale(traderId, sale))
+    }
+
     return {
-      synced: synced.length,
-      sales: synced.map(toSaleDTO),
+      synced: sales.length,
+      sales,
     }
   },
 
-  // --- List with pagination ---
   async listSales(traderId: string, query: ListSalesQuery) {
     const result = await salesRepository.findMany(traderId, query)
     return {
@@ -95,26 +140,45 @@ export const salesService = {
     }
   },
 
-  // --- Dashboard stats ---
   async getDashboardStats(traderId: string) {
     const stats = await salesRepository.getDashboardStats(traderId)
     return {
-      today: {
-        total: Number(stats.today.total),
-        count: stats.today.count,
-      },
-      thisWeek: {
-        total: Number(stats.thisWeek.total),
-        count: stats.thisWeek.count,
-      },
-      allTime: {
-        total: Number(stats.allTime.total),
-        count: stats.allTime.count,
-      },
+      today: { total: Number(stats.today.total), count: stats.today.count },
+      thisWeek: { total: Number(stats.thisWeek.total), count: stats.thisWeek.count },
+      allTime: { total: Number(stats.allTime.total), count: stats.allTime.count },
     }
   },
 
-  // --- Get single sale ---
+  async getProfitLossSummary(traderId: string, query: ProfitLossQuery) {
+    const now = new Date()
+    const from = getPeriodStartInLagos(query.period, now)
+
+    const [salesTotals, expenseTotals, inventorySummary, receivablesSummary] = await Promise.all([
+      salesRepository.getTotalsForPeriod(traderId, from, now),
+      expensesRepository.getTotalForPeriod(traderId, from, now),
+      stockRepository.getInventorySummary(traderId),
+      debtorsRepository.getReceivablesSummary(traderId),
+    ])
+
+    const revenue = Number(salesTotals._sum.amount ?? 0)
+    const expenseTotal = Number(expenseTotals._sum.amount ?? 0)
+
+    return {
+      period: query.period,
+      revenue,
+      expenseTotal,
+      operatingProfit: revenue - expenseTotal,
+      inventoryValue: inventorySummary.inventoryValue,
+      retailValue: inventorySummary.retailValue,
+      expectedMarginOnHand: inventorySummary.expectedMarginOnHand,
+      receivablesTotal: receivablesSummary.receivablesTotal,
+      salesCount: salesTotals._count.id,
+      expenseCount: expenseTotals._count.id,
+      unitsOnHand: inventorySummary.unitsOnHand,
+      activeDebtorsCount: receivablesSummary.activeDebtorsCount,
+    }
+  },
+
   async getSale(id: string, traderId: string) {
     const sale = await salesRepository.findById(id, traderId)
     if (!sale) {
@@ -123,10 +187,8 @@ export const salesService = {
     return toSaleDTO(sale)
   },
 
-  // --- Delete ---
   async deleteSale(id: string, traderId: string) {
     const result = await salesRepository.delete(id, traderId)
-    // deleteMany returns { count: number }
     if (result.count === 0) {
       throw new AppError('Sale not found', 404, 'NOT_FOUND')
     }

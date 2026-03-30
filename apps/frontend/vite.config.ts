@@ -1,8 +1,3 @@
-// vite.config.ts
-// Added @tailwindcss/vite — the modern Tailwind v4 plugin for Vite.
-// Tailwind v4 uses a Vite plugin instead of PostCSS, which is faster.
-// The VitePWA plugin stays exactly as before.
-
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -12,7 +7,6 @@ import path from 'path'
 export default defineConfig({
   plugins: [
     react(),
-    // Tailwind v4: plugin replaces the old PostCSS configuration
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
@@ -49,6 +43,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Vite needs its own alias for workspace source imports.
+      // TypeScript already knew this path, but dev-server module resolution did not.
+      '@tradebook/shared-types': path.resolve(__dirname, '../../packages/shared-types/src/index.ts'),
     },
   },
   server: {

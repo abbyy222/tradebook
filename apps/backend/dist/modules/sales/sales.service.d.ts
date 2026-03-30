@@ -1,4 +1,4 @@
-import { CreateSaleInput, SyncSalesInput, ListSalesQuery } from './sales.schema';
+import { CreateSaleInput, ListSalesQuery, ProfitLossQuery, SyncSalesInput } from './sales.schema';
 export declare const salesService: {
     syncSale(traderId: string, input: CreateSaleInput): Promise<any>;
     syncBatch(traderId: string, input: SyncSalesInput): Promise<{
@@ -27,6 +27,20 @@ export declare const salesService: {
             total: number;
             count: number;
         };
+    }>;
+    getProfitLossSummary(traderId: string, query: ProfitLossQuery): Promise<{
+        period: "TODAY" | "THIS_WEEK" | "THIS_MONTH" | "THIS_YEAR" | "ALL_TIME";
+        revenue: number;
+        expenseTotal: number;
+        operatingProfit: number;
+        inventoryValue: number;
+        retailValue: number;
+        expectedMarginOnHand: number;
+        receivablesTotal: number;
+        salesCount: number;
+        expenseCount: number;
+        unitsOnHand: number;
+        activeDebtorsCount: number;
     }>;
     getSale(id: string, traderId: string): Promise<any>;
     deleteSale(id: string, traderId: string): Promise<{

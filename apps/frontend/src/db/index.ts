@@ -1,28 +1,12 @@
-﻿// src/db/index.ts
-// Dexie wraps IndexedDB with a clean, promise-based API.
-// Think of this as the trader's local database - everything
-// written here works instantly with no network needed.
-//
-// The sync flow:
-// 1. Trader records a sale -> written to Dexie immediately (instant)
-// 2. UI updates from Dexie immediately (no loading spinner)
-// 3. Background sync worker reads PENDING records from Dexie
-// 4. Sends them to the backend API
-// 5. Marks them SYNCED in Dexie
-//
-// The trader never waits for the network. The app always feels fast.
-
 import Dexie, { type EntityTable } from 'dexie'
 import type {
-  SaleDTO,
-  ExpenseDTO,
-  StockItemDTO,
   DebtorDTO,
+  ExpenseDTO,
+  SaleDTO,
+  StockItemDTO,
   TraderDTO,
 } from '@tradebook/shared-types'
 
-// We extend the DTOs with a local syncStatus field.
-// The server DTOs don't have this - it's a client-only concern.
 export interface LocalSale extends Omit<SaleDTO, 'syncStatus'> {
   syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
 }
@@ -59,9 +43,6 @@ export interface LocalDebtorPayment {
   syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
 }
 
-// Dexie class defines the database structure and indexes.
-// The indexes after the ++ or & mirror the backend indexes
-// we defined in Prisma - same query patterns, same performance.
 class TradeBookDB extends Dexie {
   sales!: EntityTable<LocalSale, 'id'>
   expenses!: EntityTable<LocalExpense, 'id'>
@@ -74,15 +55,10 @@ class TradeBookDB extends Dexie {
   constructor() {
     super('TradeBookDB')
 
-    this.version(4).stores({
-      // The string after the table name defines the indexes.
-      // &id = primary key, unique
-      // syncStatus = index for querying pending records
-      // soldAt = index for date-range queries
-      // [traderId+soldAt] = compound index (mirrors the backend)
-      sales: '&id, syncStatus, soldAt, paymentType',
-      expenses: '&id, syncStatus, spentAt, category',
-      stockItems: '&id, syncStatus, itemName',
+    this.version(7).stores({
+      sales: '&id, syncStatus, soldAt, paymentType, stockItemId',
+      expenses: '&id, syncStatus, spentAt, category, expenseType, frequency, nextDueDate',
+      stockItems: '&id, syncStatus, itemName, updatedAt',
       stockAdjustments: '&id, stockItemId, syncStatus, createdAt, reason',
       debtors: '&id, syncStatus, status, customerName, createdAt',
       debtorPayments: '&id, debtorId, syncStatus, createdAt, paidAt',
@@ -91,6 +67,4 @@ class TradeBookDB extends Dexie {
   }
 }
 
-// Single instance - same singleton pattern as the backend Prisma client.
-// One database connection shared across the entire frontend.
 export const db = new TradeBookDB()

@@ -7,6 +7,7 @@ const authenticate_1 = require("../../middleware/authenticate");
 const expenses_schema_1 = require("./expenses.schema");
 const expenses_service_1 = require("./expenses.service");
 const zod_1 = require("zod");
+const logger_1 = require("../../utils/logger");
 exports.expensesRouter = (0, express_1.Router)();
 exports.expensesRouter.use(authenticate_1.authenticate);
 exports.expensesRouter.post('/sync', async (req, res, next) => {
@@ -17,6 +18,12 @@ exports.expensesRouter.post('/sync', async (req, res, next) => {
         res.status(201).json({ data: expense, error: null });
     }
     catch (err) {
+        logger_1.logger.warn({
+            requestId: req.requestId,
+            route: '/expenses/sync',
+            body: req.body,
+            error: err instanceof Error ? err.message : 'Unknown expense sync error',
+        });
         next(err);
     }
 });
@@ -28,6 +35,12 @@ exports.expensesRouter.post('/sync/batch', async (req, res, next) => {
         res.status(200).json({ data: result, error: null });
     }
     catch (err) {
+        logger_1.logger.warn({
+            requestId: req.requestId,
+            route: '/expenses/sync/batch',
+            body: req.body,
+            error: err instanceof Error ? err.message : 'Unknown batch expense sync error',
+        });
         next(err);
     }
 });
@@ -42,12 +55,9 @@ exports.expensesRouter.get('/', async (req, res, next) => {
         next(err);
     }
 });
-// GET /api/v1/expenses/insights?from=...&to=...
-// Returns spending broken down by category for the insights screen.
 exports.expensesRouter.get('/insights', async (req, res, next) => {
     try {
         const traderId = req.trader.traderId;
-        // Parse and validate the date range query params
         const { from, to } = zod_1.z
             .object({
             from: zod_1.z.string().datetime(),

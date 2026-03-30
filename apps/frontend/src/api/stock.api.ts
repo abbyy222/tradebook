@@ -1,4 +1,3 @@
-// src/api/stock.api.ts
 import { apiClient } from './client'
 import type { CreateStockItemDTO, StockItemDTO, CursorPaginatedResponse } from '@tradebook/shared-types'
 

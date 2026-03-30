@@ -1,6 +1,12 @@
-// src/api/expenses.api.ts
 import { apiClient } from './client'
-import type { CreateExpenseDTO, ExpenseDTO, CursorPaginatedResponse } from '@tradebook/shared-types'
+import type {
+  CreateExpenseDTO,
+  CursorPaginatedResponse,
+  ExpenseCategory,
+  ExpenseDTO,
+  ExpenseFrequency,
+  ExpenseType,
+} from '@tradebook/shared-types'
 
 export const expensesApi = {
   sync: async (data: CreateExpenseDTO) => {
@@ -9,10 +15,7 @@ export const expensesApi = {
   },
 
   syncBatch: async (expenses: CreateExpenseDTO[]) => {
-    const res = await apiClient.post<{ data: { synced: number } }>(
-      '/expenses/sync/batch',
-      { expenses }
-    )
+    const res = await apiClient.post<{ data: { synced: number } }>('/expenses/sync/batch', { expenses })
     return res.data.data
   },
 
@@ -21,7 +24,9 @@ export const expensesApi = {
     pageSize?: number
     from?: string
     to?: string
-    category?: string
+    category?: ExpenseCategory
+    expenseType?: ExpenseType
+    frequency?: ExpenseFrequency
   }) => {
     const res = await apiClient.get<CursorPaginatedResponse<ExpenseDTO>>('/expenses', { params })
     return res.data

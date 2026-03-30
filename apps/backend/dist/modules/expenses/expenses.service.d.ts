@@ -1,4 +1,4 @@
-import { CreateExpenseInput, SyncExpensesInput, ListExpensesQuery } from './expenses.schema';
+import { CreateExpenseInput, ListExpensesQuery, SyncExpensesInput } from './expenses.schema';
 export declare const expensesService: {
     syncExpense(traderId: string, input: CreateExpenseInput): Promise<any>;
     syncBatch(traderId: string, input: SyncExpensesInput): Promise<{
@@ -15,7 +15,7 @@ export declare const expensesService: {
         error: null;
     }>;
     getCategoryBreakdown(traderId: string, from: Date, to: Date): Promise<{
-        category: string;
+        category: import(".prisma/client").$Enums.ExpenseCategory;
         total: number;
         count: number;
         percentage: number;

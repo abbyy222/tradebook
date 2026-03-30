@@ -1,19 +1,11 @@
-// src/hooks/useSales.ts
-// Custom hooks are the public API of our data layer.
-// Components import these hooks ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â they never import api or db directly.
-// This means we can completely change the data layer without
-// touching a single component ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â just update the hooks.
-
-import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { v4 as uuidv4 } from 'uuid'
-import { db, type LocalSale } from '@/db'
+import { db, type LocalDebtor, type LocalSale } from '@/db'
 import { salesApi } from '@/api/sales.api'
+import { dashboardKeys } from '@/hooks/useDashboard'
+import { stockKeys } from '@/hooks/useStock'
 import type { CreateSaleDTO, CursorPaginatedResponse, SaleDTO } from '@tradebook/shared-types'
 
-// Query keys ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â centralised as constants.
-// A query key is how TanStack Query identifies a piece of cached data.
-// Using string literals everywhere leads to typos and cache misses.
-// Using constants means you can refactor without fear.
 export const salesKeys = {
   all: ['sales'] as const,
   dashboard: () => [...salesKeys.all, 'dashboard'] as const,
@@ -35,14 +27,37 @@ type SalesListQueryData = {
   pageParams: Array<string | undefined>
 }
 
-const upsertSaleInQueryData = (
-  current: SalesListQueryData | undefined,
-  sale: SaleDTO,
-  filters: SalesListFilters
-) => {
-  if (!current || !matchesSaleFilters(sale, filters) || current.pages.length === 0) {
-    return current
-  }
+const normalizeSale = (sale: Partial<SaleDTO> & Pick<SaleDTO, 'id' | 'itemName' | 'amount' | 'paymentType' | 'soldAt' | 'createdAt'>): SaleDTO => {
+  const quantity = sale.quantity ?? 1
+  const unitPrice = sale.unitPrice ?? Number((sale.amount / quantity).toFixed(2))
+  return {
+    ...sale,
+    quantity,
+    unitPrice,
+    stockItemId: sale.stockItemId,
+    debtorId: sale.debtorId,
+    syncStatus: sale.syncStatus ?? 'SYNCED',
+  } as SaleDTO
+}
+
+const applyLocalCreditSaleToDebtor = (debtor: LocalDebtor, amount: number, soldAt: string): LocalDebtor => ({
+  ...debtor,
+  totalOwed: debtor.totalOwed + amount,
+  balance: debtor.balance + amount,
+  status: 'ACTIVE',
+  updatedAt: soldAt,
+})
+
+const matchesSaleFilters = (sale: Pick<SaleDTO, 'soldAt' | 'paymentType'>, filters: SalesListFilters) => {
+  const soldAt = new Date(sale.soldAt).getTime()
+  if (filters.from && soldAt < new Date(filters.from).getTime()) return false
+  if (filters.to && soldAt > new Date(filters.to).getTime()) return false
+  if (filters.paymentType && sale.paymentType !== filters.paymentType) return false
+  return true
+}
+
+const upsertSaleInQueryData = (current: SalesListQueryData | undefined, sale: SaleDTO, filters: SalesListFilters) => {
+  if (!current || !matchesSaleFilters(sale, filters) || current.pages.length === 0) return current
 
   const [firstPage, ...restPages] = current.pages
   const nextFirstPage = {
@@ -52,58 +67,26 @@ const upsertSaleInQueryData = (
       .slice(0, SALES_PAGE_SIZE),
   }
 
-  return {
-    ...current,
-    pages: [nextFirstPage, ...restPages],
-  }
+  return { ...current, pages: [nextFirstPage, ...restPages] }
 }
 
-const updateCachedSalesLists = (
-  queryClient: ReturnType<typeof useQueryClient>,
-  sale: SaleDTO
-) => {
-  const matchingQueries = queryClient.getQueriesData<SalesListQueryData>({
-    queryKey: salesKeys.lists(),
-  })
+const updateCachedSalesLists = (queryClient: ReturnType<typeof useQueryClient>, sale: SaleDTO) => {
+  const matchingQueries = queryClient.getQueriesData<SalesListQueryData>({ queryKey: salesKeys.lists() })
 
   for (const [queryKey, current] of matchingQueries) {
     const filters = (Array.isArray(queryKey) ? queryKey[queryKey.length - 1] : {}) as SalesListFilters
     const next = upsertSaleInQueryData(current, sale, filters)
-
     if (next && next !== current) {
       queryClient.setQueryData(queryKey, next)
     }
   }
 }
 
-const matchesSaleFilters = (
-  sale: Pick<SaleDTO, 'soldAt' | 'paymentType'>,
-  filters: {
-    from?: string
-    to?: string
-    paymentType?: 'CASH' | 'TRANSFER' | 'DEBT'
-  }
-) => {
-  const soldAt = new Date(sale.soldAt).getTime()
-
-  if (filters.from && soldAt < new Date(filters.from).getTime()) return false
-  if (filters.to && soldAt > new Date(filters.to).getTime()) return false
-  if (filters.paymentType && sale.paymentType !== filters.paymentType) return false
-
-  return true
-}
-
-const listSalesFromDexie = async (
-  filters: {
-    from?: string
-    to?: string
-    paymentType?: 'CASH' | 'TRANSFER' | 'DEBT'
-  },
-  cursor?: string
-): Promise<CursorPaginatedResponse<SaleDTO>> => {
+const listSalesFromDexie = async (filters: SalesListFilters, cursor?: string): Promise<CursorPaginatedResponse<SaleDTO>> => {
   const sales = await db.sales.orderBy('soldAt').reverse().toArray()
+  const normalized = sales.map((sale) => normalizeSale(sale as any))
 
-  const filtered = sales.filter((sale) => {
+  const filtered = normalized.filter((sale) => {
     if (!matchesSaleFilters(sale, filters)) return false
     if (cursor && new Date(sale.soldAt).getTime() >= new Date(cursor).getTime()) return false
     return true
@@ -113,47 +96,27 @@ const listSalesFromDexie = async (
   const hasNextPage = filtered.length > SALES_PAGE_SIZE
   const nextCursor = hasNextPage ? page[page.length - 1]?.soldAt ?? null : null
 
-  return {
-    data: page,
-    meta: {
-      nextCursor,
-      hasNextPage,
-      pageSize: SALES_PAGE_SIZE,
-    },
-    error: null,
-  }
+  return { data: page, meta: { nextCursor, hasNextPage, pageSize: SALES_PAGE_SIZE }, error: null }
 }
 
-const mergeServerAndLocalSales = async (
-  serverSales: SaleDTO[],
-  filters: {
-    from?: string
-    to?: string
-    paymentType?: 'CASH' | 'TRANSFER' | 'DEBT'
-  }
-): Promise<CursorPaginatedResponse<SaleDTO>> => {
-  const localUnsynced = await db.sales
-    .filter((sale) => sale.syncStatus !== 'SYNCED')
-    .toArray()
-
+const mergeServerAndLocalSales = async (serverSales: SaleDTO[], filters: SalesListFilters): Promise<CursorPaginatedResponse<SaleDTO>> => {
+  const localUnsynced = await db.sales.filter((sale) => sale.syncStatus !== 'SYNCED').toArray()
   const merged = new Map<string, SaleDTO>()
 
   for (const sale of serverSales) {
     if (matchesSaleFilters(sale, filters)) {
-      merged.set(sale.id, { ...sale, syncStatus: 'SYNCED' })
+      merged.set(sale.id, { ...normalizeSale(sale), syncStatus: 'SYNCED' })
     }
   }
 
   for (const sale of localUnsynced) {
-    if (matchesSaleFilters(sale, filters)) {
-      merged.set(sale.id, { ...sale, syncStatus: 'SYNCED' })
+    const normalized = normalizeSale(sale as any)
+    if (matchesSaleFilters(normalized, filters)) {
+      merged.set(normalized.id, normalized)
     }
   }
 
-  const ordered = Array.from(merged.values()).sort(
-    (a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime()
-  )
-
+  const ordered = Array.from(merged.values()).sort((a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime())
   const page = ordered.slice(0, SALES_PAGE_SIZE)
   const hasNextPage = ordered.length > SALES_PAGE_SIZE
 
@@ -169,20 +132,23 @@ const mergeServerAndLocalSales = async (
 }
 
 const syncPendingSales = async () => {
-  const retryable = await db.sales
-    .filter((sale) => sale.syncStatus === 'PENDING' || sale.syncStatus === 'FAILED')
-    .toArray()
-
+  const retryable = await db.sales.filter((sale) => sale.syncStatus === 'PENDING' || sale.syncStatus === 'FAILED').toArray()
   if (retryable.length === 0) return
 
-  const payload: CreateSaleDTO[] = retryable.map((sale) => ({
-    id: sale.id,
-    itemName: sale.itemName,
-    amount: sale.amount,
-    paymentType: sale.paymentType,
-    debtorId: sale.debtorId,
-    soldAt: sale.soldAt,
-  }))
+  const payload: CreateSaleDTO[] = retryable.map((sale) => {
+    const normalized = normalizeSale(sale as any)
+    return {
+      id: normalized.id,
+      itemName: normalized.itemName,
+      stockItemId: normalized.stockItemId,
+      quantity: normalized.quantity,
+      unitPrice: normalized.unitPrice,
+      amount: normalized.amount,
+      paymentType: normalized.paymentType,
+      debtorId: normalized.debtorId,
+      soldAt: normalized.soldAt,
+    }
+  })
 
   await salesApi.syncBatch(payload)
 
@@ -195,57 +161,35 @@ const syncPendingSales = async () => {
 
 const storeServerSales = async (sales: SaleDTO[]) => {
   if (sales.length === 0) return
-
-  const rows: LocalSale[] = sales.map((sale) => ({
-    ...sale,
-    syncStatus: 'SYNCED',
-  }))
-
+  const rows: LocalSale[] = sales.map((sale) => ({ ...normalizeSale(sale), syncStatus: 'SYNCED' }))
   await db.sales.bulkPut(rows)
 }
 
-// --- Dashboard stats hook ---
-export const useDashboardStats = () => {
-  return useQuery({
-    queryKey: salesKeys.dashboard(),
-    queryFn: salesApi.getDashboard,
-    // staleTime: how long cached data is considered fresh.
-    // 60 seconds means if a component unmounts and remounts within
-    // 60 seconds, we use the cached value without a network request.
-    staleTime: 60_000,
-    // refetchInterval: automatically refetch in the background
-    // every 5 minutes so the dashboard stays current.
-    refetchInterval: 5 * 60_000,
-  })
+type CreateSaleInput = {
+  stockItemId: string
+  itemName: string
+  quantity: number
+  unitPrice: number
+  amount: number
+  paymentType: 'CASH' | 'TRANSFER' | 'DEBT'
+  debtorId?: string
+  soldAt: string
 }
 
-// --- Infinite scroll sales list ---
-// useInfiniteQuery handles cursor pagination automatically.
-// As the trader scrolls down, it fetches the next page
-// and appends it to the list seamlessly.
-export const useSalesList = (filters: {
-  from?: string
-  to?: string
-  paymentType?: 'CASH' | 'TRANSFER' | 'DEBT'
-}) => {
+export const useDashboardStats = () => {
+  return useMutation({ mutationFn: salesApi.getDashboard })
+}
+
+export const useSalesList = (filters: SalesListFilters) => {
   return useInfiniteQuery({
     queryKey: salesKeys.list(filters),
     queryFn: async ({ pageParam }) => {
       const cursor = pageParam as string | undefined
 
-      // Hybrid strategy:
-      // 1. If online, push pending local sales to the backend first
-      // 2. Fetch the freshest page from the server
-      // 3. Write server truth back into Dexie so offline reads stay current
-      // 4. If any online step fails, fall back to Dexie instead of breaking the UI
       if (navigator.onLine) {
+        void syncPendingSales()
         try {
-          await syncPendingSales()
-          const serverPage = await salesApi.list({
-            ...filters,
-            cursor,
-            pageSize: SALES_PAGE_SIZE,
-          })
+          const serverPage = await salesApi.list({ ...filters, cursor, pageSize: SALES_PAGE_SIZE })
           await storeServerSales(serverPage.data)
           return mergeServerAndLocalSales(serverPage.data, filters)
         } catch {
@@ -261,55 +205,101 @@ export const useSalesList = (filters: {
   })
 }
 
-// --- Create sale mutation ---
-// This is the most important mutation in the app.
-// It implements the optimistic update pattern:
-// 1. Write to Dexie immediately (UI updates instantly)
-// 2. Try to sync to backend
-// 3. If backend succeeds ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â all good
-// 4. If offline ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â stays PENDING in Dexie, syncs later
-//
-// The trader never waits for network. Record a sale in 1 second,
-// whether online or on an underground market with no signal.
 export const useCreateSale = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: Omit<CreateSaleDTO, 'id'>) => {
-      // Generate UUID on the CLIENT ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â this is the offline-first key.
-      // The ID exists before the server ever sees this record.
+    mutationFn: async (input: CreateSaleInput) => {
       const id = uuidv4()
       const createdAt = new Date().toISOString()
-      const sale = { ...input, id, createdAt }
+      const stockItem = await db.stockItems.get(input.stockItemId)
 
-      // Step 1: Write to local Dexie immediately
-      await db.sales.add({
-        ...sale,
-        syncStatus: 'PENDING',
+      if (!stockItem) {
+        throw new Error('Select a stock item from inventory before recording a sale')
+      }
+
+      if (input.quantity <= 0) {
+        throw new Error('Quantity sold must be at least 1')
+      }
+
+      if (stockItem.quantity < input.quantity) {
+        throw new Error('Not enough stock. Available: ' + stockItem.quantity)
+      }
+
+      if (Math.abs(stockItem.unitPrice - input.unitPrice) > 0.009) {
+        throw new Error('Use the current selling price saved on this stock item')
+      }
+
+      const canonicalAmount = Number((input.quantity * stockItem.unitPrice).toFixed(2))
+      const sale = normalizeSale({
+        ...input,
+        id,
+        itemName: stockItem.itemName,
+        unitPrice: stockItem.unitPrice,
+        amount: canonicalAmount,
         createdAt,
+        syncStatus: 'PENDING',
       })
 
-      // Step 2: Try to sync to backend if online
-      if (navigator.onLine) {
+      if (sale.paymentType === 'DEBT' && !sale.debtorId) {
+        throw new Error('Please select a debtor for credit sales')
+      }
+
+      await db.transaction('rw', db.sales, db.stockItems, db.debtors, async () => {
+        const latestStock = await db.stockItems.get(input.stockItemId)
+        if (!latestStock) throw new Error('Selected stock item is no longer available')
+        if (latestStock.quantity < input.quantity) {
+          throw new Error('Not enough stock. Available: ' + latestStock.quantity)
+        }
+
+        await db.sales.add({ ...sale, syncStatus: 'PENDING' })
+        await db.stockItems.update(latestStock.id, {
+          quantity: latestStock.quantity - input.quantity,
+          stockValue: (latestStock.quantity - input.quantity) * latestStock.costPrice,
+          retailValue: (latestStock.quantity - input.quantity) * latestStock.unitPrice,
+          expectedGrossProfit: (latestStock.quantity - input.quantity) * (latestStock.unitPrice - latestStock.costPrice),
+          updatedAt: sale.soldAt,
+        })
+
+        if (sale.paymentType === 'DEBT') {
+          const debtor = await db.debtors.get(sale.debtorId!)
+          if (!debtor) {
+            throw new Error('Selected debtor was not found locally')
+          }
+          await db.debtors.put(applyLocalCreditSaleToDebtor(debtor, sale.amount, sale.soldAt))
+        }
+      })
+
+      const stockDependencyReady = stockItem.syncStatus === 'SYNCED'
+      const debtorDependencyReady = sale.paymentType !== 'DEBT' || (await db.debtors.get(sale.debtorId!))?.syncStatus === 'SYNCED'
+
+      if (navigator.onLine && stockDependencyReady && debtorDependencyReady) {
         void salesApi
-          .sync(sale)
-          .then(() => db.sales.update(id, { syncStatus: 'SYNCED' }))
+          .sync({
+            id: sale.id,
+            itemName: sale.itemName,
+            stockItemId: sale.stockItemId,
+            quantity: sale.quantity,
+            unitPrice: sale.unitPrice,
+            amount: sale.amount,
+            paymentType: sale.paymentType,
+            debtorId: sale.debtorId,
+            soldAt: sale.soldAt,
+          })
+          .then(() => db.sales.update(sale.id, { syncStatus: 'SYNCED' }))
           .catch(() => {
-            // Leave the local sale as PENDING so the next sync cycle can retry it.
+            // Keep the local sale pending so the sync engine can retry after dependencies are synced.
           })
       }
 
-      return {
-        ...sale,
-        syncStatus: 'PENDING' as const,
-      }
+      return sale
     },
-
     onSuccess: (createdSale) => {
-      // Show the new sale immediately from local Dexie state instead of waiting on network-driven list refresh.
       updateCachedSalesLists(queryClient, createdSale)
       queryClient.invalidateQueries({ queryKey: salesKeys.dashboard() })
       queryClient.invalidateQueries({ queryKey: salesKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: stockKeys.all })
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.overview() })
     },
   })
 }
@@ -324,6 +314,8 @@ export const useRetrySalesSync = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: salesKeys.dashboard() })
       queryClient.invalidateQueries({ queryKey: salesKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: stockKeys.all })
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.overview() })
     },
   })
 }

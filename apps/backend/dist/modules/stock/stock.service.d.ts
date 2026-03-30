@@ -16,6 +16,11 @@ export declare const stockService: {
         error: null;
     }>;
     getLowStockAlerts(traderId: string): Promise<{
+        unitPrice: number;
+        costPrice: number;
+        stockValue: number;
+        retailValue: number;
+        expectedGrossProfit: number;
         isLowStock: boolean;
         id: string;
         itemName: string;

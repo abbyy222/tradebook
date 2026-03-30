@@ -26,10 +26,25 @@ type StockListQueryData = {
   pageParams: Array<string | undefined>
 }
 
+const computeStockMetrics = (item: Pick<StockItemDTO, 'quantity' | 'unitPrice' | 'costPrice'>) => {
+  const stockValue = item.quantity * item.costPrice
+  const retailValue = item.quantity * item.unitPrice
+  return {
+    stockValue,
+    retailValue,
+    expectedGrossProfit: retailValue - stockValue,
+  }
+}
+
+const normalizeStockItem = (item: StockItemDTO): StockItemDTO => ({
+  ...item,
+  ...computeStockMetrics(item),
+})
+
 const upsertStockItemInQueryData = (
   current: StockListQueryData | undefined,
   item: StockItemDTO,
-  filters: StockListFilters
+  filters: StockListFilters,
 ) => {
   if (!current || !matchesStockFilters(item, filters) || current.pages.length === 0) {
     return current
@@ -51,7 +66,7 @@ const upsertStockItemInQueryData = (
 
 const updateCachedStockLists = (
   queryClient: ReturnType<typeof useQueryClient>,
-  item: StockItemDTO
+  item: StockItemDTO,
 ) => {
   const matchingQueries = queryClient.getQueriesData<StockListQueryData>({
     queryKey: stockKeys.lists(),
@@ -69,7 +84,7 @@ const updateCachedStockLists = (
 
 const matchesStockFilters = (
   item: Pick<StockItemDTO, 'itemName' | 'quantity' | 'lowStockThreshold'>,
-  filters: { lowStockOnly?: boolean; search?: string }
+  filters: { lowStockOnly?: boolean; search?: string },
 ) => {
   if (filters.lowStockOnly && item.quantity > item.lowStockThreshold) return false
 
@@ -83,7 +98,7 @@ const matchesStockFilters = (
 
 const listStockFromDexie = async (
   filters: { lowStockOnly?: boolean; search?: string },
-  cursor?: string
+  cursor?: string,
 ): Promise<CursorPaginatedResponse<StockItemDTO>> => {
   const items = await db.stockItems.orderBy('updatedAt').reverse().toArray()
 
@@ -93,7 +108,7 @@ const listStockFromDexie = async (
     return true
   })
 
-  const page = filtered.slice(0, STOCK_PAGE_SIZE)
+  const page = filtered.slice(0, STOCK_PAGE_SIZE).map(normalizeStockItem)
   const hasNextPage = filtered.length > STOCK_PAGE_SIZE
   const nextCursor = hasNextPage ? page[page.length - 1]?.updatedAt ?? null : null
 
@@ -112,7 +127,7 @@ const storeServerStockItems = async (items: StockItemDTO[]) => {
   if (items.length === 0) return
 
   const rows: LocalStockItem[] = items.map((item) => ({
-    ...item,
+    ...normalizeStockItem(item),
     syncStatus: 'SYNCED',
   }))
 
@@ -121,7 +136,7 @@ const storeServerStockItems = async (items: StockItemDTO[]) => {
 
 const mergeServerAndLocalStockItems = async (
   serverItems: StockItemDTO[],
-  filters: { lowStockOnly?: boolean; search?: string }
+  filters: { lowStockOnly?: boolean; search?: string },
 ): Promise<CursorPaginatedResponse<StockItemDTO>> => {
   const localUnsynced = await db.stockItems
     .filter((item) => item.syncStatus !== 'SYNCED')
@@ -131,18 +146,18 @@ const mergeServerAndLocalStockItems = async (
 
   for (const item of serverItems) {
     if (matchesStockFilters(item, filters)) {
-      merged.set(item.id, { ...item, syncStatus: 'SYNCED' })
+      merged.set(item.id, { ...normalizeStockItem(item), syncStatus: 'SYNCED' })
     }
   }
 
   for (const item of localUnsynced) {
     if (matchesStockFilters(item, filters)) {
-      merged.set(item.id, { ...item, syncStatus: 'SYNCED' })
+      merged.set(item.id, normalizeStockItem(item))
     }
   }
 
   const ordered = Array.from(merged.values()).sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   )
 
   const page = ordered.slice(0, STOCK_PAGE_SIZE)
@@ -173,11 +188,12 @@ const syncPendingStockItems = async () => {
         itemName: item.itemName,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
+        costPrice: item.costPrice,
         lowStockThreshold: item.lowStockThreshold,
       })
 
       await db.stockItems.put({
-        ...synced,
+        ...normalizeStockItem(synced),
         syncStatus: 'SYNCED',
       })
     } catch {
@@ -195,15 +211,11 @@ const syncPendingStockAdjustments = async () => {
 
   for (const adjustment of retryable) {
     try {
-      const synced = await stockApi.adjust(
-        adjustment.stockItemId,
-        adjustment.delta,
-        adjustment.reason
-      )
+      const synced = await stockApi.adjust(adjustment.stockItemId, adjustment.delta, adjustment.reason)
 
       await db.transaction('rw', db.stockItems, db.stockAdjustments, async () => {
         await db.stockItems.put({
-          ...synced,
+          ...normalizeStockItem(synced),
           syncStatus: 'SYNCED',
         })
         await db.stockAdjustments.update(adjustment.id, { syncStatus: 'SYNCED' })
@@ -227,10 +239,12 @@ const applyLocalStockDelta = async (stockItemId: string, delta: number) => {
   }
 
   const updatedAt = new Date().toISOString()
+  const metrics = computeStockMetrics({ ...item, quantity: nextQuantity })
 
   await db.stockItems.update(stockItemId, {
     quantity: nextQuantity,
     updatedAt,
+    ...metrics,
   })
 }
 
@@ -278,9 +292,11 @@ export const useCreateStockItem = () => {
         id,
         lowStockThreshold: input.lowStockThreshold ?? 5,
       }
+      const metrics = computeStockMetrics(item)
 
       await db.stockItems.add({
         ...item,
+        ...metrics,
         syncStatus: 'PENDING',
         updatedAt: timestamp,
       })
@@ -290,23 +306,23 @@ export const useCreateStockItem = () => {
           .sync(item)
           .then((synced) =>
             db.stockItems.put({
-              ...synced,
+              ...normalizeStockItem(synced),
               syncStatus: 'SYNCED',
-            })
+            }),
           )
           .catch(() => {
             // Keep the local item as PENDING so the next sync cycle can retry it.
           })
       }
 
-      return {
+      return normalizeStockItem({
         ...item,
+        ...metrics,
         updatedAt: timestamp,
-        syncStatus: 'PENDING' as const,
-      }
+        syncStatus: 'PENDING',
+      })
     },
     onSuccess: (createdItem) => {
-      // Show the new stock row immediately from local Dexie state instead of waiting on a refetch.
       updateCachedStockLists(queryClient, createdItem)
       queryClient.invalidateQueries({ queryKey: stockKeys.all })
       queryClient.invalidateQueries({ queryKey: dashboardKeys.overview() })
@@ -344,11 +360,11 @@ export const useAdjustStock = () => {
           .then((synced) =>
             db.transaction('rw', db.stockItems, db.stockAdjustments, async () => {
               await db.stockItems.put({
-                ...synced,
+                ...normalizeStockItem(synced),
                 syncStatus: 'SYNCED',
               })
               await db.stockAdjustments.update(adjustmentId, { syncStatus: 'SYNCED' })
-            })
+            }),
           )
           .catch(() => {
             // Keep the local adjustment pending for the sync engine.

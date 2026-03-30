@@ -1,5 +1,5 @@
 // src/api/sales.api.ts
-// Every function here is fully typed — the return type is inferred
+// Every function here is fully typed - the return type is inferred
 // from the shared-types DTOs. If the backend changes a field name,
 // TypeScript flags every place in the frontend that uses it.
 
@@ -8,16 +8,16 @@ import type {
   CreateSaleDTO,
   SaleDTO,
   CursorPaginatedResponse,
+  ProfitLossPeriod,
+  ProfitLossSummaryDTO,
 } from '@tradebook/shared-types'
 
 export const salesApi = {
-  // Single sale sync — used when online
   sync: async (data: CreateSaleDTO) => {
     const res = await apiClient.post<{ data: SaleDTO }>('/sales/sync', data)
     return res.data.data
   },
 
-  // Batch sync — used when coming back online after offline period
   syncBatch: async (sales: CreateSaleDTO[]) => {
     const res = await apiClient.post<{ data: { synced: number; sales: SaleDTO[] } }>(
       '/sales/sync/batch',
@@ -45,6 +45,13 @@ export const salesApi = {
         allTime: { total: number; count: number }
       }
     }>('/sales/dashboard')
+    return res.data.data
+  },
+
+  getProfitLoss: async (period: ProfitLossPeriod = 'THIS_MONTH') => {
+    const res = await apiClient.get<{ data: ProfitLossSummaryDTO }>('/sales/profit-loss', {
+      params: { period },
+    })
     return res.data.data
   },
 

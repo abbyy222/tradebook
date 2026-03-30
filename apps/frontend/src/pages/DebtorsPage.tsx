@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { RecordSyncBadge } from '@/components/RecordSyncBadge'
 import { useDebtorsList, useCreateDebtor, useRecordPayment, useRetryDebtorSync } from '@/hooks/useDebtors'
 
@@ -100,7 +100,7 @@ export const DebtorsPage = () => {
   return (
     <div className="min-h-screen">
       <div className="relative overflow-hidden px-5 pt-12 pb-6" style={{ background: 'linear-gradient(180deg, rgba(226,75,74,0.1) 0%, transparent 100%)' }}>
-        <div className="relative z-10 flex items-center justify-between max-w-lg mx-auto">
+        <div className="relative z-10 flex items-center justify-between max-w-6xl mx-auto">
           <div>
             <p className="label-base mb-0.5">Manage</p>
             <h1 className="font-display font-bold" style={{ fontSize: '1.75rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>Debtors</h1>
@@ -109,7 +109,7 @@ export const DebtorsPage = () => {
         </div>
       </div>
 
-      <div className="px-5 max-w-lg mx-auto flex flex-col gap-3">
+      <div className="px-5 max-w-6xl mx-auto flex flex-col gap-3">
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
           {([
             ['OWING', 'Owing'],
@@ -155,3 +155,4 @@ export const DebtorsPage = () => {
     </div>
   )
 }
+

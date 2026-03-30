@@ -1,8 +1,3 @@
-// src/modules/expenses/expenses.repository.ts
-// Identical structure to sales repository.
-// The new addition is getCategoryBreakdown — an aggregate query
-// that groups spending by category for the insights screen.
-
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../prisma/client'
 import { CreateExpenseInput, ListExpensesQuery } from './expenses.schema'
@@ -12,26 +7,51 @@ const expenseSelect = {
   description: true,
   amount: true,
   category: true,
+  expenseType: true,
+  frequency: true,
+  note: true,
   syncStatus: true,
   spentAt: true,
+  startDate: true,
+  endDate: true,
+  nextDueDate: true,
   createdAt: true,
 } satisfies Prisma.ExpenseSelect
 
-export const expensesRepository = {
+const toExpenseWriteInput = (traderId: string, data: CreateExpenseInput): Prisma.ExpenseUncheckedCreateInput => ({
+  id: data.id,
+  traderId,
+  description: data.description,
+  amount: new Prisma.Decimal(data.amount),
+  category: data.category,
+  expenseType: data.expenseType,
+  frequency: data.expenseType === 'RECURRING' ? data.frequency ?? null : null,
+  note: data.note?.trim() || null,
+  syncStatus: 'SYNCED',
+  spentAt: new Date(data.spentAt),
+  startDate: data.startDate ? new Date(data.startDate) : null,
+  endDate: data.endDate ? new Date(data.endDate) : null,
+  nextDueDate: data.nextDueDate ? new Date(data.nextDueDate) : null,
+})
 
+export const expensesRepository = {
   async upsert(traderId: string, data: CreateExpenseInput) {
     return prisma.expense.upsert({
       where: { id: data.id },
-      create: {
-        id: data.id,
-        traderId,
+      create: toExpenseWriteInput(traderId, data),
+      update: {
         description: data.description,
         amount: new Prisma.Decimal(data.amount),
         category: data.category,
+        expenseType: data.expenseType,
+        frequency: data.expenseType === 'RECURRING' ? data.frequency ?? null : null,
+        note: data.note?.trim() || null,
         syncStatus: 'SYNCED',
         spentAt: new Date(data.spentAt),
+        startDate: data.startDate ? new Date(data.startDate) : null,
+        endDate: data.endDate ? new Date(data.endDate) : null,
+        nextDueDate: data.nextDueDate ? new Date(data.nextDueDate) : null,
       },
-      update: { syncStatus: 'SYNCED' },
       select: expenseSelect,
     })
   },
@@ -41,16 +61,20 @@ export const expensesRepository = {
       expenses.map(expense =>
         prisma.expense.upsert({
           where: { id: expense.id },
-          create: {
-            id: expense.id,
-            traderId,
+          create: toExpenseWriteInput(traderId, expense),
+          update: {
             description: expense.description,
             amount: new Prisma.Decimal(expense.amount),
             category: expense.category,
+            expenseType: expense.expenseType,
+            frequency: expense.expenseType === 'RECURRING' ? expense.frequency ?? null : null,
+            note: expense.note?.trim() || null,
             syncStatus: 'SYNCED',
             spentAt: new Date(expense.spentAt),
+            startDate: expense.startDate ? new Date(expense.startDate) : null,
+            endDate: expense.endDate ? new Date(expense.endDate) : null,
+            nextDueDate: expense.nextDueDate ? new Date(expense.nextDueDate) : null,
           },
-          update: { syncStatus: 'SYNCED' },
           select: expenseSelect,
         })
       )
@@ -58,12 +82,11 @@ export const expensesRepository = {
   },
 
   async findMany(traderId: string, query: ListExpensesQuery) {
-    const { cursor, pageSize, from, to, category } = query
+    const { cursor, pageSize, from, to, category, expenseType, frequency } = query
 
     const where: Prisma.ExpenseWhereInput = {
       traderId,
-      ...(cursor && { spentAt: { lt: new Date(cursor) } }),
-      ...(from || to
+      ...(from || to || cursor
         ? {
             spentAt: {
               ...(cursor && { lt: new Date(cursor) }),
@@ -73,6 +96,8 @@ export const expensesRepository = {
           }
         : {}),
       ...(category && { category }),
+      ...(expenseType && { expenseType }),
+      ...(frequency && { frequency }),
     }
 
     const raw = await prisma.expense.findMany({
@@ -84,39 +109,35 @@ export const expensesRepository = {
 
     const hasNextPage = raw.length > pageSize
     const expenses = hasNextPage ? raw.slice(0, pageSize) : raw
-    const nextCursor =
-      hasNextPage && expenses.length > 0
-        ? expenses[expenses.length - 1].spentAt.toISOString()
-        : null
+    const nextCursor = hasNextPage && expenses.length > 0
+      ? expenses[expenses.length - 1].spentAt.toISOString()
+      : null
 
     return { expenses, nextCursor, hasNextPage }
   },
 
-  // --- Category breakdown ---
-  // This powers the "Where is my money going?" insights screen.
-  // groupBy is a SQL GROUP BY under the hood — Postgres sums each
-  // category in one pass through the data rather than fetching
-  // all records and summing in JavaScript (which would be very slow).
   async getCategoryBreakdown(traderId: string, from: Date, to: Date) {
     return prisma.expense.groupBy({
       by: ['category'],
-      where: {
-        traderId,
-        spentAt: { gte: from, lte: to },
-      },
+      where: { traderId, spentAt: { gte: from, lte: to } },
       _sum: { amount: true },
       _count: { id: true },
-      orderBy: { _sum: { amount: 'desc' } }, // biggest spend category first
+      orderBy: { _sum: { amount: 'desc' } },
     })
   },
 
-  // --- Total for period ---
-  // Used by the dashboard to show total outgoings this week.
-  async getTotalForPeriod(traderId: string, from: Date, to: Date) {
+  async getTotalForPeriod(traderId: string, from?: Date, to?: Date) {
     return prisma.expense.aggregate({
       where: {
         traderId,
-        spentAt: { gte: from, lte: to },
+        ...(from || to
+          ? {
+              spentAt: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
       },
       _sum: { amount: true },
       _count: { id: true },
@@ -131,8 +152,6 @@ export const expensesRepository = {
   },
 
   async delete(id: string, traderId: string) {
-    return prisma.expense.deleteMany({
-      where: { id, traderId },
-    })
+    return prisma.expense.deleteMany({ where: { id, traderId } })
   },
 }
