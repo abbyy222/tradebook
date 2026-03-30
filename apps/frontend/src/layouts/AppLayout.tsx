@@ -26,9 +26,15 @@ export const AppLayout = () => {
       <SyncStatusBanner />
       <div className="mx-auto flex w-full max-w-[1400px] md:gap-6 md:px-5 md:py-5">
         <aside className="hidden h-[calc(100vh-5rem)] w-[260px] flex-col rounded-3xl border border-white/10 bg-[#231510] p-5 md:flex">
-          <div className="rounded-2xl border border-white/10 bg-[#2d1b14] px-4 py-4">
+          <div className="min-w-0 rounded-2xl border border-white/10 bg-[#2d1b14] px-4 py-4">
             <p className="label-base mb-1">Workspace</p>
-            <p className="font-display text-xl font-bold text-primary wonky">{displayName}</p>
+            <p
+              className="truncate font-display font-bold leading-tight text-primary wonky"
+              style={{ fontSize: 'clamp(0.95rem, 1.2vw, 1.2rem)' }}
+              title={displayName}
+            >
+              {displayName}
+            </p>
             <p className="mt-1 font-body text-xs text-secondary">Your daily business cockpit</p>
           </div>
 
@@ -57,7 +63,9 @@ export const AppLayout = () => {
               {initials || 'TB'}
             </div>
             <div className="min-w-0">
-              <p className="truncate font-ui text-sm font-bold text-primary">{displayName}</p>
+              <p className="truncate font-ui text-sm font-bold text-primary" title={displayName}>
+                {displayName}
+              </p>
               <p className="truncate font-body text-xs text-secondary">Signed in</p>
             </div>
           </div>
