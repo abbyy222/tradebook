@@ -1,12 +1,15 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import { SyncStatusBanner } from '@/components/SyncStatusBanner'
 import { useAuthStore } from '@/stores/authStore'
 import { BottomNav } from '@/components/BottomNav'
 import { APP_NAV_ITEMS } from '@/components/AppNavigation'
+import { OnboardingQuest, ONBOARDING_STORAGE_KEY } from '@/components/OnboardingQuest'
 
 export const AppLayout = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const trader = useAuthStore((state) => state.trader)
+  const [questOpen, setQuestOpen] = useState(false)
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
@@ -20,6 +23,15 @@ export const AppLayout = () => {
     .map((part) => part[0]?.toUpperCase())
     .join('')
     .slice(0, 2)
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const hasCompleted = localStorage.getItem(ONBOARDING_STORAGE_KEY) === 'true'
+    if (!hasCompleted) {
+      setQuestOpen(true)
+    }
+  }, [isAuthenticated])
 
   return (
     <div className="min-h-screen bg-[#1a0f0a]">
@@ -69,13 +81,31 @@ export const AppLayout = () => {
               <p className="truncate font-body text-xs text-secondary">Signed in</p>
             </div>
           </div>
+
+          <button
+            onClick={() => setQuestOpen(true)}
+            className="mt-3 rounded-xl border border-[#e8a838]/35 bg-[#3a2319] px-3.5 py-2.5 text-left font-ui text-xs font-bold uppercase tracking-[0.08em] text-[#f0bc5a]"
+          >
+            Launch Quest Guide
+          </button>
         </aside>
 
         <main className="min-w-0 flex-1 pb-24 md:rounded-3xl md:border md:border-white/10 md:bg-[#20130e] md:pb-4">
           <Outlet />
         </main>
       </div>
+      <button
+        onClick={() => setQuestOpen(true)}
+        className="fixed bottom-[5.5rem] right-3 z-40 rounded-full border border-[#e8a838]/30 bg-[#2f1c14] px-3 py-2 font-ui text-[10px] font-bold uppercase tracking-[0.08em] text-[#f0bc5a] md:hidden"
+      >
+        Guide
+      </button>
       <BottomNav />
+      <OnboardingQuest
+        open={questOpen}
+        onClose={() => setQuestOpen(false)}
+        onComplete={() => localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true')}
+      />
     </div>
   )
 }
