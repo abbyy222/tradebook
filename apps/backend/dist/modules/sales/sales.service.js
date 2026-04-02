@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.salesService = void 0;
+const client_1 = require("@prisma/client");
 const sales_repository_1 = require("./sales.repository");
 const debtors_repository_1 = require("../debtors/debtors.repository");
 const expenses_repository_1 = require("../expenses/expenses.repository");
@@ -41,6 +42,13 @@ const getPeriodStartInLagos = (period, now) => {
             return undefined;
     }
 };
+const getPeriodEndInLagos = (period, now) => {
+    if (period === 'ALL_TIME')
+        return now;
+    const lagosNow = new Date(now.getTime() + LAGOS_OFFSET_MS);
+    lagosNow.setUTCHours(23, 59, 59, 999);
+    return new Date(lagosNow.getTime() - LAGOS_OFFSET_MS);
+};
 const assertSaleAmountMatches = (input) => {
     const expected = Number((input.quantity * input.unitPrice).toFixed(2));
     if (Math.abs(expected - input.amount) > 0.009) {
@@ -74,6 +82,9 @@ exports.salesService = {
     async syncSale(traderId, input) {
         const existingSale = await sales_repository_1.salesRepository.findById(input.id, traderId);
         const normalizedInput = await normalizeSaleAgainstStock(traderId, input, existingSale);
+        if (existingSale) {
+            return toSaleDTO(existingSale);
+        }
         if (normalizedInput.paymentType === 'DEBT' && !normalizedInput.debtorId) {
             throw new errorHandler_1.AppError('A debtor must be specified for credit sales', 400, 'DEBTOR_REQUIRED');
         }
@@ -83,11 +94,24 @@ exports.salesService = {
                 throw new errorHandler_1.AppError('Debtor not found', 404, 'NOT_FOUND');
             }
         }
-        const sale = await sales_repository_1.salesRepository.upsert(traderId, normalizedInput);
-        if (!existingSale && normalizedInput.stockItemId) {
+        let sale;
+        try {
+            sale = await sales_repository_1.salesRepository.create(traderId, normalizedInput);
+        }
+        catch (error) {
+            const isDuplicateSale = error instanceof client_1.Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+            if (!isDuplicateSale)
+                throw error;
+            const alreadySynced = await sales_repository_1.salesRepository.findById(normalizedInput.id, traderId);
+            if (!alreadySynced) {
+                throw new errorHandler_1.AppError('Sale already exists but could not be loaded', 409, 'SALE_DUPLICATE');
+            }
+            return toSaleDTO(alreadySynced);
+        }
+        if (normalizedInput.stockItemId) {
             await stock_repository_1.stockRepository.adjustQuantity(normalizedInput.stockItemId, traderId, -normalizedInput.quantity);
         }
-        if (!existingSale && normalizedInput.paymentType === 'DEBT' && normalizedInput.debtorId) {
+        if (normalizedInput.paymentType === 'DEBT' && normalizedInput.debtorId) {
             await debtors_repository_1.debtorsRepository.incrementOwed(normalizedInput.debtorId, normalizedInput.amount);
         }
         return toSaleDTO(sale);
@@ -126,9 +150,10 @@ exports.salesService = {
     async getProfitLossSummary(traderId, query) {
         const now = new Date();
         const from = getPeriodStartInLagos(query.period, now);
+        const to = getPeriodEndInLagos(query.period, now);
         const [salesTotals, expenseTotals, inventorySummary, receivablesSummary] = await Promise.all([
-            sales_repository_1.salesRepository.getTotalsForPeriod(traderId, from, now),
-            expenses_repository_1.expensesRepository.getTotalForPeriod(traderId, from, now),
+            sales_repository_1.salesRepository.getTotalsForPeriod(traderId, from, to),
+            expenses_repository_1.expensesRepository.getTotalForPeriod(traderId, from, to),
             stock_repository_1.stockRepository.getInventorySummary(traderId),
             debtors_repository_1.debtorsRepository.getReceivablesSummary(traderId),
         ]);

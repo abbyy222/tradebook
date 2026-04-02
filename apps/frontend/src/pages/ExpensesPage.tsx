@@ -59,20 +59,24 @@ const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
 const buildWindow = (scope: TimeScope) => {
   const now = new Date()
   const from = new Date(now)
+  const to = new Date(now)
 
   if (scope === 'TODAY') {
     from.setHours(0, 0, 0, 0)
+    to.setHours(23, 59, 59, 999)
   } else if (scope === 'THIS_MONTH') {
     from.setDate(1)
     from.setHours(0, 0, 0, 0)
+    to.setHours(23, 59, 59, 999)
   } else {
     from.setMonth(0, 1)
     from.setHours(0, 0, 0, 0)
+    to.setHours(23, 59, 59, 999)
   }
 
   return {
     from: from.toISOString(),
-    to: now.toISOString(),
+    to: to.toISOString(),
   }
 }
 

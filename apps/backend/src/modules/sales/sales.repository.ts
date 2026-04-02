@@ -34,6 +34,25 @@ const saleSelect = {
 } satisfies Prisma.SaleSelect
 
 export const salesRepository = {
+  async create(traderId: string, data: CreateSaleInput) {
+    return prisma.sale.create({
+      data: {
+        id: data.id,
+        traderId,
+        stockItemId: data.stockItemId ?? null,
+        itemName: data.itemName,
+        quantity: data.quantity,
+        unitPrice: new Prisma.Decimal(data.unitPrice),
+        amount: new Prisma.Decimal(data.amount),
+        paymentType: data.paymentType,
+        debtorId: data.debtorId ?? null,
+        syncStatus: 'SYNCED',
+        soldAt: new Date(data.soldAt),
+      },
+      select: saleSelect,
+    })
+  },
+
   async upsert(traderId: string, data: CreateSaleInput) {
     return prisma.sale.upsert({
       where: { id: data.id },

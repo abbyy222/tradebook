@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { salesRepository } from './sales.repository'
 import { debtorsRepository } from '../debtors/debtors.repository'
 import { expensesRepository } from '../expenses/expenses.repository'
@@ -42,6 +43,14 @@ const getPeriodStartInLagos = (period: ProfitLossQuery['period'], now: Date) => 
     default:
       return undefined
   }
+}
+
+const getPeriodEndInLagos = (period: ProfitLossQuery['period'], now: Date) => {
+  if (period === 'ALL_TIME') return now
+
+  const lagosNow = new Date(now.getTime() + LAGOS_OFFSET_MS)
+  lagosNow.setUTCHours(23, 59, 59, 999)
+  return new Date(lagosNow.getTime() - LAGOS_OFFSET_MS)
 }
 
 const assertSaleAmountMatches = (input: CreateSaleInput) => {
@@ -89,6 +98,10 @@ export const salesService = {
     const existingSale = await salesRepository.findById(input.id, traderId)
     const normalizedInput = await normalizeSaleAgainstStock(traderId, input, existingSale)
 
+    if (existingSale) {
+      return toSaleDTO(existingSale)
+    }
+
     if (normalizedInput.paymentType === 'DEBT' && !normalizedInput.debtorId) {
       throw new AppError('A debtor must be specified for credit sales', 400, 'DEBTOR_REQUIRED')
     }
@@ -100,13 +113,25 @@ export const salesService = {
       }
     }
 
-    const sale = await salesRepository.upsert(traderId, normalizedInput)
+    let sale
+    try {
+      sale = await salesRepository.create(traderId, normalizedInput)
+    } catch (error) {
+      const isDuplicateSale = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+      if (!isDuplicateSale) throw error
 
-    if (!existingSale && normalizedInput.stockItemId) {
+      const alreadySynced = await salesRepository.findById(normalizedInput.id, traderId)
+      if (!alreadySynced) {
+        throw new AppError('Sale already exists but could not be loaded', 409, 'SALE_DUPLICATE')
+      }
+      return toSaleDTO(alreadySynced)
+    }
+
+    if (normalizedInput.stockItemId) {
       await stockRepository.adjustQuantity(normalizedInput.stockItemId, traderId, -normalizedInput.quantity)
     }
 
-    if (!existingSale && normalizedInput.paymentType === 'DEBT' && normalizedInput.debtorId) {
+    if (normalizedInput.paymentType === 'DEBT' && normalizedInput.debtorId) {
       await debtorsRepository.incrementOwed(normalizedInput.debtorId, normalizedInput.amount)
     }
 
@@ -152,10 +177,11 @@ export const salesService = {
   async getProfitLossSummary(traderId: string, query: ProfitLossQuery) {
     const now = new Date()
     const from = getPeriodStartInLagos(query.period, now)
+    const to = getPeriodEndInLagos(query.period, now)
 
     const [salesTotals, expenseTotals, inventorySummary, receivablesSummary] = await Promise.all([
-      salesRepository.getTotalsForPeriod(traderId, from, now),
-      expensesRepository.getTotalForPeriod(traderId, from, now),
+      salesRepository.getTotalsForPeriod(traderId, from, to),
+      expensesRepository.getTotalForPeriod(traderId, from, to),
       stockRepository.getInventorySummary(traderId),
       debtorsRepository.getReceivablesSummary(traderId),
     ])

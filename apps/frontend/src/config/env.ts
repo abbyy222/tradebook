@@ -3,8 +3,22 @@
 // Vite exposes env vars prefixed with VITE_ to the browser.
 // Never put secrets here — this code ships to the client.
 
+const normalizeApiUrl = (value: string) => {
+  const trimmed = value.trim().replace(/\/+$/, '')
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  return `https://${trimmed.replace(/^\/+/, '')}`
+}
+
+const rawApiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+const apiUrl = normalizeApiUrl(rawApiUrl)
+
+if (import.meta.env.PROD && !/^https?:\/\//i.test(rawApiUrl)) {
+  // Helps catch broken env values in deployment logs/console.
+  console.warn('VITE_API_URL is missing protocol, auto-prefixed with https://')
+}
+
 const env = {
-  API_URL: import.meta.env.VITE_API_URL ?? 'http://localhost:3000',
+  API_URL: apiUrl,
   APP_ENV: import.meta.env.MODE,
 } as const
 

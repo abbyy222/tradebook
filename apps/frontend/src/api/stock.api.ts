@@ -7,8 +7,14 @@ export const stockApi = {
     return res.data.data
   },
 
-  list: async (params: { cursor?: string; pageSize?: number; lowStockOnly?: boolean; search?: string }) => {
-    const res = await apiClient.get<CursorPaginatedResponse<StockItemDTO>>('/stock', { params })
+  list: async (
+    params: { cursor?: string; pageSize?: number; lowStockOnly?: boolean; search?: string },
+    options?: { timeoutMs?: number },
+  ) => {
+    const res = await apiClient.get<CursorPaginatedResponse<StockItemDTO>>('/stock', {
+      params,
+      ...(options?.timeoutMs ? { timeout: options.timeoutMs } : {}),
+    })
     return res.data
   },
 

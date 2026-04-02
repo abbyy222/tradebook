@@ -17,6 +17,7 @@ export const stockKeys = {
 }
 
 const STOCK_PAGE_SIZE = 20
+const STOCK_SERVER_TIMEOUT_MS = 2_500
 export type StockAdjustmentReason = 'restock' | 'sale_adjustment' | 'damage' | 'correction'
 
 type StockListFilters = { lowStockOnly?: boolean; search?: string }
@@ -264,7 +265,7 @@ export const useStockList = (filters: { lowStockOnly?: boolean; search?: string 
             pageSize: STOCK_PAGE_SIZE,
             lowStockOnly: filters.lowStockOnly,
             search: filters.search,
-          })
+          }, { timeoutMs: STOCK_SERVER_TIMEOUT_MS })
           await storeServerStockItems(serverPage.data)
           return mergeServerAndLocalStockItems(serverPage.data, filters)
         } catch {
