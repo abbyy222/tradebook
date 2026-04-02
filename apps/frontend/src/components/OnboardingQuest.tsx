@@ -57,7 +57,7 @@ const QUEST_STEPS: QuestStep[] = [
     reward: '+30 cashflow points',
     route: '/debtors',
     actionLabel: 'Open Debtors',
-    tip: 'Check balances frequently so receivables do not pile up.',
+    tip: 'Check this often so money customers owe you does not pile up.',
   },
 ]
 

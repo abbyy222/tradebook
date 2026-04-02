@@ -188,10 +188,10 @@ export const DashboardPage = () => {
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.4fr_1fr]">
         <section className="rounded-3xl border border-white/10 bg-[#231510] p-4 md:p-5">
-          <p className="label-base mb-3">This month snapshot</p>
+          <p className="label-base mb-3">This month summary</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <StatCard
-              label="Revenue"
+              label="Money in"
               value={overviewLoading ? '' : fmt(operatingSnapshot?.revenue ?? 0)}
               subtext={operatingSnapshot ? `${operatingSnapshot.salesCount} sales` : undefined}
               accent="gold"
@@ -207,15 +207,15 @@ export const DashboardPage = () => {
               isLoading={overviewLoading}
             />
             <StatCard
-              label="Op. Profit/Loss"
+              label="Profit after expenses"
               value={overviewLoading ? '' : fmt(operatingSnapshot?.operatingProfit ?? 0)}
               trend={
                 operatingSnapshot
                   ? {
                       text:
                         operatingSnapshot.operatingProfit >= 0
-                          ? 'operating profit'
-                          : 'operating loss',
+                          ? 'you are making profit'
+                          : 'you are in loss',
                       positive: operatingSnapshot.operatingProfit >= 0,
                     }
                   : undefined
@@ -225,9 +225,9 @@ export const DashboardPage = () => {
               isLoading={overviewLoading}
             />
             <StatCard
-              label="Receivables"
+              label="Customers owing"
               value={overviewLoading ? '' : fmt(operatingSnapshot?.receivablesTotal ?? 0)}
-              subtext={operatingSnapshot ? `${operatingSnapshot.activeDebtorsCount} active debtors` : undefined}
+              subtext={operatingSnapshot ? `${operatingSnapshot.activeDebtorsCount} customers owing` : undefined}
               accent="neutral"
               icon={<UserIcon />}
               isLoading={overviewLoading}
@@ -236,21 +236,21 @@ export const DashboardPage = () => {
 
           <div className="mt-3 grid grid-cols-1 gap-3 rounded-2xl border border-white/10 bg-[#1f130e] p-4 md:grid-cols-2 md:p-5">
             <div>
-              <p className="label-base mb-1">Inventory on hand</p>
+              <p className="label-base mb-1">Goods left in shop</p>
               <p className="font-display text-xl font-bold text-primary wonky md:text-2xl">
                 {overviewLoading ? '...' : fmt(operatingSnapshot?.inventoryValue ?? 0)}
               </p>
               <p className="mt-1 text-xs text-secondary">
-                {overviewLoading ? '' : `${operatingSnapshot?.unitsOnHand ?? 0} units on hand`}
+                {overviewLoading ? '' : `${operatingSnapshot?.unitsOnHand ?? 0} items left`}
               </p>
             </div>
             <div className="md:text-right">
-              <p className="label-base mb-1">Expected margin on hand</p>
+              <p className="label-base mb-1">Possible profit in goods left</p>
               <p className="font-display text-lg font-bold text-[#4ecca3] wonky md:text-xl">
                 {overviewLoading ? '...' : fmt(operatingSnapshot?.expectedMarginOnHand ?? 0)}
               </p>
               <p className="mt-1 text-xs text-secondary">
-                {overviewLoading ? '' : `Retail value ${fmt(operatingSnapshot?.retailValue ?? 0)}`}
+                {overviewLoading ? '' : `If sold today: ${fmt(operatingSnapshot?.retailValue ?? 0)}`}
               </p>
             </div>
           </div>

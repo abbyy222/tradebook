@@ -19,6 +19,8 @@ export const stockKeys = {
 const STOCK_PAGE_SIZE = 20
 const STOCK_SERVER_TIMEOUT_MS = 2_500
 export type StockAdjustmentReason = 'restock' | 'sale_adjustment' | 'damage' | 'correction'
+let isSyncingStockItems = false
+let isSyncingStockAdjustments = false
 
 type StockListFilters = { lowStockOnly?: boolean; search?: string }
 
@@ -176,54 +178,74 @@ const mergeServerAndLocalStockItems = async (
 }
 
 const syncPendingStockItems = async () => {
+  if (isSyncingStockItems) return
+  isSyncingStockItems = true
+
   const retryable = await db.stockItems
     .filter((item) => item.syncStatus === 'PENDING' || item.syncStatus === 'FAILED')
     .toArray()
 
-  if (retryable.length === 0) return
-
-  for (const item of retryable) {
-    try {
-      const synced = await stockApi.sync({
-        id: item.id,
-        itemName: item.itemName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        costPrice: item.costPrice,
-        lowStockThreshold: item.lowStockThreshold,
-      })
-
-      await db.stockItems.put({
-        ...normalizeStockItem(synced),
-        syncStatus: 'SYNCED',
-      })
-    } catch {
-      await db.stockItems.update(item.id, { syncStatus: 'FAILED' })
-    }
+  if (retryable.length === 0) {
+    isSyncingStockItems = false
+    return
   }
-}
 
-const syncPendingStockAdjustments = async () => {
-  const retryable = await db.stockAdjustments
-    .filter((adjustment) => adjustment.syncStatus === 'PENDING' || adjustment.syncStatus === 'FAILED')
-    .sortBy('createdAt')
+  try {
+    for (const item of retryable) {
+      try {
+        const synced = await stockApi.sync({
+          id: item.id,
+          itemName: item.itemName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          costPrice: item.costPrice,
+          lowStockThreshold: item.lowStockThreshold,
+        })
 
-  if (retryable.length === 0) return
-
-  for (const adjustment of retryable) {
-    try {
-      const synced = await stockApi.adjust(adjustment.stockItemId, adjustment.delta, adjustment.reason)
-
-      await db.transaction('rw', db.stockItems, db.stockAdjustments, async () => {
         await db.stockItems.put({
           ...normalizeStockItem(synced),
           syncStatus: 'SYNCED',
         })
-        await db.stockAdjustments.update(adjustment.id, { syncStatus: 'SYNCED' })
-      })
-    } catch {
-      await db.stockAdjustments.update(adjustment.id, { syncStatus: 'FAILED' })
+      } catch {
+        await db.stockItems.update(item.id, { syncStatus: 'FAILED' })
+      }
     }
+  } finally {
+    isSyncingStockItems = false
+  }
+}
+
+const syncPendingStockAdjustments = async () => {
+  if (isSyncingStockAdjustments) return
+  isSyncingStockAdjustments = true
+
+  const retryable = await db.stockAdjustments
+    .filter((adjustment) => adjustment.syncStatus === 'PENDING' || adjustment.syncStatus === 'FAILED')
+    .sortBy('createdAt')
+
+  if (retryable.length === 0) {
+    isSyncingStockAdjustments = false
+    return
+  }
+
+  try {
+    for (const adjustment of retryable) {
+      try {
+        const synced = await stockApi.adjust(adjustment.stockItemId, adjustment.delta, adjustment.reason)
+
+        await db.transaction('rw', db.stockItems, db.stockAdjustments, async () => {
+          await db.stockItems.put({
+            ...normalizeStockItem(synced),
+            syncStatus: 'SYNCED',
+          })
+          await db.stockAdjustments.update(adjustment.id, { syncStatus: 'SYNCED' })
+        })
+      } catch {
+        await db.stockAdjustments.update(adjustment.id, { syncStatus: 'FAILED' })
+      }
+    }
+  } finally {
+    isSyncingStockAdjustments = false
   }
 }
 
@@ -356,20 +378,7 @@ export const useAdjustStock = () => {
       })
 
       if (navigator.onLine) {
-        void stockApi
-          .adjust(input.stockItemId, input.delta, input.reason)
-          .then((synced) =>
-            db.transaction('rw', db.stockItems, db.stockAdjustments, async () => {
-              await db.stockItems.put({
-                ...normalizeStockItem(synced),
-                syncStatus: 'SYNCED',
-              })
-              await db.stockAdjustments.update(adjustmentId, { syncStatus: 'SYNCED' })
-            }),
-          )
-          .catch(() => {
-            // Keep the local adjustment pending for the sync engine.
-          })
+        await syncPendingStockAdjustments()
       }
 
       return db.stockItems.get(input.stockItemId)

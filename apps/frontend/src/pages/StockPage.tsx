@@ -123,10 +123,10 @@ export const StockPage = () => {
 
       <div className="px-5 max-w-6xl mx-auto flex flex-col gap-4 pb-10">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <SummaryCard label="Stock value" value={fmt(summary.stockValue)} sublabel="What your inventory cost you" />
-          <SummaryCard label="Retail value" value={fmt(summary.retailValue)} sublabel="Potential sales value on hand" />
-          <SummaryCard label="Expected margin" value={fmt(summary.expectedGrossProfit)} sublabel="Retail value minus stock value" />
-          <SummaryCard label="Units on hand" value={summary.units.toLocaleString('en-NG')} sublabel="Current physical quantity tracked" />
+          <SummaryCard label="Cost of goods left" value={fmt(summary.stockValue)} sublabel="How much your remaining goods cost" />
+          <SummaryCard label="If sold now" value={fmt(summary.retailValue)} sublabel="Possible money in from goods left" />
+          <SummaryCard label="Possible profit" value={fmt(summary.expectedGrossProfit)} sublabel="Selling value minus cost" />
+          <SummaryCard label="Items left" value={summary.units.toLocaleString('en-NG')} sublabel="How many goods are left" />
         </div>
 
         <div className="relative"><svg className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ color: 'rgba(245,237,224,0.25)' }}><circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.5" /><path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg><input type="search" placeholder="Search items..." value={search} onChange={e => setSearch(e.target.value)} className="input-base" style={{ paddingLeft: '2.75rem' }} /></div>
@@ -146,5 +146,6 @@ export const StockPage = () => {
     </div>
   )
 }
+
 
 

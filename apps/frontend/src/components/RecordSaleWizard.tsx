@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useCreateSale } from '@/hooks/useSales'
 import { useDebtorsList } from '@/hooks/useDebtors'
 import { useStockList } from '@/hooks/useStock'
+import { useAuthStore } from '@/stores/authStore'
+import { buildReceiptText, printReceipt } from '@/utils/receipt'
 
 interface Props {
   onClose: () => void
@@ -52,8 +54,12 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
   const [selectedDebtorId, setSelectedDebtorId] = useState('')
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
+  const [completedSaleId, setCompletedSaleId] = useState('')
+  const [completedSaleTime, setCompletedSaleTime] = useState('')
+  const [receiptBusy, setReceiptBusy] = useState(false)
 
   const createSale = useCreateSale()
+  const trader = useAuthStore((state) => state.trader)
   const { data: stockData } = useStockList({ search })
   const { data: debtorsData } = useDebtorsList()
 
@@ -65,6 +71,21 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
 
   const qty = Number.parseInt(quantity, 10) || 0
   const amount = selectedStockItem ? Number((selectedStockItem.unitPrice * qty).toFixed(2)) : 0
+  const receiptPayload = success && selectedStockItem
+    ? {
+        receiptNumber: completedSaleId ? completedSaleId.slice(0, 8).toUpperCase() : 'SALE',
+        businessName: trader?.businessName ?? trader?.name ?? 'Tradebook',
+        traderName: trader?.name,
+        phoneNumber: trader?.phoneNumber,
+        soldAt: completedSaleTime || new Date().toISOString(),
+        itemName: selectedStockItem.itemName,
+        quantity: qty,
+        unitPrice: selectedStockItem.unitPrice,
+        amount,
+        paymentType,
+        debtorName: paymentType === 'DEBT' ? selectedDebtor?.customerName : undefined,
+      }
+    : null
   const stepIndex = STEPS.indexOf(step)
   const goNext = () => setStep(STEPS[stepIndex + 1])
   const goBack = () => (stepIndex === 0 ? onClose() : setStep(STEPS[stepIndex - 1]))
@@ -84,7 +105,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
 
     try {
       setError('')
-      await createSale.mutateAsync({
+      const createdSale = await createSale.mutateAsync({
         stockItemId: selectedStockItem.id,
         itemName: selectedStockItem.itemName,
         quantity: qty,
@@ -94,6 +115,8 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
         debtorId: paymentType === 'DEBT' ? selectedDebtorId : undefined,
         soldAt: new Date().toISOString(),
       })
+      setCompletedSaleId(createdSale.id)
+      setCompletedSaleTime(createdSale.soldAt)
       setSuccess(true)
       setTimeout(onClose, 2200)
     } catch (err) {
@@ -115,6 +138,59 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
           <div className="w-full rounded-xl px-5 py-4 flex items-center justify-between" style={{ background: '#2e1c14', border: '1px solid rgba(255,255,255,0.07)' }}>
             <span className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.6)' }}>{selectedStockItem.itemName} x {qty}</span>
             <span className="font-display font-bold" style={{ fontSize: '1.1rem', color: '#e8a838', fontVariationSettings: "'WONK' 1" }}>{fmt(amount)}</span>
+          </div>
+
+          <div className="w-full grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <button
+              className="btn-ghost"
+              disabled={!receiptPayload || receiptBusy}
+              onClick={() => {
+                if (!receiptPayload) return
+                printReceipt(receiptPayload)
+              }}
+            >
+              Print / PDF
+            </button>
+            <button
+              className="btn-ghost"
+              disabled={!receiptPayload || receiptBusy}
+              onClick={async () => {
+                if (!receiptPayload) return
+                setReceiptBusy(true)
+                try {
+                  const text = buildReceiptText(receiptPayload)
+                  if (navigator.share) {
+                    await navigator.share({
+                      title: `Receipt ${receiptPayload.receiptNumber}`,
+                      text,
+                    })
+                  } else {
+                    await navigator.clipboard.writeText(text)
+                    window.alert('Receipt copied. You can paste and send it via WhatsApp or SMS.')
+                  }
+                } finally {
+                  setReceiptBusy(false)
+                }
+              }}
+            >
+              Share
+            </button>
+            <button
+              className="btn-ghost"
+              disabled={!receiptPayload || receiptBusy}
+              onClick={async () => {
+                if (!receiptPayload) return
+                setReceiptBusy(true)
+                try {
+                  await navigator.clipboard.writeText(buildReceiptText(receiptPayload))
+                  window.alert('Receipt copied to clipboard.')
+                } finally {
+                  setReceiptBusy(false)
+                }
+              }}
+            >
+              Copy Text
+            </button>
           </div>
         </div>
       </div>
