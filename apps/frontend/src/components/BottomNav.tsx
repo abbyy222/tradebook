@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { APP_PRIMARY_NAV_ITEMS } from '@/components/AppNavigation'
+import { APP_NAV_ITEMS } from '@/components/AppNavigation'
 
 export const BottomNav = () => {
   return (
@@ -8,12 +8,12 @@ export const BottomNav = () => {
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-[#180d09]/95 backdrop-blur-xl md:hidden"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="mx-auto flex max-w-xl items-stretch px-2">
-        {APP_PRIMARY_NAV_ITEMS.map((item) => (
+      <div className="mx-auto flex max-w-xl items-stretch px-1.5">
+        {APP_NAV_ITEMS.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.to === '/dashboard'} className="flex-1">
             {({ isActive }) => (
               <div
-                className="relative flex min-h-[64px] flex-col items-center justify-center gap-1 py-2 transition-all duration-150"
+                className="relative flex min-h-[62px] flex-col items-center justify-center gap-0.5 py-2 transition-all duration-150"
                 style={{ color: isActive ? '#f0bc5a' : 'rgba(245,237,224,0.45)' }}
               >
                 {isActive && (
@@ -22,8 +22,8 @@ export const BottomNav = () => {
                     style={{ background: 'linear-gradient(90deg, #c4622d, #e8a838)' }}
                   />
                 )}
-                <item.Icon active={isActive} className="h-5 w-5" />
-                <span className="font-ui text-[10px] font-bold uppercase tracking-[0.1em]">
+                <item.Icon active={isActive} className="h-[18px] w-[18px]" />
+                <span className="font-ui text-[9px] font-bold uppercase tracking-[0.08em]">
                   {item.label}
                 </span>
               </div>
