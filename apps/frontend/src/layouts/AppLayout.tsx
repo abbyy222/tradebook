@@ -66,7 +66,7 @@ export const AppLayout = () => {
   return (
     <div className="min-h-screen bg-[#1a0f0a]">
       <SyncStatusBanner />
-      <div className="mx-auto flex w-full max-w-[1400px] md:gap-6 md:px-5 md:py-5">
+      <div className="mx-auto flex w-full max-w-[1320px] md:gap-6 md:px-5 md:py-5">
         <aside className="hidden h-[calc(100vh-5rem)] w-[260px] flex-col rounded-3xl border border-white/10 bg-[#231510] p-5 md:flex">
           <div className="min-w-0 rounded-2xl border border-white/10 bg-[#2d1b14] px-4 py-4">
             <p className="label-base mb-1">Workspace</p>

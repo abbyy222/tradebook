@@ -33,6 +33,11 @@
     scroll-behavior: smooth;
   }
 
+  /* Keep desktop rendering compact and consistent across environments */
+  @media (min-width: 1200px) {
+    html { font-size: 15px; }
+  }
+
   body {
     /* Deep earth — the colour of Lagos red soil at midnight */
     background-color: var(--surface-0);
