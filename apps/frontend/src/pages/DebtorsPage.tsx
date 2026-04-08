@@ -424,24 +424,24 @@ export const DebtorsPage = () => {
 
   return (
     <div className="min-h-screen">
-      <div className="relative overflow-hidden px-5 pt-12 pb-6" style={{ background: 'linear-gradient(180deg, rgba(226,75,74,0.1) 0%, transparent 100%)' }}>
+      <div className="relative overflow-hidden px-4 pt-10 pb-5 max-[360px]:px-3.5 max-[360px]:pt-9 max-[360px]:pb-4 sm:px-5 sm:pt-12 sm:pb-6" style={{ background: 'linear-gradient(180deg, rgba(226,75,74,0.1) 0%, transparent 100%)' }}>
         <div className="relative z-10 flex items-center justify-between max-w-6xl mx-auto">
           <div>
             <p className="label-base mb-0.5">Manage</p>
-            <h1 className="font-display font-bold" style={{ fontSize: '1.75rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>Debtors</h1>
+            <h1 className="font-display font-bold max-[360px]:text-[1.55rem]" style={{ fontSize: '1.75rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>Debtors</h1>
           </div>
-          <button onClick={() => setAddOpen(true)} className="rounded-xl px-4 py-2.5 font-ui font-bold text-sm" style={{ background: 'linear-gradient(135deg, #c04818, #e8a838)', color: '#fff' }}>+ Add</button>
+          <button onClick={() => setAddOpen(true)} className="rounded-xl px-3.5 py-2.5 text-[13px] font-ui font-bold max-[360px]:px-3 max-[360px]:py-2 max-[360px]:text-xs" style={{ background: 'linear-gradient(135deg, #c04818, #e8a838)', color: '#fff' }}>+ Add</button>
         </div>
       </div>
 
-      <div className="px-5 max-w-6xl mx-auto flex flex-col gap-3">
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+      <div className="px-4 max-w-6xl mx-auto flex flex-col gap-3 max-[360px]:px-3.5">
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 max-[360px]:gap-1.5" style={{ scrollbarWidth: 'none' }}>
           {([
             ['OWING', 'Owing'],
             ['CLEARED', 'Cleared'],
             ['ALL', 'All'],
           ] as [DebtorTab, string][]).map(([tab, label]) => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className="rounded-full px-4 py-2 font-ui font-bold text-xs flex-shrink-0 transition-all duration-150" style={{ background: activeTab === tab ? 'linear-gradient(135deg, #c04818, #e8a838)' : 'rgba(255,255,255,0.05)', color: activeTab === tab ? '#fff' : 'rgba(245,237,224,0.5)', border: `1px solid ${activeTab === tab ? 'transparent' : 'rgba(255,255,255,0.07)'}`, letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: '0.65rem' }}>
+            <button key={tab} onClick={() => setActiveTab(tab)} className="rounded-full px-4 py-2 font-ui font-bold text-xs flex-shrink-0 transition-all duration-150 max-[360px]:px-3 max-[360px]:py-1.5" style={{ background: activeTab === tab ? 'linear-gradient(135deg, #c04818, #e8a838)' : 'rgba(255,255,255,0.05)', color: activeTab === tab ? '#fff' : 'rgba(245,237,224,0.5)', border: `1px solid ${activeTab === tab ? 'transparent' : 'rgba(255,255,255,0.07)'}`, letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: '0.65rem' }}>
               {label} ({tabCounts[tab]})
             </button>
           ))}
@@ -456,29 +456,29 @@ export const DebtorsPage = () => {
             <p className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.35)' }}>{activeTab === 'OWING' ? 'Everyone has paid. Well done!' : activeTab === 'CLEARED' ? 'Cleared records stay here for history and audits.' : 'Add your first debtor to start tracking balances.'}</p>
           </div>
         ) : filteredDebtors.map((debtor: any) => (
-          <div key={debtor.id} className="rounded-2xl px-4 py-4 sm:px-5 flex flex-col gap-3 sm:gap-4" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div key={debtor.id} className="rounded-2xl px-4 py-4 sm:px-5 flex flex-col gap-3 sm:gap-4 max-[360px]:px-3.5 max-[360px]:py-3.5 max-[360px]:gap-2.5" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.06)' }}>
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-3">
-                <div className="rounded-full flex items-center justify-center font-ui font-bold text-sm flex-shrink-0" style={{ width: 40, height: 40, background: 'linear-gradient(135deg, rgba(192,72,24,0.35), rgba(45,58,124,0.35))', color: '#f0bc5a', border: '1px solid rgba(232,168,56,0.2)' }}>{debtor.customerName[0].toUpperCase()}</div>
+                <div className="rounded-full flex items-center justify-center font-ui font-bold text-sm flex-shrink-0 max-[360px]:text-xs" style={{ width: 40, height: 40, background: 'linear-gradient(135deg, rgba(192,72,24,0.35), rgba(45,58,124,0.35))', color: '#f0bc5a', border: '1px solid rgba(232,168,56,0.2)' }}>{debtor.customerName[0].toUpperCase()}</div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-ui font-semibold text-sm leading-tight break-words" style={{ color: '#f5ede0' }}>{debtor.customerName}</p>
-                    {debtor.balance === 0 && <span className="inline-flex rounded-full px-2.5 py-1 font-ui font-bold text-[10px]" style={{ background: 'rgba(78,204,163,0.12)', color: '#4ecca3', border: '1px solid rgba(78,204,163,0.2)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Cleared</span>}
+                    <p className="font-ui font-semibold text-sm leading-tight break-words max-[360px]:text-[13px]" style={{ color: '#f5ede0' }}>{debtor.customerName}</p>
+                    {debtor.balance === 0 && <span className="inline-flex rounded-full px-2.5 py-1 font-ui font-bold text-[10px] max-[360px]:px-2 max-[360px]:py-0.5 max-[360px]:text-[9px]" style={{ background: 'rgba(78,204,163,0.12)', color: '#4ecca3', border: '1px solid rgba(78,204,163,0.2)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Cleared</span>}
                   </div>
-                  {debtor.phoneNumber && <p className="font-body text-xs mt-0.5 break-all" style={{ color: 'rgba(245,237,224,0.3)' }}>{debtor.phoneNumber}</p>}
-                  {debtor.dueDate && <p className="font-body text-xs mt-1" style={{ color: '#f0bc5a' }}>Due {new Date(debtor.dueDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>}
+                  {debtor.phoneNumber && <p className="font-body text-xs mt-0.5 break-all max-[360px]:text-[11px]" style={{ color: 'rgba(245,237,224,0.3)' }}>{debtor.phoneNumber}</p>}
+                  {debtor.dueDate && <p className="font-body text-xs mt-1 max-[360px]:text-[11px]" style={{ color: '#f0bc5a' }}>Due {new Date(debtor.dueDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>}
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1.5 flex-shrink-0 text-right">
-                <p className="font-display font-bold leading-none" style={{ fontSize: '1.05rem', color: debtor.balance === 0 ? '#4ecca3' : '#f87171', fontVariationSettings: "'WONK' 1" }}>{fmt(debtor.balance)}</p>
+                <p className="font-display font-bold leading-none max-[360px]:text-[0.95rem]" style={{ fontSize: '1.05rem', color: debtor.balance === 0 ? '#4ecca3' : '#f87171', fontVariationSettings: "'WONK' 1" }}>{fmt(debtor.balance)}</p>
                 <RecordSyncBadge syncStatus={debtor.syncStatus} onRetry={debtor.syncStatus === 'FAILED' ? () => retryDebtorSync.mutate() : undefined} />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
-              <button onClick={() => setScheduleDebtor(debtor)} className="rounded-full px-3 py-2 font-ui font-bold text-xs w-full sm:w-auto" style={{ background: 'rgba(117,133,200,0.18)', color: '#9fb0ff', border: '1px solid rgba(117,133,200,0.28)' }}>Schedule</button>
-              <button onClick={() => setStatementDebtor(debtor)} className="rounded-full px-3 py-2 font-ui font-bold text-xs w-full sm:w-auto" style={{ background: 'rgba(232,168,56,0.15)', color: '#f0bc5a', border: '1px solid rgba(232,168,56,0.22)' }}>Statement</button>
-              {debtor.balance > 0 && <button onClick={() => setSelectedDebtor(debtor)} className="rounded-full px-3 py-2 font-ui font-bold text-xs w-full col-span-2 sm:col-span-1 sm:w-auto" style={{ background: 'rgba(78,204,163,0.12)', color: '#4ecca3', border: '1px solid rgba(78,204,163,0.2)' }}>Pay</button>}
+              <button onClick={() => setScheduleDebtor(debtor)} className="rounded-full px-3 py-2 font-ui font-bold text-xs w-full sm:w-auto max-[360px]:px-2.5 max-[360px]:py-1.5 max-[360px]:text-[11px]" style={{ background: 'rgba(117,133,200,0.18)', color: '#9fb0ff', border: '1px solid rgba(117,133,200,0.28)' }}>Schedule</button>
+              <button onClick={() => setStatementDebtor(debtor)} className="rounded-full px-3 py-2 font-ui font-bold text-xs w-full sm:w-auto max-[360px]:px-2.5 max-[360px]:py-1.5 max-[360px]:text-[11px]" style={{ background: 'rgba(232,168,56,0.15)', color: '#f0bc5a', border: '1px solid rgba(232,168,56,0.22)' }}>Statement</button>
+              {debtor.balance > 0 && <button onClick={() => setSelectedDebtor(debtor)} className="rounded-full px-3 py-2 font-ui font-bold text-xs w-full col-span-2 sm:col-span-1 sm:w-auto max-[360px]:px-2.5 max-[360px]:py-1.5 max-[360px]:text-[11px]" style={{ background: 'rgba(78,204,163,0.12)', color: '#4ecca3', border: '1px solid rgba(78,204,163,0.2)' }}>Pay</button>}
             </div>
           </div>
         ))}
