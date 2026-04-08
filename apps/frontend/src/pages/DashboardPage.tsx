@@ -161,7 +161,7 @@ export const DashboardPage = () => {
         </div>
       </section>
 
-      <section className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Today's sales"
           value={overviewLoading ? '' : fmt(stats?.today.total ?? 0)}
@@ -205,7 +205,7 @@ export const DashboardPage = () => {
         />
       </section>
 
-      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.4fr_1fr]">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr]">
         <section className="rounded-3xl border border-white/10 bg-[#231510] p-4 md:p-5">
           <p className="label-base mb-3">This month summary</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
