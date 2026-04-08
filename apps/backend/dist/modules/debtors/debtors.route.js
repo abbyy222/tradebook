@@ -38,6 +38,16 @@ exports.debtorsRouter.get('/:id', async (req, res, next) => {
         next(err);
     }
 });
+exports.debtorsRouter.get('/:id/statement', async (req, res, next) => {
+    try {
+        const debtorId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const statement = await debtors_service_1.debtorsService.getStatement(debtorId, req.trader.traderId);
+        res.status(200).json({ data: statement, error: null });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 // GET /api/v1/debtors/:id/payments — full payment history
 exports.debtorsRouter.get('/:id/payments', async (req, res, next) => {
     try {
@@ -55,6 +65,17 @@ exports.debtorsRouter.post('/:id/payments', async (req, res, next) => {
         const input = debtors_schema_1.recordPaymentSchema.parse(req.body);
         const debtorId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
         const debtor = await debtors_service_1.debtorsService.recordPayment(debtorId, req.trader.traderId, input);
+        res.status(200).json({ data: debtor, error: null });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.debtorsRouter.patch('/:id/schedule', async (req, res, next) => {
+    try {
+        const debtorId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const input = debtors_schema_1.updateDebtorScheduleSchema.parse(req.body);
+        const debtor = await debtors_service_1.debtorsService.updateDebtorSchedule(debtorId, req.trader.traderId, input);
         res.status(200).json({ data: debtor, error: null });
     }
     catch (err) {

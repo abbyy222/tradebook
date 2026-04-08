@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { RecordSyncBadge } from '@/components/RecordSyncBadge'
+import { useAuthStore } from '@/stores/authStore'
 import {
   useAdjustStock,
   useCreateStockItem,
@@ -98,6 +99,8 @@ export const StockPage = () => {
   const [addOpen, setAddOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<StockItemDTO | null>(null)
   const [search, setSearch] = useState('')
+  const trader = useAuthStore((state) => state.trader)
+  const isOwner = trader?.role !== 'SALESPERSON'
   const retryStockSync = useRetryStockSync()
   const { data, isLoading } = useStockList({ search: search || undefined })
   const items = data?.pages.flatMap((page) => page.data) ?? []
@@ -118,7 +121,7 @@ export const StockPage = () => {
   return (
     <div className="min-h-screen">
       <div className="relative overflow-hidden px-5 pt-12 pb-6" style={{ background: 'linear-gradient(180deg, rgba(78,204,163,0.1) 0%, transparent 100%)' }}>
-        <div className="relative z-10 flex items-center justify-between max-w-6xl mx-auto gap-4"><div><p className="label-base mb-0.5">Inventory</p><h1 className="font-display font-bold" style={{ fontSize: '1.75rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>Stock</h1><p className="font-body text-sm mt-1" style={{ color: 'rgba(245,237,224,0.45)' }}>Cost-aware inventory for valuation and future profit reporting.</p></div><button onClick={() => setAddOpen(true)} className="rounded-xl px-4 py-2.5 font-ui font-bold text-sm shrink-0" style={{ background: 'linear-gradient(135deg, #c04818, #e8a838)', color: '#fff' }}>+ Add</button></div>
+        <div className="relative z-10 flex items-center justify-between max-w-6xl mx-auto gap-4"><div><p className="label-base mb-0.5">Inventory</p><h1 className="font-display font-bold" style={{ fontSize: '1.75rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>Stock</h1><p className="font-body text-sm mt-1" style={{ color: 'rgba(245,237,224,0.45)' }}>Cost-aware inventory for valuation and future profit reporting.</p></div>{isOwner && <button onClick={() => setAddOpen(true)} className="rounded-xl px-4 py-2.5 font-ui font-bold text-sm shrink-0" style={{ background: 'linear-gradient(135deg, #c04818, #e8a838)', color: '#fff' }}>+ Add</button>}</div>
       </div>
 
       <div className="px-5 max-w-6xl mx-auto flex flex-col gap-4 pb-10">
@@ -137,15 +140,17 @@ export const StockPage = () => {
           <div className="flex flex-col items-center gap-3 py-16 text-center"><span style={{ fontSize: '2rem' }}>📦</span><p className="font-display font-bold text-lg" style={{ color: '#f5ede0', fontVariationSettings: "'WONK' 1" }}>{search ? 'No items found' : 'No stock yet'}</p><p className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.35)' }}>{search ? 'Try a different search' : 'Tap "+ Add" to track your first item'}</p></div>
         ) : items.map((item) => {
           const isLow = item.quantity <= (item.lowStockThreshold ?? 5)
-          return <div key={item.id} className="rounded-2xl px-5 py-4 flex items-center gap-4" style={{ background: '#231510', border: `1px solid ${isLow ? 'rgba(226,75,74,0.2)' : 'rgba(255,255,255,0.06)'}` }}><div className="rounded-xl flex items-center justify-center font-mono font-semibold flex-shrink-0" style={{ width: 44, height: 44, background: isLow ? 'rgba(226,75,74,0.12)' : 'rgba(78,204,163,0.08)', color: isLow ? '#f87171' : '#4ecca3', fontSize: '0.8rem' }}>{item.quantity}</div><div className="flex-1 min-w-0"><p className="font-ui font-semibold text-sm truncate" style={{ color: '#f5ede0' }}>{item.itemName}</p><p className="font-body text-xs mt-0.5" style={{ color: 'rgba(245,237,224,0.35)' }}>Sell {fmt(item.unitPrice)} · Cost {fmt(item.costPrice)}{isLow && <span style={{ color: '#f87171', marginLeft: '0.5rem' }}>· Low stock!</span>}</p><p className="font-body text-xs mt-1" style={{ color: 'rgba(245,237,224,0.28)' }}>Stock value {fmt(item.stockValue)} · Margin room {fmt(item.expectedGrossProfit)}</p></div><div className="flex flex-col items-end gap-2 flex-shrink-0"><p className="font-display font-bold" style={{ fontSize: '0.95rem', color: '#e8a838', fontVariationSettings: "'WONK' 1" }}>{fmt(item.retailValue)}</p><RecordSyncBadge syncStatus={item.syncStatus} onRetry={item.syncStatus === 'FAILED' ? () => retryStockSync.mutate() : undefined} /><button onClick={() => setSelectedItem(item)} className="rounded-full px-3 py-1 font-ui font-bold text-xs" style={{ background: 'rgba(78,204,163,0.12)', color: '#4ecca3', border: '1px solid rgba(78,204,163,0.2)' }}>Adjust</button></div></div>
+          return <div key={item.id} className="rounded-2xl px-5 py-4 flex items-center gap-4" style={{ background: '#231510', border: `1px solid ${isLow ? 'rgba(226,75,74,0.2)' : 'rgba(255,255,255,0.06)'}` }}><div className="rounded-xl flex items-center justify-center font-mono font-semibold flex-shrink-0" style={{ width: 44, height: 44, background: isLow ? 'rgba(226,75,74,0.12)' : 'rgba(78,204,163,0.08)', color: isLow ? '#f87171' : '#4ecca3', fontSize: '0.8rem' }}>{item.quantity}</div><div className="flex-1 min-w-0"><p className="font-ui font-semibold text-sm truncate" style={{ color: '#f5ede0' }}>{item.itemName}</p><p className="font-body text-xs mt-0.5" style={{ color: 'rgba(245,237,224,0.35)' }}>Sell {fmt(item.unitPrice)} · Cost {fmt(item.costPrice)}{isLow && <span style={{ color: '#f87171', marginLeft: '0.5rem' }}>· Low stock!</span>}</p><p className="font-body text-xs mt-1" style={{ color: 'rgba(245,237,224,0.28)' }}>Stock value {fmt(item.stockValue)} · Margin room {fmt(item.expectedGrossProfit)}</p></div><div className="flex flex-col items-end gap-2 flex-shrink-0"><p className="font-display font-bold" style={{ fontSize: '0.95rem', color: '#e8a838', fontVariationSettings: "'WONK' 1" }}>{fmt(item.retailValue)}</p><RecordSyncBadge syncStatus={item.syncStatus} onRetry={item.syncStatus === 'FAILED' ? () => retryStockSync.mutate() : undefined} />{isOwner && <button onClick={() => setSelectedItem(item)} className="rounded-full px-3 py-1 font-ui font-bold text-xs" style={{ background: 'rgba(78,204,163,0.12)', color: '#4ecca3', border: '1px solid rgba(78,204,163,0.2)' }}>Adjust</button>}</div></div>
         })}
       </div>
 
-      {addOpen && <AddStockSheet onClose={() => setAddOpen(false)} />}
-      {selectedItem && <AdjustStockSheet item={selectedItem} onClose={() => setSelectedItem(null)} />}
+      {isOwner && addOpen && <AddStockSheet onClose={() => setAddOpen(false)} />}
+      {isOwner && selectedItem && <AdjustStockSheet item={selectedItem} onClose={() => setSelectedItem(null)} />}
     </div>
   )
 }
+
+
 
 
 

@@ -10,6 +10,8 @@ import { AppError } from './errorHandler'
 
 interface JwtPayload {
   traderId: string
+  actorId: string
+  role: 'OWNER' | 'SALESPERSON'
   phoneNumber: string
 }
 

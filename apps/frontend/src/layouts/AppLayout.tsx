@@ -1,14 +1,32 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Navigate, Outlet } from 'react-router-dom'
+import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
 import { SyncStatusBanner } from '@/components/SyncStatusBanner'
 import { useAuthStore } from '@/stores/authStore'
 import { BottomNav } from '@/components/BottomNav'
 import { APP_NAV_ITEMS } from '@/components/AppNavigation'
 import { OnboardingQuest, ONBOARDING_STORAGE_KEY } from '@/components/OnboardingQuest'
+import { authApi } from '@/api/auth.api'
+
+const TeamIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="8" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.8" />
+    <circle cx="16" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.8" />
+    <path d="M3.5 19a4.6 4.6 0 0 1 9 0M11.5 19a4.6 4.6 0 0 1 9 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+)
+
+const LogoutIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    <path d="M14 16l4-4-4-4M8 12h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
 
 export const AppLayout = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const trader = useAuthStore((state) => state.trader)
+  const logout = useAuthStore((state) => state.logout)
+  const navigate = useNavigate()
   const [questOpen, setQuestOpen] = useState(false)
 
   if (!isAuthenticated) {
@@ -16,6 +34,7 @@ export const AppLayout = () => {
   }
 
   const displayName = trader?.businessName ?? trader?.name ?? 'Tradebook'
+  const isOwner = trader?.role !== 'SALESPERSON'
   const initials = displayName
     .split(' ')
     .filter(Boolean)
@@ -32,6 +51,17 @@ export const AppLayout = () => {
       setQuestOpen(true)
     }
   }, [isAuthenticated])
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout()
+    } catch {
+      // keep logout resilient even if network fails
+    } finally {
+      logout()
+      navigate('/login', { replace: true })
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#1a0f0a]">
@@ -88,18 +118,58 @@ export const AppLayout = () => {
           >
             Launch Quest Guide
           </button>
+          {isOwner ? (
+            <NavLink
+              to="/team"
+              className="mt-2 flex items-center gap-2 rounded-xl border border-white/15 bg-[#2b1912] px-3.5 py-2.5 text-left font-ui text-xs font-bold uppercase tracking-[0.08em] text-secondary hover:text-primary"
+            >
+              <TeamIcon />
+              Manage Team
+            </NavLink>
+          ) : null}
+          <button
+            onClick={handleLogout}
+            className="mt-2 flex items-center gap-2 rounded-xl border border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.08)] px-3.5 py-2.5 text-left font-ui text-xs font-bold uppercase tracking-[0.08em] text-[#f87171]"
+          >
+            <LogoutIcon />
+            Logout
+          </button>
         </aside>
 
         <main className="min-w-0 flex-1 pb-24 md:rounded-3xl md:border md:border-white/10 md:bg-[#20130e] md:pb-4">
           <Outlet />
         </main>
       </div>
-      <button
-        onClick={() => setQuestOpen(true)}
-        className="fixed bottom-[5.5rem] right-3 z-40 rounded-full border border-[#e8a838]/30 bg-[#2f1c14] px-3 py-2 font-ui text-[10px] font-bold uppercase tracking-[0.08em] text-[#f0bc5a] md:hidden"
-      >
-        Guide
-      </button>
+      <div className="fixed bottom-[5.35rem] left-3 right-3 z-40 flex items-center justify-end gap-1.5 md:hidden">
+        <button
+          onClick={() => setQuestOpen(true)}
+          className="flex items-center gap-1.5 rounded-full border border-[#e8a838]/30 bg-[#2f1c14] px-3 py-2 font-ui text-[10px] font-bold uppercase tracking-[0.08em] text-[#f0bc5a]"
+        >
+          Guide
+        </button>
+        <NavLink
+          to="/more"
+          className="flex items-center gap-1.5 rounded-full border border-white/15 bg-[#2b1912] px-3 py-2 font-ui text-[10px] font-bold uppercase tracking-[0.08em] text-secondary"
+        >
+          More
+        </NavLink>
+        {isOwner ? (
+          <NavLink
+            to="/team"
+            className="flex items-center gap-1.5 rounded-full border border-white/15 bg-[#2b1912] px-3 py-2 font-ui text-[10px] font-bold uppercase tracking-[0.08em] text-secondary"
+          >
+            <TeamIcon />
+            Manage Team
+          </NavLink>
+        ) : null}
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-1.5 rounded-full border border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.08)] px-3 py-2 font-ui text-[10px] font-bold uppercase tracking-[0.08em] text-[#f87171]"
+        >
+          <LogoutIcon />
+          Logout
+        </button>
+      </div>
       <BottomNav />
       <OnboardingQuest
         open={questOpen}

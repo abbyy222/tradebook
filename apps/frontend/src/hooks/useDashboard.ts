@@ -21,10 +21,20 @@ type DashboardOverview = {
   operatingSnapshot: ProfitLossSummaryDTO
   activeDebtors: DebtorDTO[]
   stockAlerts: StockItemDTO[]
+  dueReminders: Array<{
+    id: string
+    customerName: string
+    balance: number
+    dueDate: string
+    urgency: 'OVERDUE' | 'TODAY' | 'SOON'
+    daysDiff: number
+  }>
 }
 
 const DASHBOARD_PREVIEW_LIMIT = 4
+const REMINDER_PREVIEW_LIMIT = 5
 const LAGOS_OFFSET_MS = 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
 
 const startOfToday = () => {
   const now = new Date()
@@ -138,6 +148,45 @@ const getLocalStockAlerts = async () => {
     .slice(0, DASHBOARD_PREVIEW_LIMIT)
 }
 
+const getDueReminders = (debtors: DebtorDTO[]) => {
+  const today = startOfToday()
+
+  return debtors
+    .filter((debtor) => isOwingDebtor(debtor) && debtor.dueDate)
+    .map((debtor) => {
+      const due = startOfDay(new Date(debtor.dueDate!))
+      const daysDiff = Math.round((due.getTime() - today.getTime()) / DAY_MS)
+
+      let urgency: 'OVERDUE' | 'TODAY' | 'SOON' | null = null
+      if (daysDiff < 0) urgency = 'OVERDUE'
+      else if (daysDiff === 0) urgency = 'TODAY'
+      else if (daysDiff <= 3) urgency = 'SOON'
+
+      if (!urgency) return null
+
+      return {
+        id: debtor.id,
+        customerName: debtor.customerName,
+        balance: debtor.balance,
+        dueDate: debtor.dueDate!,
+        urgency,
+        daysDiff,
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    .sort((a, b) => {
+      if (a.daysDiff !== b.daysDiff) return a.daysDiff - b.daysDiff
+      return b.balance - a.balance
+    })
+    .slice(0, REMINDER_PREVIEW_LIMIT)
+}
+
+const startOfDay = (date: Date) => {
+  const normalized = new Date(date)
+  normalized.setHours(0, 0, 0, 0)
+  return normalized
+}
+
 const storeServerDebtors = async (debtors: DebtorDTO[]) => {
   if (debtors.length === 0) return
 
@@ -170,7 +219,10 @@ const getLocalDashboardOverview = async (): Promise<DashboardOverview> => {
     getLocalStockAlerts(),
   ])
 
-  return { stats, operatingSnapshot, activeDebtors, stockAlerts }
+  const localDebtors = await db.debtors.toArray()
+  const dueReminders = getDueReminders(localDebtors)
+
+  return { stats, operatingSnapshot, activeDebtors, stockAlerts, dueReminders }
 }
 
 export const useDashboardOverview = () => {
@@ -198,6 +250,7 @@ export const useDashboardOverview = () => {
               .filter(isOwingDebtor)
               .slice(0, DASHBOARD_PREVIEW_LIMIT),
             stockAlerts: stockAlerts.slice(0, DASHBOARD_PREVIEW_LIMIT),
+            dueReminders: getDueReminders(debtorsPage.data),
           }
         } catch {
           return getLocalDashboardOverview()

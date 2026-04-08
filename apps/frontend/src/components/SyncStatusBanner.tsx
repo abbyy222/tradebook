@@ -44,6 +44,10 @@ export const SyncStatusBanner = () => {
         stockAdjustmentFailed,
         debtorsPending,
         debtorsFailed,
+        savingsPending,
+        savingsFailed,
+        suppliersPending,
+        suppliersFailed,
       ] = await Promise.all([
         db.sales.where('syncStatus').equals('PENDING').count(),
         db.sales.where('syncStatus').equals('FAILED').count(),
@@ -55,13 +59,17 @@ export const SyncStatusBanner = () => {
         db.stockAdjustments.where('syncStatus').equals('FAILED').count(),
         db.debtors.where('syncStatus').equals('PENDING').count(),
         db.debtors.where('syncStatus').equals('FAILED').count(),
+        db.savings.where('syncStatus').equals('PENDING').count(),
+        db.savings.where('syncStatus').equals('FAILED').count(),
+        db.suppliers.where('syncStatus').equals('PENDING').count(),
+        db.suppliers.where('syncStatus').equals('FAILED').count(),
       ])
 
       if (cancelled) return
 
       setSnapshot({
-        pending: salesPending + expensesPending + stockPending + stockAdjustmentPending + debtorsPending,
-        failed: salesFailed + expensesFailed + stockFailed + stockAdjustmentFailed + debtorsFailed,
+        pending: salesPending + expensesPending + stockPending + stockAdjustmentPending + debtorsPending + savingsPending + suppliersPending,
+        failed: salesFailed + expensesFailed + stockFailed + stockAdjustmentFailed + debtorsFailed + savingsFailed + suppliersFailed,
       })
     }
 

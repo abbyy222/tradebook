@@ -95,10 +95,24 @@ const StockIcon = ({ active, className }: NavIconProps) => (
   </svg>
 )
 
-export const APP_NAV_ITEMS: AppNavItem[] = [
+const MoreIcon = ({ active, className }: NavIconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="6" cy="12" r="1.8" fill="currentColor" />
+    <circle cx="12" cy="12" r="1.8" fill="currentColor" />
+    <circle cx="18" cy="12" r="1.8" fill="currentColor" />
+    {active ? <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.4" opacity="0.2" /> : null}
+  </svg>
+)
+
+export const APP_PRIMARY_NAV_ITEMS: AppNavItem[] = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
   { to: '/sales', label: 'Sales', Icon: SalesIcon },
   { to: '/expenses', label: 'Expenses', Icon: ExpenseIcon },
   { to: '/debtors', label: 'Debtors', Icon: DebtorIcon },
   { to: '/stock', label: 'Stock', Icon: StockIcon },
+]
+
+export const APP_NAV_ITEMS: AppNavItem[] = [
+  ...APP_PRIMARY_NAV_ITEMS,
+  { to: '/more', label: 'More', Icon: MoreIcon },
 ]

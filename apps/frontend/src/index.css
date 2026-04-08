@@ -8,6 +8,21 @@
 @config "../tailwind.config.js";
 @import "tailwindcss";
 
+:root {
+  --surface-0: #1a0f0a;
+  --surface-1: #231510;
+  --surface-2: #2e1c14;
+  --surface-3: #3a2319;
+  --text-primary: #f5ede0;
+  --text-secondary: rgba(245, 237, 224, 0.72);
+  --text-muted: rgba(245, 237, 224, 0.5);
+  --brand-gold: #e8a838;
+  --status-success: #4ecca3;
+  --status-warning: #f0bc5a;
+  --status-danger: #f87171;
+  --status-info: #9fb0ff;
+}
+
 /* ─── BASE RESET ─────────────────────────────────────────────────────────── */
 @layer base {
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -20,8 +35,8 @@
 
   body {
     /* Deep earth — the colour of Lagos red soil at midnight */
-    background-color: #1a0f0a;
-    color: #f5ede0;
+    background-color: var(--surface-0);
+    color: var(--text-primary);
     font-family: 'Instrument Sans', system-ui, sans-serif;
     font-weight: 400;
     line-height: 1.6;
@@ -41,7 +56,7 @@
 
   /* Focus ring — gold, never invisible */
   :focus-visible {
-    outline: 2px solid #e8a838;
+    outline: 2px solid var(--brand-gold);
     outline-offset: 2px;
     border-radius: 6px;
   }
@@ -61,10 +76,10 @@
 
   /* ── SURFACE CARDS ──────────────────────────────────────────────────────── */
   /* The three surface levels — like depth layers in the market */
-  .surface-0 { background-color: #1a0f0a; }  /* Ground — deep earth       */
-  .surface-1 { background-color: #231510; }  /* Platform — raised earth   */
-  .surface-2 { background-color: #2e1c14; }  /* Counter — vendor's table  */
-  .surface-3 { background-color: #3a2319; }  /* Elevated — showcase shelf */
+  .surface-0 { background-color: var(--surface-0); }  /* Ground — deep earth       */
+  .surface-1 { background-color: var(--surface-1); }  /* Platform — raised earth   */
+  .surface-2 { background-color: var(--surface-2); }  /* Counter — vendor's table  */
+  .surface-3 { background-color: var(--surface-3); }  /* Elevated — showcase shelf */
 
   /* ── CARD BASE ──────────────────────────────────────────────────────────── */
   .card {
@@ -89,9 +104,9 @@
   .wonky { font-variation-settings: 'WONK' 1; }
 
   /* ── TEXT COLOURS ───────────────────────────────────────────────────────── */
-  .text-primary   { color: #f5ede0; }  /* Warm cream white */
-  .text-secondary { color: rgba(245, 237, 224, 0.6); }
-  .text-muted     { color: rgba(245, 237, 224, 0.35); }
+  .text-primary   { color: var(--text-primary); }  /* Warm cream white */
+  .text-secondary { color: var(--text-secondary); }
+  .text-muted     { color: var(--text-muted); }
   .text-terra     { color: #e08b5a; }
   .text-gold      { color: #e8a838; }
 
@@ -196,7 +211,7 @@
   /* ── LABELS ─────────────────────────────────────────────────────────────── */
   .label-base {
     @apply font-ui font-bold text-xs tracking-widest uppercase;
-    color: rgba(245, 237, 224, 0.4);
+    color: rgba(245, 237, 224, 0.55);
     letter-spacing: 0.1em;
   }
 
@@ -300,9 +315,14 @@
     font-weight: 700;
     letter-spacing: 0.05em;
     background: rgba(29, 158, 117, 0.12);
-    color: #4ecca3;
+    color: var(--status-success);
     border: 1px solid rgba(29, 158, 117, 0.2);
   }
+
+  .status-success { color: var(--status-success); }
+  .status-warning { color: var(--status-warning); }
+  .status-danger { color: var(--status-danger); }
+  .status-info { color: var(--status-info); }
 
   /* ── NAIRA AMOUNT ─────────────────────────────────────────────────────────── */
   /* Used everywhere money is shown — Fraunces makes numbers beautiful */

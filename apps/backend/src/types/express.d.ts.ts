@@ -8,6 +8,8 @@ declare namespace Express {
   interface Request {
     trader?: {
       traderId: string
+      actorId: string
+      role: 'OWNER' | 'SALESPERSON'
       phoneNumber: string
     }
     requestId?: string

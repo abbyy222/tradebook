@@ -9,6 +9,8 @@ exports.authRouter = void 0;
 const express_1 = require("express");
 const auth_schema_1 = require("./auth.schema");
 const auth_service_1 = require("./auth.service");
+const authenticate_1 = require("../../middleware/authenticate");
+const authorizeRole_1 = require("../../middleware/authorizeRole");
 exports.authRouter = (0, express_1.Router)();
 exports.authRouter.post('/register', async (req, res, next) => {
     try {
@@ -31,4 +33,28 @@ exports.authRouter.post('/login', async (req, res, next) => {
     catch (err) {
         next(err);
     }
+});
+exports.authRouter.post('/salespeople', authenticate_1.authenticate, (0, authorizeRole_1.authorizeRole)('OWNER'), async (req, res, next) => {
+    try {
+        const input = auth_schema_1.createSalespersonSchema.parse(req.body);
+        const result = await auth_service_1.authService.createSalesperson(req.trader.traderId, input);
+        res.status(201).json({ data: result, error: null });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.authRouter.get('/salespeople', authenticate_1.authenticate, (0, authorizeRole_1.authorizeRole)('OWNER'), async (req, res, next) => {
+    try {
+        const result = await auth_service_1.authService.listSalespeople(req.trader.traderId);
+        res.status(200).json({ data: result, error: null });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.authRouter.post('/logout', authenticate_1.authenticate, async (_req, res) => {
+    // JWT is stateless in current architecture, so logout is handled client-side
+    // by dropping token/session. This endpoint exists for explicit API semantics.
+    res.status(200).json({ data: { success: true }, error: null });
 });

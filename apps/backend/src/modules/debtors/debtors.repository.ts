@@ -9,6 +9,7 @@ import {
   CreateDebtorInput,
   RecordPaymentInput,
   ListDebtorsQuery,
+  UpdateDebtorScheduleInput,
 } from './debtors.schema'
 
 const debtorSelect = {
@@ -228,6 +229,55 @@ export const debtorsRepository = {
   async delete(id: string, traderId: string) {
     return prisma.debtor.deleteMany({
       where: { id, traderId },
+    })
+  },
+
+  async getStatement(debtorId: string, traderId: string) {
+    const debtor = await prisma.debtor.findFirst({
+      where: { id: debtorId, traderId },
+      select: debtorSelect,
+    })
+    if (!debtor) return null
+
+    const [sales, payments] = await Promise.all([
+      prisma.sale.findMany({
+        where: { traderId, debtorId },
+        select: {
+          id: true,
+          itemName: true,
+          amount: true,
+          soldAt: true,
+        },
+        orderBy: { soldAt: 'asc' },
+      }),
+      prisma.payment.findMany({
+        where: { debtorId },
+        select: {
+          id: true,
+          amount: true,
+          note: true,
+          paidAt: true,
+        },
+        orderBy: { paidAt: 'asc' },
+      }),
+    ])
+
+    return { debtor, sales, payments }
+  },
+
+  async updateSchedule(debtorId: string, traderId: string, input: UpdateDebtorScheduleInput) {
+    const updated = await prisma.debtor.updateMany({
+      where: { id: debtorId, traderId },
+      data: {
+        dueDate: input.dueDate ? new Date(input.dueDate) : null,
+      },
+    })
+
+    if (updated.count === 0) return null
+
+    return prisma.debtor.findFirst({
+      where: { id: debtorId, traderId },
+      select: debtorSelect,
     })
   },
 }

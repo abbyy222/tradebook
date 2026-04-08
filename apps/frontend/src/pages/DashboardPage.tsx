@@ -58,7 +58,14 @@ const PlusCircleIcon = () => (
   </svg>
 )
 
-const QuickActionIcon = ({ variant }: { variant: 'expenses' | 'debtors' | 'stock' }) => {
+const BellIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M6 16v-4a6 6 0 1 1 12 0v4l2 2H4l2-2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    <path d="M10 20a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+)
+
+const QuickActionIcon = ({ variant }: { variant: 'expenses' | 'debtors' | 'stock' | 'team' }) => {
   if (variant === 'expenses') {
     return (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -77,6 +84,16 @@ const QuickActionIcon = ({ variant }: { variant: 'expenses' | 'debtors' | 'stock
     )
   }
 
+  if (variant === 'team') {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="8" cy="9" r="2.6" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="16" cy="9" r="2.6" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M3.5 19a4.8 4.8 0 0 1 9 0M11.5 19a4.8 4.8 0 0 1 9 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    )
+  }
+
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M12 3 4 7v10l8 4 8-4V7l-8-4Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
@@ -87,6 +104,7 @@ const QuickActionIcon = ({ variant }: { variant: 'expenses' | 'debtors' | 'stock
 
 export const DashboardPage = () => {
   const trader = useAuthStore((s) => s.trader)
+  const isOwner = trader?.role !== 'SALESPERSON'
   const navigate = useNavigate()
   const [wizardOpen, setWizardOpen] = useState(false)
 
@@ -95,6 +113,7 @@ export const DashboardPage = () => {
   const operatingSnapshot = overview?.operatingSnapshot
   const activeDebtors: DebtorDTO[] = overview?.activeDebtors ?? []
   const stockAlerts: StockItemDTO[] = overview?.stockAlerts ?? []
+  const dueReminders = overview?.dueReminders ?? []
 
   const name = trader?.businessName ?? trader?.name ?? 'My Business'
   const initials = name
@@ -257,6 +276,55 @@ export const DashboardPage = () => {
         </section>
 
         <section className="flex flex-col gap-4">
+          {dueReminders.length > 0 && (
+            <div className="overflow-hidden rounded-3xl border border-[rgba(232,168,56,0.3)] bg-[#231510]">
+              <div className="flex items-center justify-between border-b border-[rgba(232,168,56,0.16)] px-4 py-3.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[#f0bc5a]">
+                    <BellIcon />
+                  </span>
+                  <p className="font-ui text-sm font-bold text-[#f0bc5a]">Payment reminders</p>
+                </div>
+                <button onClick={() => navigate('/debtors')} className="font-ui text-xs font-semibold text-gold">
+                  Manage {'>'}
+                </button>
+              </div>
+              <div className="divide-y divide-white/5">
+                {dueReminders.slice(0, 4).map((item) => {
+                  const urgencyLabel =
+                    item.urgency === 'OVERDUE'
+                      ? 'Overdue'
+                      : item.urgency === 'TODAY'
+                      ? 'Due today'
+                      : `Due in ${item.daysDiff} day${item.daysDiff > 1 ? 's' : ''}`
+
+                  const urgencyColor =
+                    item.urgency === 'OVERDUE'
+                      ? '#f87171'
+                      : item.urgency === 'TODAY'
+                      ? '#f0bc5a'
+                      : '#9fb0ff'
+
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => navigate('/debtors')}
+                      className="w-full px-4 py-3 text-left transition-opacity duration-150 hover:opacity-85"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-ui text-sm font-semibold text-primary">{item.customerName}</p>
+                          <p className="font-body text-xs" style={{ color: urgencyColor }}>{urgencyLabel}</p>
+                        </div>
+                        <p className="font-display text-sm font-bold text-[#f87171] wonky">{fmt(item.balance)}</p>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           <button
             onClick={() => setWizardOpen(true)}
             className="group relative w-full overflow-hidden rounded-3xl border border-[#c4622d]/30 p-5 text-left transition-all duration-150 hover:-translate-y-[1px]"
@@ -281,11 +349,12 @@ export const DashboardPage = () => {
 
           <div className="rounded-3xl border border-white/10 bg-[#231510] p-4 md:p-5">
             <p className="label-base mb-3">Quick actions</p>
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className={`grid gap-2.5 ${isOwner ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
               {[
                 { icon: 'expenses' as const, label: 'Add expense', to: '/expenses' },
                 { icon: 'debtors' as const, label: 'Add debtor', to: '/debtors' },
                 { icon: 'stock' as const, label: 'Update stock', to: '/stock' },
+                ...(isOwner ? [{ icon: 'team' as const, label: 'Manage team', to: '/team' }] : []),
               ].map((action) => (
                 <button
                   key={action.to}

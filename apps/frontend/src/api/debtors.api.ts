@@ -3,8 +3,10 @@ import { apiClient } from './client'
 import type {
   CreateDebtorDTO,
   DebtorDTO,
+  DebtorStatementDTO,
   RecordPaymentDTO,
   CursorPaginatedResponse,
+  UpdateDebtorScheduleDTO,
 } from '@tradebook/shared-types'
 
 export const debtorsApi = {
@@ -30,6 +32,16 @@ export const debtorsApi = {
 
   getPaymentHistory: async (id: string) => {
     const res = await apiClient.get<{ data: any[] }>(`/debtors/${id}/payments`)
+    return res.data.data
+  },
+
+  getStatement: async (id: string) => {
+    const res = await apiClient.get<{ data: DebtorStatementDTO }>(`/debtors/${id}/statement`)
+    return res.data.data
+  },
+
+  updateSchedule: async (id: string, data: UpdateDebtorScheduleDTO) => {
+    const res = await apiClient.patch<{ data: DebtorDTO }>(`/debtors/${id}/schedule`, data)
     return res.data.data
   },
 }

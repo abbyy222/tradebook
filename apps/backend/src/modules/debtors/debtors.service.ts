@@ -5,6 +5,7 @@ import {
   CreateDebtorInput,
   RecordPaymentInput,
   ListDebtorsQuery,
+  UpdateDebtorScheduleInput,
 } from './debtors.schema'
 import { AppError } from '../../middleware/errorHandler'
 import { logger } from '../../utils/logger'
@@ -92,10 +93,70 @@ export const debtorsService = {
     }))
   },
 
+  async getStatement(debtorId: string, traderId: string) {
+    const statement = await debtorsRepository.getStatement(debtorId, traderId)
+    if (!statement) throw new AppError('Debtor not found', 404, 'NOT_FOUND')
+
+    const debtor = toDebtorDTO(statement.debtor)
+
+    const timeline = [
+      ...statement.sales.map((sale) => ({
+        id: sale.id,
+        type: 'SALE' as const,
+        amount: Number(sale.amount),
+        date: sale.soldAt.toISOString(),
+        reference: sale.itemName,
+        note: 'Credit sale',
+      })),
+      ...statement.payments.map((payment) => ({
+        id: payment.id,
+        type: 'PAYMENT' as const,
+        amount: Number(payment.amount),
+        date: payment.paidAt.toISOString(),
+        note: payment.note ?? undefined,
+      })),
+    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+    let runningBalance = 0
+    const entries = timeline.map((entry) => {
+      if (entry.type === 'SALE') runningBalance += entry.amount
+      if (entry.type === 'PAYMENT') runningBalance -= entry.amount
+
+      return {
+        ...entry,
+        balanceAfter: Math.max(Number(runningBalance.toFixed(2)), 0),
+      }
+    })
+
+    const totalSalesOnCredit = statement.sales.reduce((sum, sale) => sum + Number(sale.amount), 0)
+    const totalPayments = statement.payments.reduce((sum, payment) => sum + Number(payment.amount), 0)
+
+    return {
+      debtor,
+      generatedAt: new Date().toISOString(),
+      entries,
+      totals: {
+        totalSalesOnCredit,
+        totalPayments,
+        balance: debtor.balance,
+      },
+    }
+  },
+
   async getDebtor(id: string, traderId: string) {
     const debtor = await debtorsRepository.findById(id, traderId)
     if (!debtor) throw new AppError('Debtor not found', 404, 'NOT_FOUND')
     return toDebtorDTO(debtor)
+  },
+
+  async updateDebtorSchedule(
+    debtorId: string,
+    traderId: string,
+    input: UpdateDebtorScheduleInput
+  ) {
+    const updatedDebtor = await debtorsRepository.updateSchedule(debtorId, traderId, input)
+    if (!updatedDebtor) throw new AppError('Debtor not found', 404, 'NOT_FOUND')
+    return toDebtorDTO(updatedDebtor)
   },
 
   async deleteDebtor(id: string, traderId: string) {

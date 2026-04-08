@@ -194,4 +194,49 @@ exports.debtorsRepository = {
             where: { id, traderId },
         });
     },
+    async getStatement(debtorId, traderId) {
+        const debtor = await client_2.prisma.debtor.findFirst({
+            where: { id: debtorId, traderId },
+            select: debtorSelect,
+        });
+        if (!debtor)
+            return null;
+        const [sales, payments] = await Promise.all([
+            client_2.prisma.sale.findMany({
+                where: { traderId, debtorId },
+                select: {
+                    id: true,
+                    itemName: true,
+                    amount: true,
+                    soldAt: true,
+                },
+                orderBy: { soldAt: 'asc' },
+            }),
+            client_2.prisma.payment.findMany({
+                where: { debtorId },
+                select: {
+                    id: true,
+                    amount: true,
+                    note: true,
+                    paidAt: true,
+                },
+                orderBy: { paidAt: 'asc' },
+            }),
+        ]);
+        return { debtor, sales, payments };
+    },
+    async updateSchedule(debtorId, traderId, input) {
+        const updated = await client_2.prisma.debtor.updateMany({
+            where: { id: debtorId, traderId },
+            data: {
+                dueDate: input.dueDate ? new Date(input.dueDate) : null,
+            },
+        });
+        if (updated.count === 0)
+            return null;
+        return client_2.prisma.debtor.findFirst({
+            where: { id: debtorId, traderId },
+            select: debtorSelect,
+        });
+    },
 };

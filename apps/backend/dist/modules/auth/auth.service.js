@@ -24,6 +24,7 @@ const toTraderDTO = (trader) => ({
     phoneNumber: trader.phoneNumber,
     name: trader.name,
     businessName: trader.businessName ?? undefined,
+    role: trader.role,
     language: trader.language,
     createdAt: trader.createdAt.toISOString(),
 });
@@ -39,8 +40,35 @@ exports.authService = {
         // 3. Create the trader
         const trader = await auth_repository_1.authRepository.create({ ...input, pinHash });
         // 4. Generate JWT
-        const token = jsonwebtoken_1.default.sign({ traderId: trader.id, phoneNumber: trader.phoneNumber }, env_1.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+        const token = jsonwebtoken_1.default.sign({ traderId: trader.id, actorId: trader.id, role: trader.role, phoneNumber: trader.phoneNumber }, env_1.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
         return { token, trader: toTraderDTO(trader) };
+    },
+    async createSalesperson(ownerTraderId, input) {
+        const existing = await auth_repository_1.authRepository.findByPhone(input.phoneNumber);
+        if (existing) {
+            throw new errorHandler_1.AppError('Phone number already registered', 409, 'CONFLICT');
+        }
+        const owner = await auth_repository_1.authRepository.findById(ownerTraderId);
+        if (!owner) {
+            throw new errorHandler_1.AppError('Owner account not found', 404, 'NOT_FOUND');
+        }
+        if (owner.role !== 'OWNER') {
+            throw new errorHandler_1.AppError('Only business owners can add salespeople', 403, 'FORBIDDEN');
+        }
+        const pinHash = await bcryptjs_1.default.hash(input.pin, SALT_ROUNDS);
+        const salesperson = await auth_repository_1.authRepository.createSalesperson(ownerTraderId, { ...input, pinHash });
+        return toTraderDTO(salesperson);
+    },
+    async listSalespeople(ownerTraderId) {
+        const owner = await auth_repository_1.authRepository.findById(ownerTraderId);
+        if (!owner) {
+            throw new errorHandler_1.AppError('Owner account not found', 404, 'NOT_FOUND');
+        }
+        if (owner.role !== 'OWNER') {
+            throw new errorHandler_1.AppError('Only business owners can view team members', 403, 'FORBIDDEN');
+        }
+        const rows = await auth_repository_1.authRepository.listSalespeople(ownerTraderId);
+        return rows.map(toTraderDTO);
     },
     async login(input) {
         // 1. Find trader
@@ -55,8 +83,14 @@ exports.authService = {
         if (!pinValid) {
             throw new errorHandler_1.AppError('Invalid credentials', 401, 'UNAUTHORIZED');
         }
+        const scopeTraderId = trader.ownerTraderId ?? trader.id;
         // 3. Generate JWT
-        const token = jsonwebtoken_1.default.sign({ traderId: trader.id, phoneNumber: trader.phoneNumber }, env_1.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+        const token = jsonwebtoken_1.default.sign({
+            traderId: scopeTraderId,
+            actorId: trader.id,
+            role: trader.role,
+            phoneNumber: trader.phoneNumber,
+        }, env_1.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
         return { token, trader: toTraderDTO(trader) };
     },
 };

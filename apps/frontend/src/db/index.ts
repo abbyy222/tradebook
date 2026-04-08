@@ -1,5 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type {
+  SavingsEntryDTO,
+  SupplierDTO,
   DebtorDTO,
   ExpenseDTO,
   SaleDTO,
@@ -43,6 +45,15 @@ export interface LocalDebtorPayment {
   syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
 }
 
+export interface LocalSavingsEntry extends Omit<SavingsEntryDTO, 'createdByTraderId'> {
+  createdByTraderId?: string
+  syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
+}
+
+export interface LocalSupplier extends SupplierDTO {
+  syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
+}
+
 class TradeBookDB extends Dexie {
   sales!: EntityTable<LocalSale, 'id'>
   expenses!: EntityTable<LocalExpense, 'id'>
@@ -50,6 +61,8 @@ class TradeBookDB extends Dexie {
   stockAdjustments!: EntityTable<LocalStockAdjustment, 'id'>
   debtors!: EntityTable<LocalDebtor, 'id'>
   debtorPayments!: EntityTable<LocalDebtorPayment, 'id'>
+  savings!: EntityTable<LocalSavingsEntry, 'id'>
+  suppliers!: EntityTable<LocalSupplier, 'id'>
   trader!: EntityTable<TraderDTO & { id: string }, 'id'>
 
   constructor() {
@@ -62,6 +75,18 @@ class TradeBookDB extends Dexie {
       stockAdjustments: '&id, stockItemId, syncStatus, createdAt, reason',
       debtors: '&id, syncStatus, status, customerName, createdAt',
       debtorPayments: '&id, debtorId, syncStatus, createdAt, paidAt',
+      trader: '&id',
+    })
+
+    this.version(8).stores({
+      sales: '&id, syncStatus, soldAt, paymentType, stockItemId',
+      expenses: '&id, syncStatus, spentAt, category, expenseType, frequency, nextDueDate',
+      stockItems: '&id, syncStatus, itemName, updatedAt',
+      stockAdjustments: '&id, stockItemId, syncStatus, createdAt, reason',
+      debtors: '&id, syncStatus, status, customerName, createdAt',
+      debtorPayments: '&id, debtorId, syncStatus, createdAt, paidAt',
+      savings: '&id, syncStatus, savedAt, createdAt',
+      suppliers: '&id, syncStatus, name, createdAt',
       trader: '&id',
     })
   }

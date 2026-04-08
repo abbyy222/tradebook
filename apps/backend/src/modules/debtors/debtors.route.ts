@@ -6,6 +6,7 @@ import {
   createDebtorSchema,
   recordPaymentSchema,
   listDebtorsQuerySchema,
+  updateDebtorScheduleSchema,
 } from './debtors.schema'
 import { debtorsService } from './debtors.service'
 
@@ -36,6 +37,14 @@ debtorsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction
   } catch (err) { next(err) }
 })
 
+debtorsRouter.get('/:id/statement', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const debtorId = Array.isArray(req.params.id)? req.params.id[0]:req.params.id
+    const statement = await debtorsService.getStatement(debtorId, req.trader!.traderId)
+    res.status(200).json({ data: statement, error: null })
+  } catch (err) { next(err) }
+})
+
 // GET /api/v1/debtors/:id/payments — full payment history
 debtorsRouter.get('/:id/payments', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -58,6 +67,15 @@ debtorsRouter.post('/:id/payments', async (req: Request, res: Response, next: Ne
       req.trader!.traderId,
       input
     )
+    res.status(200).json({ data: debtor, error: null })
+  } catch (err) { next(err) }
+})
+
+debtorsRouter.patch('/:id/schedule', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const debtorId = Array.isArray(req.params.id)? req.params.id[0]:req.params.id
+    const input = updateDebtorScheduleSchema.parse(req.body)
+    const debtor = await debtorsService.updateDebtorSchedule(debtorId, req.trader!.traderId, input)
     res.status(200).json({ data: debtor, error: null })
   } catch (err) { next(err) }
 })

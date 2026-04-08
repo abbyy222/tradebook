@@ -22,6 +22,9 @@ const sales_route_1 = require("./modules/sales/sales.route");
 const expenses_route_1 = require("./modules/expenses/expenses.route");
 const debtors_route_1 = require("./modules/debtors/debtors.route");
 const stock_route_1 = require("./modules/stock/stock.route");
+const savings_route_1 = require("./modules/savings/savings.route");
+const customers_route_1 = require("./modules/customers/customers.route");
+const suppliers_route_1 = require("./modules/suppliers/suppliers.route");
 const app = (0, express_1.default)();
 exports.app = app;
 // --- Security middleware ---
@@ -71,6 +74,9 @@ app.use('/api/v1/sales', sales_route_1.salesRouter);
 app.use('/api/v1/expenses', expenses_route_1.expensesRouter);
 app.use('/api/v1/debtors', debtors_route_1.debtorsRouter);
 app.use('/api/v1/stock', stock_route_1.stockRouter);
+app.use('/api/v1/savings', savings_route_1.savingsRouter);
+app.use('/api/v1/customers', customers_route_1.customersRouter);
+app.use('/api/v1/suppliers', suppliers_route_1.suppliersRouter);
 // --- 404 handler ---
 // Express 5's path matcher no longer accepts bare "*".
 // A final middleware with no path still catches every unmatched request.

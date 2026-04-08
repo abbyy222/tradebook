@@ -70,11 +70,63 @@ exports.debtorsService = {
             createdAt: p.createdAt.toISOString(),
         }));
     },
+    async getStatement(debtorId, traderId) {
+        const statement = await debtors_repository_1.debtorsRepository.getStatement(debtorId, traderId);
+        if (!statement)
+            throw new errorHandler_1.AppError('Debtor not found', 404, 'NOT_FOUND');
+        const debtor = toDebtorDTO(statement.debtor);
+        const timeline = [
+            ...statement.sales.map((sale) => ({
+                id: sale.id,
+                type: 'SALE',
+                amount: Number(sale.amount),
+                date: sale.soldAt.toISOString(),
+                reference: sale.itemName,
+                note: 'Credit sale',
+            })),
+            ...statement.payments.map((payment) => ({
+                id: payment.id,
+                type: 'PAYMENT',
+                amount: Number(payment.amount),
+                date: payment.paidAt.toISOString(),
+                note: payment.note ?? undefined,
+            })),
+        ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        let runningBalance = 0;
+        const entries = timeline.map((entry) => {
+            if (entry.type === 'SALE')
+                runningBalance += entry.amount;
+            if (entry.type === 'PAYMENT')
+                runningBalance -= entry.amount;
+            return {
+                ...entry,
+                balanceAfter: Math.max(Number(runningBalance.toFixed(2)), 0),
+            };
+        });
+        const totalSalesOnCredit = statement.sales.reduce((sum, sale) => sum + Number(sale.amount), 0);
+        const totalPayments = statement.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+        return {
+            debtor,
+            generatedAt: new Date().toISOString(),
+            entries,
+            totals: {
+                totalSalesOnCredit,
+                totalPayments,
+                balance: debtor.balance,
+            },
+        };
+    },
     async getDebtor(id, traderId) {
         const debtor = await debtors_repository_1.debtorsRepository.findById(id, traderId);
         if (!debtor)
             throw new errorHandler_1.AppError('Debtor not found', 404, 'NOT_FOUND');
         return toDebtorDTO(debtor);
+    },
+    async updateDebtorSchedule(debtorId, traderId, input) {
+        const updatedDebtor = await debtors_repository_1.debtorsRepository.updateSchedule(debtorId, traderId, input);
+        if (!updatedDebtor)
+            throw new errorHandler_1.AppError('Debtor not found', 404, 'NOT_FOUND');
+        return toDebtorDTO(updatedDebtor);
     },
     async deleteDebtor(id, traderId) {
         const result = await debtors_repository_1.debtorsRepository.delete(id, traderId);

@@ -101,12 +101,12 @@ export const StatCard = ({
       <div className="flex items-start justify-between gap-2">
         <p
           className="font-ui font-bold uppercase tracking-widest"
-          style={{ fontSize: '0.65rem', color: 'rgba(245,237,224,0.4)', letterSpacing: '0.1em' }}
+          style={{ fontSize: '0.65rem', color: 'rgba(245,237,224,0.55)', letterSpacing: '0.1em' }}
         >
           {label}
         </p>
         {icon ? (
-          <span className="shrink-0 text-[rgba(245,237,224,0.5)] transition-transform duration-150 group-hover:scale-105">
+          <span className="shrink-0 text-[rgba(245,237,224,0.62)] transition-transform duration-150 group-hover:scale-105">
             {icon}
           </span>
         ) : null}
@@ -136,7 +136,7 @@ export const StatCard = ({
           {trend && (
             <>
               <span style={{ color: trend.positive ? '#4ecca3' : '#f87171', fontSize: '0.75rem' }}>
-                {trend.positive ? '?' : '?'}
+                {trend.positive ? '+' : '-'}
               </span>
               <span
                 className="truncate font-ui font-semibold"
@@ -150,7 +150,7 @@ export const StatCard = ({
             </>
           )}
           {subtext && !trend && (
-            <span className="truncate font-body" style={{ fontSize: '0.72rem', color: 'rgba(245,237,224,0.35)' }}>
+            <span className="truncate font-body" style={{ fontSize: '0.72rem', color: 'rgba(245,237,224,0.5)' }}>
               {subtext}
             </span>
           )}

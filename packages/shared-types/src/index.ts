@@ -58,6 +58,13 @@ export interface LoginDTO {
   pin: string
 }
 
+export interface CreateSalespersonDTO {
+  phoneNumber: string
+  name: string
+  pin: string
+  language?: 'EN' | 'PIDGIN' | 'IGBO' | 'YORUBA' | 'HAUSA'
+}
+
 export interface AuthResponseDTO {
   token: string
   trader: TraderDTO
@@ -68,6 +75,7 @@ export interface TraderDTO {
   phoneNumber: string
   name: string
   businessName?: string
+  role: 'OWNER' | 'SALESPERSON'
   language: string
   createdAt: string
 }
@@ -159,6 +167,10 @@ export interface CreateDebtorDTO {
   dueDate?: string
 }
 
+export interface UpdateDebtorScheduleDTO {
+  dueDate: string | null
+}
+
 export interface DebtorDTO {
   id: string
   customerName: string
@@ -167,13 +179,97 @@ export interface DebtorDTO {
   totalPaid: number
   balance: number
   status: 'ACTIVE' | 'PARTIAL' | 'CLEARED'
-  dueDate?: string
+  dueDate?: string | null
   createdAt: string
 }
 
 export interface RecordPaymentDTO {
   amount: number
   paidAt: string
+  note?: string
+}
+
+export interface DebtorStatementEntryDTO {
+  id: string
+  type: 'SALE' | 'PAYMENT'
+  amount: number
+  date: string
+  note?: string
+  reference?: string
+  balanceAfter: number
+}
+
+export interface DebtorStatementDTO {
+  debtor: DebtorDTO
+  generatedAt: string
+  entries: DebtorStatementEntryDTO[]
+  totals: {
+    totalSalesOnCredit: number
+    totalPayments: number
+    balance: number
+  }
+}
+
+export interface CreateSavingsEntryDTO {
+  id: string
+  amount: number
+  savedAt: string
+  note?: string
+}
+
+export interface SavingsEntryDTO {
+  id: string
+  amount: number
+  savedAt: string
+  note?: string
+  createdByTraderId: string
+  createdAt: string
+}
+
+export interface CreateCustomerDTO {
+  id: string
+  name: string
+  phoneNumber?: string
+  note?: string
+}
+
+export interface CustomerDTO {
+  id: string
+  name: string
+  phoneNumber?: string
+  note?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UpdateCustomerDTO {
+  name?: string
+  phoneNumber?: string
+  note?: string
+}
+
+export interface CreateSupplierDTO {
+  id: string
+  name: string
+  phoneNumber?: string
+  itemCategory?: string
+  note?: string
+}
+
+export interface SupplierDTO {
+  id: string
+  name: string
+  phoneNumber?: string
+  itemCategory?: string
+  note?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UpdateSupplierDTO {
+  name?: string
+  phoneNumber?: string
+  itemCategory?: string
   note?: string
 }
 

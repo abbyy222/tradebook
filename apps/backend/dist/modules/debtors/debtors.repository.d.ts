@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { CreateDebtorInput, RecordPaymentInput, ListDebtorsQuery } from './debtors.schema';
+import { CreateDebtorInput, RecordPaymentInput, ListDebtorsQuery, UpdateDebtorScheduleInput } from './debtors.schema';
 export declare const debtorsRepository: {
     upsert(traderId: string, data: CreateDebtorInput): Promise<{
         status: import(".prisma/client").$Enums.DebtStatus;
@@ -73,4 +73,40 @@ export declare const debtorsRepository: {
         dueDate: Date | null;
     } | null>;
     delete(id: string, traderId: string): Promise<Prisma.BatchPayload>;
+    getStatement(debtorId: string, traderId: string): Promise<{
+        debtor: {
+            status: import(".prisma/client").$Enums.DebtStatus;
+            phoneNumber: string | null;
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            customerName: string;
+            totalOwed: Prisma.Decimal;
+            totalPaid: Prisma.Decimal;
+            dueDate: Date | null;
+        };
+        sales: {
+            id: string;
+            itemName: string;
+            amount: Prisma.Decimal;
+            soldAt: Date;
+        }[];
+        payments: {
+            id: string;
+            amount: Prisma.Decimal;
+            note: string | null;
+            paidAt: Date;
+        }[];
+    } | null>;
+    updateSchedule(debtorId: string, traderId: string, input: UpdateDebtorScheduleInput): Promise<{
+        status: import(".prisma/client").$Enums.DebtStatus;
+        phoneNumber: string | null;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        customerName: string;
+        totalOwed: Prisma.Decimal;
+        totalPaid: Prisma.Decimal;
+        dueDate: Date | null;
+    } | null>;
 };

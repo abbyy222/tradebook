@@ -3,6 +3,8 @@ import { salesApi } from '@/api/sales.api'
 import { expensesApi } from '@/api/expenses.api'
 import { stockApi } from '@/api/stock.api'
 import { debtorsApi } from '@/api/debtors.api'
+import { savingsApi } from '@/api/savings.api'
+import { suppliersApi } from '@/api/suppliers.api'
 
 const BATCH_SIZE = 50
 
@@ -37,6 +39,8 @@ class SyncEngine {
       await Promise.allSettled([
         this.syncSales(),
         this.syncExpenses(),
+        this.syncSavings(),
+        this.syncSuppliers(),
       ])
     } finally {
       this.isSyncing = false
@@ -212,6 +216,53 @@ class SyncEngine {
         })
       } catch {
         await db.stockAdjustments.update(adjustment.id, { syncStatus: 'FAILED' })
+      }
+    }
+  }
+
+  private async syncSavings() {
+    const retryable = await db.savings.filter((entry) => entry.syncStatus === 'PENDING' || entry.syncStatus === 'FAILED').toArray()
+    if (retryable.length === 0) return
+
+    for (const entry of retryable) {
+      try {
+        const synced = await savingsApi.sync({
+          id: entry.id,
+          amount: entry.amount,
+          savedAt: entry.savedAt,
+          note: entry.note,
+        })
+
+        await db.savings.put({
+          ...synced,
+          syncStatus: 'SYNCED',
+        })
+      } catch {
+        await db.savings.update(entry.id, { syncStatus: 'FAILED' })
+      }
+    }
+  }
+
+  private async syncSuppliers() {
+    const retryable = await db.suppliers.filter((supplier) => supplier.syncStatus === 'PENDING' || supplier.syncStatus === 'FAILED').toArray()
+    if (retryable.length === 0) return
+
+    for (const supplier of retryable) {
+      try {
+        const synced = await suppliersApi.sync({
+          id: supplier.id,
+          name: supplier.name,
+          phoneNumber: supplier.phoneNumber ?? undefined,
+          itemCategory: supplier.itemCategory ?? undefined,
+          note: supplier.note ?? undefined,
+        })
+
+        await db.suppliers.put({
+          ...synced,
+          syncStatus: 'SYNCED',
+        })
+      } catch {
+        await db.suppliers.update(supplier.id, { syncStatus: 'FAILED' })
       }
     }
   }

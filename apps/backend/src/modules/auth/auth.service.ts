@@ -9,13 +9,14 @@ import jwt from 'jsonwebtoken'
 import { env } from '../../config/env'
 import { AppError } from '../../middleware/errorHandler'
 import { authRepository } from './auth.repository'
-import { RegisterInput, LoginInput } from './auth.schema'
+import { RegisterInput, LoginInput, CreateSalespersonInput } from './auth.schema'
 
 interface TraderDTO {
   id: string
   phoneNumber: string
   name: string
   businessName?: string
+  role: 'OWNER' | 'SALESPERSON'
   language: string
   createdAt: string
 }
@@ -36,6 +37,7 @@ const toTraderDTO = (trader: any): TraderDTO => ({
   phoneNumber: trader.phoneNumber,
   name: trader.name,
   businessName: trader.businessName ?? undefined,
+  role: trader.role,
   language: trader.language,
   createdAt: trader.createdAt.toISOString(),
 })
@@ -56,12 +58,47 @@ export const authService = {
 
     // 4. Generate JWT
     const token = jwt.sign(
-      { traderId: trader.id, phoneNumber: trader.phoneNumber },
+      { traderId: trader.id, actorId: trader.id, role: trader.role, phoneNumber: trader.phoneNumber },
       env.JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     )
 
     return { token, trader: toTraderDTO(trader) }
+  },
+
+  async createSalesperson(ownerTraderId: string, input: CreateSalespersonInput): Promise<TraderDTO> {
+    const existing = await authRepository.findByPhone(input.phoneNumber)
+    if (existing) {
+      throw new AppError('Phone number already registered', 409, 'CONFLICT')
+    }
+
+    const owner = await authRepository.findById(ownerTraderId)
+    if (!owner) {
+      throw new AppError('Owner account not found', 404, 'NOT_FOUND')
+    }
+
+    if (owner.role !== 'OWNER') {
+      throw new AppError('Only business owners can add salespeople', 403, 'FORBIDDEN')
+    }
+
+    const pinHash = await bcrypt.hash(input.pin, SALT_ROUNDS)
+    const salesperson = await authRepository.createSalesperson(ownerTraderId, { ...input, pinHash })
+
+    return toTraderDTO(salesperson)
+  },
+
+  async listSalespeople(ownerTraderId: string): Promise<TraderDTO[]> {
+    const owner = await authRepository.findById(ownerTraderId)
+    if (!owner) {
+      throw new AppError('Owner account not found', 404, 'NOT_FOUND')
+    }
+
+    if (owner.role !== 'OWNER') {
+      throw new AppError('Only business owners can view team members', 403, 'FORBIDDEN')
+    }
+
+    const rows = await authRepository.listSalespeople(ownerTraderId)
+    return rows.map(toTraderDTO)
   },
 
   async login(input: LoginInput): Promise<AuthResponseDTO> {
@@ -80,9 +117,16 @@ export const authService = {
       throw new AppError('Invalid credentials', 401, 'UNAUTHORIZED')
     }
 
+    const scopeTraderId = trader.ownerTraderId ?? trader.id
+
     // 3. Generate JWT
     const token = jwt.sign(
-      { traderId: trader.id, phoneNumber: trader.phoneNumber },
+      {
+        traderId: scopeTraderId,
+        actorId: trader.id,
+        role: trader.role,
+        phoneNumber: trader.phoneNumber,
+      },
       env.JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     )

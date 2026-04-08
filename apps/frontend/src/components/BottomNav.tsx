@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { APP_NAV_ITEMS } from '@/components/AppNavigation'
+import { APP_PRIMARY_NAV_ITEMS } from '@/components/AppNavigation'
 
 export const BottomNav = () => {
   return (
@@ -9,7 +9,7 @@ export const BottomNav = () => {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <div className="mx-auto flex max-w-xl items-stretch px-2">
-        {APP_NAV_ITEMS.map((item) => (
+        {APP_PRIMARY_NAV_ITEMS.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.to === '/dashboard'} className="flex-1">
             {({ isActive }) => (
               <div

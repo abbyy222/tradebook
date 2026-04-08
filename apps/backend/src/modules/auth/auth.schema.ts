@@ -23,5 +23,18 @@ export const loginSchema = z.object({
   pin: z.string().length(4),
 })
 
+export const createSalespersonSchema = z.object({
+  phoneNumber: z
+    .string()
+    .regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number'),
+  name: z.string().min(2).max(100),
+  pin: z
+    .string()
+    .length(4, 'PIN must be exactly 4 digits')
+    .regex(/^\d+$/, 'PIN must contain only numbers'),
+  language: z.enum(['EN', 'PIDGIN', 'IGBO', 'YORUBA', 'HAUSA']).default('EN'),
+})
+
 export type RegisterInput = z.infer<typeof registerSchema>
 export type LoginInput = z.infer<typeof loginSchema>
+export type CreateSalespersonInput = z.infer<typeof createSalespersonSchema>

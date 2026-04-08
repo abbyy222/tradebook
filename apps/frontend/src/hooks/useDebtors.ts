@@ -33,7 +33,7 @@ const normalizePhoneNumber = (phoneNumber?: string) => {
   return hasPlusPrefix ? `+${digitsOnly}` : digitsOnly
 }
 
-const normalizeDueDate = (dueDate?: string) => {
+const normalizeDueDate = (dueDate?: string | null) => {
   if (!dueDate) return undefined
 
   const trimmed = dueDate.trim()
@@ -53,7 +53,7 @@ const toRecordPaymentPayload = (
 })
 
 const toCreateDebtorPayload = (
-  debtor: Pick<CreateDebtorDTO, 'id' | 'customerName' | 'phoneNumber' | 'totalOwed' | 'dueDate'>
+  debtor: Pick<CreateDebtorDTO, 'id' | 'customerName' | 'phoneNumber' | 'totalOwed'> & { dueDate?: string | null }
 ): CreateDebtorDTO => ({
   id: debtor.id,
   customerName: debtor.customerName.trim(),
@@ -285,6 +285,14 @@ export const usePaymentHistory = (debtorId: string) => {
   })
 }
 
+export const useDebtorStatement = (debtorId: string) => {
+  return useQuery({
+    queryKey: [...debtorKeys.detail(debtorId), 'statement'],
+    queryFn: () => debtorsApi.getStatement(debtorId),
+    enabled: !!debtorId,
+  })
+}
+
 export const useCreateDebtor = () => {
   const queryClient = useQueryClient()
 
@@ -366,6 +374,29 @@ export const useRecordPayment = (debtorId: string) => {
     onSuccess: async (updatedDebtor) => {
       queryClient.setQueryData(debtorKeys.detail(debtorId), updatedDebtor)
       queryClient.invalidateQueries({ queryKey: debtorKeys.payments(debtorId) })
+      queryClient.invalidateQueries({ queryKey: debtorKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.overview() })
+    },
+  })
+}
+
+export const useUpdateDebtorSchedule = (debtorId: string) => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (dueDate: string | null) => {
+      const updatedDebtor = await debtorsApi.updateSchedule(debtorId, { dueDate })
+
+      await db.debtors.put({
+        ...updatedDebtor,
+        syncStatus: 'SYNCED',
+        updatedAt: new Date().toISOString(),
+      })
+
+      return updatedDebtor
+    },
+    onSuccess: (updatedDebtor) => {
+      queryClient.setQueryData(debtorKeys.detail(debtorId), updatedDebtor)
       queryClient.invalidateQueries({ queryKey: debtorKeys.lists() })
       queryClient.invalidateQueries({ queryKey: dashboardKeys.overview() })
     },

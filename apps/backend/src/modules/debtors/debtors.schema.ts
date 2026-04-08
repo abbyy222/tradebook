@@ -22,6 +22,10 @@ export const recordPaymentSchema = z.object({
   note: z.string().max(300).optional(),
 })
 
+export const updateDebtorScheduleSchema = z.object({
+  dueDate: z.string().datetime().nullable(),
+})
+
 export const listDebtorsQuerySchema = z.object({
   cursor: z.string().optional(),
   pageSize: z
@@ -34,4 +38,5 @@ export const listDebtorsQuerySchema = z.object({
 
 export type CreateDebtorInput = z.infer<typeof createDebtorSchema>
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>
+export type UpdateDebtorScheduleInput = z.infer<typeof updateDebtorScheduleSchema>
 export type ListDebtorsQuery = z.infer<typeof listDebtorsQuerySchema>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useCreateSale } from '@/hooks/useSales'
-import { useDebtorsList } from '@/hooks/useDebtors'
+import { useCreateDebtor, useDebtorsList } from '@/hooks/useDebtors'
+import { useCustomersList } from '@/hooks/useCustomers'
 import { useStockList } from '@/hooks/useStock'
 import { useAuthStore } from '@/stores/authStore'
 import { buildReceiptText, printReceipt } from '@/utils/receipt'
@@ -11,6 +12,7 @@ interface Props {
 
 type Step = 'item' | 'quantity' | 'payment' | 'confirm'
 type PaymentType = 'CASH' | 'TRANSFER' | 'DEBT'
+type CreditSource = 'DEBTORS' | 'CUSTOMERS'
 
 const STEPS: Step[] = ['item', 'quantity', 'payment', 'confirm']
 const STEP_LABELS = ['Item', 'Quantity', 'Payment', 'Confirm']
@@ -52,6 +54,13 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
   const [quantity, setQuantity] = useState('1')
   const [paymentType, setPaymentType] = useState<PaymentType>('CASH')
   const [selectedDebtorId, setSelectedDebtorId] = useState('')
+  const [creditSource, setCreditSource] = useState<CreditSource>('DEBTORS')
+  const [selectedCustomerId, setSelectedCustomerId] = useState('')
+  const [debtorSearch, setDebtorSearch] = useState('')
+  const [showCreateDebtor, setShowCreateDebtor] = useState(false)
+  const [newDebtorName, setNewDebtorName] = useState('')
+  const [newDebtorPhone, setNewDebtorPhone] = useState('')
+  const [newDebtorDueDate, setNewDebtorDueDate] = useState('')
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
   const [completedSaleId, setCompletedSaleId] = useState('')
@@ -59,14 +68,37 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
   const [receiptBusy, setReceiptBusy] = useState(false)
 
   const createSale = useCreateSale()
+  const createDebtor = useCreateDebtor()
   const trader = useAuthStore((state) => state.trader)
   const { data: stockData } = useStockList({ search })
   const { data: debtorsData } = useDebtorsList()
+  const { data: customersData } = useCustomersList(debtorSearch || undefined)
 
   const stockItems = stockData?.pages.flatMap((page) => page.data) ?? []
   const selectedStockItem = stockItems.find((item) => item.id === selectedStockItemId)
   const debtors = debtorsData?.pages.flatMap((page) => page.data) ?? []
-  const selectableDebtors = debtors.filter((debtor) => debtor.status !== 'CLEARED' || debtor.balance > 0)
+  const customers = customersData?.pages.flatMap((page) => page.data) ?? []
+  const selectableDebtors = debtors
+  const filteredDebtors = useMemo(() => {
+    const term = debtorSearch.trim().toLowerCase()
+    if (!term) return selectableDebtors
+    return selectableDebtors.filter((debtor) => {
+      return (
+        debtor.customerName.toLowerCase().includes(term) ||
+        debtor.phoneNumber?.toLowerCase().includes(term)
+      )
+    })
+  }, [debtorSearch, selectableDebtors])
+  const filteredCustomers = useMemo(() => {
+    const term = debtorSearch.trim().toLowerCase()
+    if (!term) return customers
+    return customers.filter((customer) => {
+      return (
+        customer.name.toLowerCase().includes(term) ||
+        customer.phoneNumber?.toLowerCase().includes(term)
+      )
+    })
+  }, [customers, debtorSearch])
   const selectedDebtor = selectableDebtors.find((debtor) => debtor.id === selectedDebtorId)
 
   const qty = Number.parseInt(quantity, 10) || 0
@@ -96,6 +128,66 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
     if (qty > selectedStockItem.quantity) return 'Not enough stock. Available: ' + selectedStockItem.quantity
     return ''
   }, [qty, selectedStockItem])
+
+  const handleQuickCreateDebtor = async () => {
+    const name = newDebtorName.trim()
+    const phone = newDebtorPhone.trim()
+    if (!name) {
+      setError('Enter customer name to add debtor')
+      return
+    }
+
+    try {
+      setError('')
+      const createdDebtor = await createDebtor.mutateAsync({
+        customerName: name,
+        phoneNumber: phone || undefined,
+        totalOwed: 0,
+        dueDate: newDebtorDueDate || undefined,
+      })
+      setSelectedDebtorId(createdDebtor.id)
+      setDebtorSearch(name)
+      setShowCreateDebtor(false)
+      setNewDebtorName('')
+      setNewDebtorPhone('')
+      setNewDebtorDueDate('')
+    } catch {
+      setError('Unable to add debtor right now')
+    }
+  }
+
+  const normalizePhone = (value?: string | null) => {
+    if (!value) return ''
+    return value.replace(/\D/g, '')
+  }
+
+  const handleSelectCustomerForCredit = async (customer: { id: string; name: string; phoneNumber?: string }) => {
+    setError('')
+    setSelectedCustomerId(customer.id)
+
+    const customerPhone = normalizePhone(customer.phoneNumber)
+    const existingDebtor = selectableDebtors.find((debtor) => {
+      const debtorPhone = normalizePhone(debtor.phoneNumber)
+      if (customerPhone && debtorPhone && customerPhone === debtorPhone) return true
+      return debtor.customerName.trim().toLowerCase() === customer.name.trim().toLowerCase()
+    })
+
+    if (existingDebtor) {
+      setSelectedDebtorId(existingDebtor.id)
+      return
+    }
+
+    try {
+      const createdDebtor = await createDebtor.mutateAsync({
+        customerName: customer.name,
+        phoneNumber: customer.phoneNumber || undefined,
+        totalOwed: 0,
+      })
+      setSelectedDebtorId(createdDebtor.id)
+    } catch {
+      setError('Could not link this customer to credit right now')
+    }
+  }
 
   const handleConfirm = async () => {
     if (!selectedStockItem || quantityError) {
@@ -266,7 +358,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
               {PAYMENT_OPTIONS.map((option) => {
                 const isSelected = paymentType === option.type
                 return (
-                  <button key={option.type} onClick={() => { setPaymentType(option.type); if (option.type !== 'DEBT') setSelectedDebtorId('') }} className="flex items-center gap-4 rounded-xl p-4 w-full text-left transition-all duration-150 active:scale-98" style={{ background: isSelected ? option.bg : 'rgba(255,255,255,0.03)', border: isSelected ? '1.5px solid ' + option.color + '55' : '1.5px solid rgba(255,255,255,0.07)' }}>
+                  <button key={option.type} onClick={() => { setPaymentType(option.type); if (option.type !== 'DEBT') { setSelectedDebtorId(''); setSelectedCustomerId('') } }} className="flex items-center gap-4 rounded-xl p-4 w-full text-left transition-all duration-150 active:scale-98" style={{ background: isSelected ? option.bg : 'rgba(255,255,255,0.03)', border: isSelected ? '1.5px solid ' + option.color + '55' : '1.5px solid rgba(255,255,255,0.07)' }}>
                     <span style={{ fontSize: '1.5rem', flexShrink: 0 }}>{option.emoji}</span>
                     <div className="flex-1"><p className="font-ui font-bold text-sm" style={{ color: isSelected ? option.color : '#f5ede0' }}>{option.label}</p><p className="font-body text-xs mt-0.5" style={{ color: 'rgba(245,237,224,0.35)' }}>{option.desc}</p></div>
                   </button>
@@ -275,19 +367,104 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
             </div>
             {paymentType === 'DEBT' && (
               <div className="flex flex-col gap-2">
-                <p className="font-ui font-bold text-xs uppercase tracking-wider" style={{ color: 'rgba(245,237,224,0.4)' }}>Select debtor</p>
-                {selectableDebtors.length === 0 ? (
-                  <div className="rounded-xl px-4 py-3 font-body text-sm" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.18)', color: '#f5ede0' }}>Add the customer on the Debtors page first, then record this as credit.</div>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-ui font-bold text-xs uppercase tracking-wider" style={{ color: 'rgba(245,237,224,0.4)' }}>Select debtor</p>
+                  <button
+                    type="button"
+                    className="rounded-full px-3 py-1 font-ui font-bold text-[11px]"
+                    style={{ background: 'rgba(232,168,56,0.15)', color: '#f0bc5a', border: '1px solid rgba(232,168,56,0.22)' }}
+                    onClick={() => setShowCreateDebtor((prev) => !prev)}
+                  >
+                    {showCreateDebtor ? 'Cancel' : '+ New debtor'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {(['DEBTORS', 'CUSTOMERS'] as const).map((source) => (
+                    <button
+                      key={source}
+                      type="button"
+                      onClick={() => setCreditSource(source)}
+                      className="rounded-xl px-3 py-2 font-ui font-bold text-xs transition-all duration-150"
+                      style={{
+                        background: creditSource === source ? 'rgba(117,133,200,0.18)' : 'rgba(255,255,255,0.03)',
+                        color: creditSource === source ? '#9fb0ff' : 'rgba(245,237,224,0.55)',
+                        border: `1px solid ${creditSource === source ? 'rgba(117,133,200,0.35)' : 'rgba(255,255,255,0.07)'}`,
+                      }}
+                    >
+                      {source === 'DEBTORS' ? 'From debtors' : 'From customers'}
+                    </button>
+                  ))}
+                </div>
+
+                <input
+                  type="text"
+                  placeholder={creditSource === 'DEBTORS' ? 'Search debtor name or phone' : 'Search customer name or phone'}
+                  value={debtorSearch}
+                  onChange={(e) => setDebtorSearch(e.target.value)}
+                  className="input-base"
+                />
+
+                {showCreateDebtor ? (
+                  <div className="rounded-xl p-3 flex flex-col gap-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <input
+                      type="text"
+                      placeholder="Customer name"
+                      value={newDebtorName}
+                      onChange={(e) => setNewDebtorName(e.target.value)}
+                      className="input-base"
+                    />
+                    <input
+                      type="tel"
+                      placeholder="Phone number (optional)"
+                      value={newDebtorPhone}
+                      onChange={(e) => setNewDebtorPhone(e.target.value)}
+                      className="input-base"
+                    />
+                    <div className="flex flex-col gap-1">
+                      <label className="label-base">First payment date (optional)</label>
+                      <input
+                        type="date"
+                        value={newDebtorDueDate}
+                        onChange={(e) => setNewDebtorDueDate(e.target.value)}
+                        className="input-base"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => void handleQuickCreateDebtor()}
+                      disabled={createDebtor.isPending}
+                    >
+                      {createDebtor.isPending ? 'Adding...' : 'Add and select'}
+                    </button>
+                  </div>
+                ) : null}
+
+                {creditSource === 'DEBTORS' && filteredDebtors.length === 0 ? (
+                  <div className="rounded-xl px-4 py-3 font-body text-sm" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.18)', color: '#f5ede0' }}>No matching debtor. Tap New debtor to add this customer now.</div>
+                ) : creditSource === 'CUSTOMERS' && filteredCustomers.length === 0 ? (
+                  <div className="rounded-xl px-4 py-3 font-body text-sm" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.18)', color: '#f5ede0' }}>No matching customer. Add customer from More {'>'} Customers.</div>
                 ) : (
                   <div className="flex flex-col gap-2 max-h-40 overflow-y-auto">
-                    {selectableDebtors.map((debtor) => {
-                      const isSelected = selectedDebtorId === debtor.id
-                      return (
-                        <button key={debtor.id} onClick={() => setSelectedDebtorId(debtor.id)} className="w-full rounded-xl px-4 py-3 text-left transition-all duration-150" style={{ background: isSelected ? 'rgba(248,113,113,0.12)' : 'rgba(255,255,255,0.03)', border: isSelected ? '1px solid rgba(248,113,113,0.35)' : '1px solid rgba(255,255,255,0.07)' }}>
-                          <div className="flex items-center justify-between gap-3"><span className="font-ui font-bold text-sm" style={{ color: '#f5ede0' }}>{debtor.customerName}</span><span className="font-body text-xs" style={{ color: '#f87171' }}>Owes {fmt(debtor.balance)}</span></div>
-                        </button>
-                      )
-                    })}
+                    {creditSource === 'DEBTORS'
+                      ? filteredDebtors.map((debtor) => {
+                          const isSelected = selectedDebtorId === debtor.id
+                          return (
+                            <button key={debtor.id} onClick={() => { setSelectedDebtorId(debtor.id); setSelectedCustomerId('') }} className="w-full rounded-xl px-4 py-3 text-left transition-all duration-150" style={{ background: isSelected ? 'rgba(248,113,113,0.12)' : 'rgba(255,255,255,0.03)', border: isSelected ? '1px solid rgba(248,113,113,0.35)' : '1px solid rgba(255,255,255,0.07)' }}>
+                              <div className="flex items-center justify-between gap-3"><span className="font-ui font-bold text-sm" style={{ color: '#f5ede0' }}>{debtor.customerName}</span><span className="font-body text-xs" style={{ color: debtor.balance > 0 ? '#f87171' : '#4ecca3' }}>{debtor.balance > 0 ? `Owes ${fmt(debtor.balance)}` : 'Cleared'}</span></div>
+                            </button>
+                          )
+                        })
+                      : filteredCustomers.map((customer) => {
+                          const isSelected = selectedCustomerId === customer.id
+                          return (
+                            <button key={customer.id} onClick={() => void handleSelectCustomerForCredit(customer)} className="w-full rounded-xl px-4 py-3 text-left transition-all duration-150" style={{ background: isSelected ? 'rgba(117,133,200,0.15)' : 'rgba(255,255,255,0.03)', border: isSelected ? '1px solid rgba(117,133,200,0.35)' : '1px solid rgba(255,255,255,0.07)' }}>
+                              <div className="flex items-center justify-between gap-3"><span className="font-ui font-bold text-sm" style={{ color: '#f5ede0' }}>{customer.name}</span><span className="font-body text-xs" style={{ color: '#9fb0ff' }}>Use as credit</span></div>
+                              {customer.phoneNumber ? <p className="font-body text-xs mt-0.5" style={{ color: 'rgba(245,237,224,0.35)' }}>{customer.phoneNumber}</p> : null}
+                            </button>
+                          )
+                        })}
                   </div>
                 )}
               </div>

@@ -1,4 +1,4 @@
-import { CreateDebtorInput, RecordPaymentInput, ListDebtorsQuery } from './debtors.schema';
+import { CreateDebtorInput, RecordPaymentInput, ListDebtorsQuery, UpdateDebtorScheduleInput } from './debtors.schema';
 export declare const debtorsService: {
     createDebtor(traderId: string, input: CreateDebtorInput): Promise<any>;
     recordPayment(debtorId: string, traderId: string, input: RecordPaymentInput): Promise<any>;
@@ -18,7 +18,33 @@ export declare const debtorsService: {
         id: string;
         note: string | null;
     }[]>;
+    getStatement(debtorId: string, traderId: string): Promise<{
+        debtor: any;
+        generatedAt: string;
+        entries: ({
+            balanceAfter: number;
+            id: string;
+            type: "SALE";
+            amount: number;
+            date: string;
+            reference: string;
+            note: string;
+        } | {
+            balanceAfter: number;
+            id: string;
+            type: "PAYMENT";
+            amount: number;
+            date: string;
+            note: string | undefined;
+        })[];
+        totals: {
+            totalSalesOnCredit: number;
+            totalPayments: number;
+            balance: any;
+        };
+    }>;
     getDebtor(id: string, traderId: string): Promise<any>;
+    updateDebtorSchedule(debtorId: string, traderId: string, input: UpdateDebtorScheduleInput): Promise<any>;
     deleteDebtor(id: string, traderId: string): Promise<{
         deleted: boolean;
     }>;

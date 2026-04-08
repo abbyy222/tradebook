@@ -34,6 +34,11 @@ enum Language {
   HAUSA
 }
 
+enum TraderRole {
+  OWNER
+  SALESPERSON
+}
+
 enum ExpenseCategory {
   RESTOCK
   TRANSPORT
@@ -63,22 +68,79 @@ enum ExpenseFrequency {
 }
 
 model Trader {
-  id           String    @id @default(uuid())
-  phoneNumber  String    @unique @map("phone_number")
-  name         String
-  pinHash      String    @map("pin_hash")
-  language     Language  @default(EN)
-  businessName String?   @map("business_name")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id             String      @id @default(uuid())
+  phoneNumber    String      @unique @map("phone_number")
+  name           String
+  pinHash        String      @map("pin_hash")
+  language       Language    @default(EN)
+  businessName   String?     @map("business_name")
+  role           TraderRole  @default(OWNER)
+  ownerTraderId  String?     @map("owner_trader_id")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
 
-  sales        Sale[]
-  expenses     Expense[]
-  stockItems   StockItem[]
-  debtors      Debtor[]
+  owner          Trader?     @relation("OwnerSalespeople", fields: [ownerTraderId], references: [id], onDelete: SetNull)
+  salespeople    Trader[]    @relation("OwnerSalespeople")
+  sales          Sale[]
+  expenses       Expense[]
+  stockItems     StockItem[]
+  debtors        Debtor[]
+  savingsEntries SavingsEntry[] @relation("BusinessSavings")
+  recordedSavings SavingsEntry[] @relation("RecordedSavings")
+  customers      Customer[]
+  suppliers      Supplier[]
 
   @@index([phoneNumber])
+  @@index([ownerTraderId])
   @@map("traders")
+}
+
+model Customer {
+  id         String   @id @default(uuid())
+  traderId   String   @map("trader_id")
+  name       String
+  phoneNumber String? @map("phone_number")
+  note       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  trader     Trader   @relation(fields: [traderId], references: [id], onDelete: Cascade)
+
+  @@index([traderId, createdAt])
+  @@map("customers")
+}
+
+model Supplier {
+  id          String   @id @default(uuid())
+  traderId    String   @map("trader_id")
+  name        String
+  phoneNumber String?  @map("phone_number")
+  itemCategory String? @map("item_category")
+  note        String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  trader      Trader   @relation(fields: [traderId], references: [id], onDelete: Cascade)
+
+  @@index([traderId, createdAt])
+  @@map("suppliers")
+}
+
+model SavingsEntry {
+  id                String   @id @default(uuid())
+  traderId          String   @map("trader_id")
+  createdByTraderId String   @map("created_by_trader_id")
+  amount            Decimal  @db.Decimal(12, 2)
+  note              String?
+  savedAt           DateTime @map("saved_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  trader            Trader   @relation("BusinessSavings", fields: [traderId], references: [id], onDelete: Cascade)
+  createdBy         Trader   @relation("RecordedSavings", fields: [createdByTraderId], references: [id], onDelete: Cascade)
+
+  @@index([traderId, savedAt])
+  @@index([traderId, createdAt])
+  @@map("savings_entries")
 }
 
 model Sale {

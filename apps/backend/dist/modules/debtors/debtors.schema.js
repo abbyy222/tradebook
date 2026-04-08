@@ -1,7 +1,7 @@
 "use strict";
 // src/modules/debtors/debtors.schema.ts
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.listDebtorsQuerySchema = exports.recordPaymentSchema = exports.createDebtorSchema = void 0;
+exports.listDebtorsQuerySchema = exports.updateDebtorScheduleSchema = exports.recordPaymentSchema = exports.createDebtorSchema = void 0;
 const zod_1 = require("zod");
 exports.createDebtorSchema = zod_1.z.object({
     id: zod_1.z.string().uuid(),
@@ -20,6 +20,9 @@ exports.recordPaymentSchema = zod_1.z.object({
         .multipleOf(0.01),
     paidAt: zod_1.z.string().datetime(),
     note: zod_1.z.string().max(300).optional(),
+});
+exports.updateDebtorScheduleSchema = zod_1.z.object({
+    dueDate: zod_1.z.string().datetime().nullable(),
 });
 exports.listDebtorsQuerySchema = zod_1.z.object({
     cursor: zod_1.z.string().optional(),

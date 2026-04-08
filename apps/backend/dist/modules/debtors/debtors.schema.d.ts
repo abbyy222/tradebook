@@ -11,6 +11,9 @@ export declare const recordPaymentSchema: z.ZodObject<{
     paidAt: z.ZodString;
     note: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
+export declare const updateDebtorScheduleSchema: z.ZodObject<{
+    dueDate: z.ZodNullable<z.ZodString>;
+}, z.core.$strip>;
 export declare const listDebtorsQuerySchema: z.ZodObject<{
     cursor: z.ZodOptional<z.ZodString>;
     pageSize: z.ZodPipe<z.ZodPipe<z.ZodOptional<z.ZodString>, z.ZodTransform<number, string | undefined>>, z.ZodNumber>;
@@ -22,4 +25,5 @@ export declare const listDebtorsQuerySchema: z.ZodObject<{
 }, z.core.$strip>;
 export type CreateDebtorInput = z.infer<typeof createDebtorSchema>;
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
+export type UpdateDebtorScheduleInput = z.infer<typeof updateDebtorScheduleSchema>;
 export type ListDebtorsQuery = z.infer<typeof listDebtorsQuerySchema>;
