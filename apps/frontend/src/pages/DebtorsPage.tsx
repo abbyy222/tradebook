@@ -456,24 +456,29 @@ export const DebtorsPage = () => {
             <p className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.35)' }}>{activeTab === 'OWING' ? 'Everyone has paid. Well done!' : activeTab === 'CLEARED' ? 'Cleared records stay here for history and audits.' : 'Add your first debtor to start tracking balances.'}</p>
           </div>
         ) : filteredDebtors.map((debtor: any) => (
-          <div key={debtor.id} className="rounded-2xl px-5 py-4 flex items-center gap-4" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="rounded-full flex items-center justify-center font-ui font-bold text-sm flex-shrink-0" style={{ width: 44, height: 44, background: 'linear-gradient(135deg, rgba(192,72,24,0.35), rgba(45,58,124,0.35))', color: '#f0bc5a', border: '1px solid rgba(232,168,56,0.2)' }}>{debtor.customerName[0].toUpperCase()}</div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-ui font-semibold text-sm" style={{ color: '#f5ede0' }}>{debtor.customerName}</p>
-                {debtor.balance === 0 && <span className="inline-flex rounded-full px-2.5 py-1 font-ui font-bold text-[10px]" style={{ background: 'rgba(78,204,163,0.12)', color: '#4ecca3', border: '1px solid rgba(78,204,163,0.2)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Cleared</span>}
+          <div key={debtor.id} className="rounded-2xl px-4 py-4 sm:px-5 flex flex-col gap-3 sm:gap-4" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="rounded-full flex items-center justify-center font-ui font-bold text-sm flex-shrink-0" style={{ width: 40, height: 40, background: 'linear-gradient(135deg, rgba(192,72,24,0.35), rgba(45,58,124,0.35))', color: '#f0bc5a', border: '1px solid rgba(232,168,56,0.2)' }}>{debtor.customerName[0].toUpperCase()}</div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-ui font-semibold text-sm leading-tight break-words" style={{ color: '#f5ede0' }}>{debtor.customerName}</p>
+                    {debtor.balance === 0 && <span className="inline-flex rounded-full px-2.5 py-1 font-ui font-bold text-[10px]" style={{ background: 'rgba(78,204,163,0.12)', color: '#4ecca3', border: '1px solid rgba(78,204,163,0.2)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Cleared</span>}
+                  </div>
+                  {debtor.phoneNumber && <p className="font-body text-xs mt-0.5 break-all" style={{ color: 'rgba(245,237,224,0.3)' }}>{debtor.phoneNumber}</p>}
+                  {debtor.dueDate && <p className="font-body text-xs mt-1" style={{ color: '#f0bc5a' }}>Due {new Date(debtor.dueDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>}
+                </div>
               </div>
-              {debtor.phoneNumber && <p className="font-body text-xs mt-0.5" style={{ color: 'rgba(245,237,224,0.3)' }}>{debtor.phoneNumber}</p>}
-              {debtor.dueDate && <p className="font-body text-xs" style={{ color: '#f0bc5a' }}>Due {new Date(debtor.dueDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>}
+              <div className="flex flex-col items-end gap-1.5 flex-shrink-0 text-right">
+                <p className="font-display font-bold leading-none" style={{ fontSize: '1.05rem', color: debtor.balance === 0 ? '#4ecca3' : '#f87171', fontVariationSettings: "'WONK' 1" }}>{fmt(debtor.balance)}</p>
+                <RecordSyncBadge syncStatus={debtor.syncStatus} onRetry={debtor.syncStatus === 'FAILED' ? () => retryDebtorSync.mutate() : undefined} />
+              </div>
             </div>
-            <div className="flex flex-col items-end gap-2 flex-shrink-0">
-              <p className="font-display font-bold" style={{ fontSize: '1rem', color: debtor.balance === 0 ? '#4ecca3' : '#f87171', fontVariationSettings: "'WONK' 1" }}>{fmt(debtor.balance)}</p>
-              <RecordSyncBadge syncStatus={debtor.syncStatus} onRetry={debtor.syncStatus === 'FAILED' ? () => retryDebtorSync.mutate() : undefined} />
-              <div className="flex items-center gap-1.5">
-                <button onClick={() => setScheduleDebtor(debtor)} className="rounded-full px-3 py-1 font-ui font-bold text-xs" style={{ background: 'rgba(117,133,200,0.18)', color: '#9fb0ff', border: '1px solid rgba(117,133,200,0.28)' }}>Schedule</button>
-                <button onClick={() => setStatementDebtor(debtor)} className="rounded-full px-3 py-1 font-ui font-bold text-xs" style={{ background: 'rgba(232,168,56,0.15)', color: '#f0bc5a', border: '1px solid rgba(232,168,56,0.22)' }}>Statement</button>
-                {debtor.balance > 0 && <button onClick={() => setSelectedDebtor(debtor)} className="rounded-full px-3 py-1 font-ui font-bold text-xs" style={{ background: 'rgba(78,204,163,0.12)', color: '#4ecca3', border: '1px solid rgba(78,204,163,0.2)' }}>Pay</button>}
-              </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
+              <button onClick={() => setScheduleDebtor(debtor)} className="rounded-full px-3 py-2 font-ui font-bold text-xs w-full sm:w-auto" style={{ background: 'rgba(117,133,200,0.18)', color: '#9fb0ff', border: '1px solid rgba(117,133,200,0.28)' }}>Schedule</button>
+              <button onClick={() => setStatementDebtor(debtor)} className="rounded-full px-3 py-2 font-ui font-bold text-xs w-full sm:w-auto" style={{ background: 'rgba(232,168,56,0.15)', color: '#f0bc5a', border: '1px solid rgba(232,168,56,0.22)' }}>Statement</button>
+              {debtor.balance > 0 && <button onClick={() => setSelectedDebtor(debtor)} className="rounded-full px-3 py-2 font-ui font-bold text-xs w-full col-span-2 sm:col-span-1 sm:w-auto" style={{ background: 'rgba(78,204,163,0.12)', color: '#4ecca3', border: '1px solid rgba(78,204,163,0.2)' }}>Pay</button>}
             </div>
           </div>
         ))}

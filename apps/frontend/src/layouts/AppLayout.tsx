@@ -140,36 +140,6 @@ export const AppLayout = () => {
           <Outlet />
         </main>
       </div>
-      <div className="fixed bottom-[5.35rem] left-3 right-3 z-40 flex items-center justify-end gap-1.5 md:hidden">
-        <button
-          onClick={() => setQuestOpen(true)}
-          className="flex items-center gap-1.5 rounded-full border border-[#e8a838]/30 bg-[#2f1c14] px-3 py-2 font-ui text-[10px] font-bold uppercase tracking-[0.08em] text-[#f0bc5a]"
-        >
-          Guide
-        </button>
-        <NavLink
-          to="/more"
-          className="flex items-center gap-1.5 rounded-full border border-white/15 bg-[#2b1912] px-3 py-2 font-ui text-[10px] font-bold uppercase tracking-[0.08em] text-secondary"
-        >
-          More
-        </NavLink>
-        {isOwner ? (
-          <NavLink
-            to="/team"
-            className="flex items-center gap-1.5 rounded-full border border-white/15 bg-[#2b1912] px-3 py-2 font-ui text-[10px] font-bold uppercase tracking-[0.08em] text-secondary"
-          >
-            <TeamIcon />
-            Manage Team
-          </NavLink>
-        ) : null}
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-1.5 rounded-full border border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.08)] px-3 py-2 font-ui text-[10px] font-bold uppercase tracking-[0.08em] text-[#f87171]"
-        >
-          <LogoutIcon />
-          Logout
-        </button>
-      </div>
       <BottomNav />
       <OnboardingQuest
         open={questOpen}
