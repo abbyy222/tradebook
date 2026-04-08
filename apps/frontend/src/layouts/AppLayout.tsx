@@ -67,7 +67,7 @@ export const AppLayout = () => {
     <div className="min-h-screen bg-[#1a0f0a]">
       <SyncStatusBanner />
       <div className="mx-auto flex w-full max-w-[1320px] md:gap-6 md:px-5 md:py-5">
-        <aside className="hidden h-[calc(100vh-5rem)] w-[260px] flex-col rounded-3xl border border-white/10 bg-[#231510] p-5 md:flex">
+        <aside className="hidden h-[calc(100vh-5rem)] w-[260px] flex-col overflow-y-auto rounded-3xl border border-white/10 bg-[#231510] p-5 md:flex">
           <div className="min-w-0 rounded-2xl border border-white/10 bg-[#2d1b14] px-4 py-4">
             <p className="label-base mb-1">Workspace</p>
             <p
@@ -80,7 +80,7 @@ export const AppLayout = () => {
             <p className="mt-1 font-body text-xs text-secondary">Your daily business cockpit</p>
           </div>
 
-          <nav className="mt-4 flex flex-1 flex-col gap-1.5" aria-label="Desktop navigation">
+          <nav className="mt-4 flex min-h-0 flex-1 flex-col gap-1.5" aria-label="Desktop navigation">
             {APP_NAV_ITEMS.map((item) => (
               <NavLink key={item.to} to={item.to} end={item.to === '/dashboard'}>
                 {({ isActive }) => (
@@ -100,7 +100,7 @@ export const AppLayout = () => {
             ))}
           </nav>
 
-          <div className="mt-4 flex items-center gap-3 rounded-xl border border-white/10 bg-[#2b1912] px-3.5 py-3">
+          <div className="mt-4 flex shrink-0 items-center gap-3 rounded-xl border border-white/10 bg-[#2b1912] px-3.5 py-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#c4622d] to-[#e8a838] font-ui text-sm font-extrabold text-white">
               {initials || 'TB'}
             </div>
@@ -114,14 +114,14 @@ export const AppLayout = () => {
 
           <button
             onClick={() => setQuestOpen(true)}
-            className="mt-3 rounded-xl border border-[#e8a838]/35 bg-[#3a2319] px-3.5 py-2.5 text-left font-ui text-xs font-bold uppercase tracking-[0.08em] text-[#f0bc5a]"
+            className="mt-3 shrink-0 rounded-xl border border-[#e8a838]/35 bg-[#3a2319] px-3.5 py-2.5 text-left font-ui text-xs font-bold uppercase tracking-[0.08em] text-[#f0bc5a]"
           >
             Launch Quest Guide
           </button>
           {isOwner ? (
             <NavLink
               to="/team"
-              className="mt-2 flex items-center gap-2 rounded-xl border border-white/15 bg-[#2b1912] px-3.5 py-2.5 text-left font-ui text-xs font-bold uppercase tracking-[0.08em] text-secondary hover:text-primary"
+              className="mt-2 flex shrink-0 items-center gap-2 rounded-xl border border-white/15 bg-[#2b1912] px-3.5 py-2.5 text-left font-ui text-xs font-bold uppercase tracking-[0.08em] text-secondary hover:text-primary"
             >
               <TeamIcon />
               Manage Team
@@ -129,7 +129,7 @@ export const AppLayout = () => {
           ) : null}
           <button
             onClick={handleLogout}
-            className="mt-2 flex items-center gap-2 rounded-xl border border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.08)] px-3.5 py-2.5 text-left font-ui text-xs font-bold uppercase tracking-[0.08em] text-[#f87171]"
+            className="mt-2 flex shrink-0 items-center gap-2 rounded-xl border border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.08)] px-3.5 py-2.5 text-left font-ui text-xs font-bold uppercase tracking-[0.08em] text-[#f87171]"
           >
             <LogoutIcon />
             Logout

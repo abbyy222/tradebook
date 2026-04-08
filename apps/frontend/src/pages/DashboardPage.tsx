@@ -408,7 +408,7 @@ export const DashboardPage = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 divide-y divide-white/5 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+          <div className="flex flex-col divide-y divide-white/5">
             {activeDebtors.slice(0, 4).map((debtor: DebtorDTO) => (
               <button
                 key={debtor.id}
