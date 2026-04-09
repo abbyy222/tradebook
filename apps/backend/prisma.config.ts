@@ -3,7 +3,7 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
-const prismaDatasourceUrl = process.env.DATABASE_URL || process.env.DIRECT_URL;
+const prismaDatasourceUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
 
 if (!prismaDatasourceUrl) {
   throw new Error("Set DATABASE_URL (or DIRECT_URL) before running Prisma commands.");
@@ -15,8 +15,8 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    // Prefer DATABASE_URL because it's the proven runtime connection on Render.
-    // DIRECT_URL still works as fallback when explicitly provided.
+    // Migrations should use DIRECT_URL first (direct DB connection).
+    // Fallback to DATABASE_URL keeps local/dev resilient.
     url: prismaDatasourceUrl,
   },
 });
