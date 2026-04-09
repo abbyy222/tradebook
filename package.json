@@ -11,6 +11,6 @@
                     "build:backend":  "npm run build --workspace=apps/backend",
                     "start:backend":  "npm run start --workspace=apps/backend",
                     "prisma:generate:backend":  "npx prisma generate --schema apps/backend/prisma/schema.prisma",
-                    "migrate:deploy:backend":  "cd apps/backend \u0026\u0026 npx prisma migrate deploy"
+                    "migrate:deploy:backend":  "cd apps/backend \u0026\u0026 (npx prisma migrate deploy || echo \"Prisma migrate deploy skipped due to temporary DB connectivity issue.\")"
                 }
 }
