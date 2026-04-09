@@ -14,13 +14,14 @@
   --surface-2: #2e1c14;
   --surface-3: #3a2319;
   --text-primary: #f5ede0;
-  --text-secondary: rgba(245, 237, 224, 0.72);
-  --text-muted: rgba(245, 237, 224, 0.5);
+  --text-secondary: rgba(245, 237, 224, 0.78);
+  --text-muted: rgba(245, 237, 224, 0.58);
   --brand-gold: #e8a838;
   --status-success: #4ecca3;
   --status-warning: #f0bc5a;
   --status-danger: #f87171;
-  --status-info: #9fb0ff;
+  --status-info: #b6c4ff;
+  --focus-ring: rgba(232, 168, 56, 0.5);
 }
 
 /* ─── BASE RESET ─────────────────────────────────────────────────────────── */
@@ -62,8 +63,9 @@
   /* Focus ring — gold, never invisible */
   :focus-visible {
     outline: 2px solid var(--brand-gold);
-    outline-offset: 2px;
+    outline-offset: 3px;
     border-radius: 6px;
+    box-shadow: 0 0 0 3px var(--focus-ring);
   }
 
   /* Remove tap highlight on mobile */
@@ -144,7 +146,7 @@
     position: relative;
     overflow: hidden;
     transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
-    box-shadow: 0 4px 24px rgba(196, 98, 45, 0.35);
+    box-shadow: 0 3px 16px rgba(196, 98, 45, 0.26);
     letter-spacing: 0.01em;
   }
 
@@ -158,12 +160,12 @@
 
   .btn-primary:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 8px 32px rgba(196, 98, 45, 0.5);
+    box-shadow: 0 6px 24px rgba(196, 98, 45, 0.38);
   }
 
   .btn-primary:active:not(:disabled) {
     transform: scale(0.97);
-    box-shadow: 0 2px 12px rgba(196, 98, 45, 0.3);
+    box-shadow: 0 2px 10px rgba(196, 98, 45, 0.24);
   }
 
   .btn-primary:disabled {
@@ -178,19 +180,19 @@
     @apply rounded-xl px-5 py-4 min-h-[52px];
     background: transparent;
     color: rgba(245, 237, 224, 0.6);
-    border: 1.5px solid rgba(255, 255, 255, 0.1);
+    border: 1.5px solid rgba(255, 255, 255, 0.14);
     cursor: pointer;
     transition: border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
   }
 
-  .btn-ghost:hover { border-color: rgba(232, 168, 56, 0.4); color: #e8a838; }
+  .btn-ghost:hover { border-color: rgba(232, 168, 56, 0.5); color: #f0bc5a; }
   .btn-ghost:active { transform: scale(0.97); }
 
   /* ── INPUTS ─────────────────────────────────────────────────────────────── */
   .input-base {
     @apply w-full rounded-xl px-5 py-4 text-base;
     background: #2e1c14;
-    border: 1.5px solid rgba(255, 255, 255, 0.08);
+    border: 1.5px solid rgba(255, 255, 255, 0.14);
     color: #f5ede0;
     font-family: 'Instrument Sans', sans-serif;
     outline: none;
@@ -202,7 +204,7 @@
 
   .input-base:focus {
     border-color: #c4622d;
-    box-shadow: 0 0 0 3px rgba(196, 98, 45, 0.18);
+    box-shadow: 0 0 0 3px rgba(196, 98, 45, 0.24);
   }
 
   .input-base.error {
@@ -353,6 +355,17 @@
   /* Applied via JS IntersectionObserver for page sections */
   .reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.5s ease, transform 0.5s ease; }
   .reveal.visible { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ─── UTILITY LAYER ──────────────────────────────────────────────────────── */
