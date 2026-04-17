@@ -7,8 +7,8 @@ export declare const env: {
     JWT_SECRET: string;
     JWT_EXPIRES_IN: string;
     INTERNAL_JWT_EXPIRES_IN: string;
-    PLATFORM_SEED_DEV_PHONE: string;
-    PLATFORM_SEED_DEV_PASSWORD: string;
-    PLATFORM_SEED_DEV_NAME: string;
     FRONTEND_URL: string;
+    PLATFORM_SEED_DEV_PHONE?: string | undefined;
+    PLATFORM_SEED_DEV_PASSWORD?: string | undefined;
+    PLATFORM_SEED_DEV_NAME?: string | undefined;
 };

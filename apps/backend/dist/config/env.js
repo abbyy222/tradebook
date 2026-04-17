@@ -15,9 +15,9 @@ const envSchema = zod_1.z.object({
     INTERNAL_JWT_SECRET: zod_1.z.string().min(32, 'INTERNAL_JWT_SECRET must be at least 32 characters').optional(),
     JWT_EXPIRES_IN: zod_1.z.string().default('7d'),
     INTERNAL_JWT_EXPIRES_IN: zod_1.z.string().default('12h'),
-    PLATFORM_SEED_DEV_PHONE: zod_1.z.string().regex(/^\+?[0-9]{10,15}$/, 'PLATFORM_SEED_DEV_PHONE is invalid'),
-    PLATFORM_SEED_DEV_PASSWORD: zod_1.z.string().min(8, 'PLATFORM_SEED_DEV_PASSWORD must be at least 8 characters'),
-    PLATFORM_SEED_DEV_NAME: zod_1.z.string().min(2, 'PLATFORM_SEED_DEV_NAME is required'),
+    PLATFORM_SEED_DEV_PHONE: zod_1.z.string().regex(/^\+?[0-9]{10,15}$/, 'PLATFORM_SEED_DEV_PHONE is invalid').optional(),
+    PLATFORM_SEED_DEV_PASSWORD: zod_1.z.string().min(8, 'PLATFORM_SEED_DEV_PASSWORD must be at least 8 characters').optional(),
+    PLATFORM_SEED_DEV_NAME: zod_1.z.string().min(2, 'PLATFORM_SEED_DEV_NAME is required').optional(),
     FRONTEND_URL: zod_1.z.string().default('http://localhost:5173'),
 });
 const parsed = envSchema.safeParse(process.env);

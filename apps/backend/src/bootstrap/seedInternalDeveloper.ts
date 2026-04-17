@@ -7,6 +7,14 @@ import { v4 as uuidv4 } from 'uuid'
 const SALT_ROUNDS = 12
 
 export const seedInternalDeveloper = async () => {
+  if (!env.PLATFORM_SEED_DEV_PHONE || !env.PLATFORM_SEED_DEV_PASSWORD || !env.PLATFORM_SEED_DEV_NAME) {
+    logger.info({
+      event: 'platform_dev_seed_skipped',
+      reason: 'missing_seed_env',
+    })
+    return
+  }
+
   // Cleanup legacy default seed record if it exists and does not match configured env phone.
   if (env.PLATFORM_SEED_DEV_PHONE !== '08000000000') {
     await prisma.$executeRawUnsafe(
