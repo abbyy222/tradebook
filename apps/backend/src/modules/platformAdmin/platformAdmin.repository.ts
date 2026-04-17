@@ -170,20 +170,9 @@ const getBusinessesRowsCte = (search?: string) => {
   `
 }
 
-const toBusinessStatusSummary = (rows: Array<Pick<BusinessDirectoryRow, 'activityStatus'>>) => {
-  let active = 0
-  let dormant = 0
-  let inactive = 0
-  let newlyOnboarded = 0
-
-  for (const row of rows) {
-    if (row.activityStatus === 'ACTIVE') active += 1
-    if (row.activityStatus === 'DORMANT') dormant += 1
-    if (row.activityStatus === 'INACTIVE') inactive += 1
-    if (row.activityStatus === 'NEW') newlyOnboarded += 1
-  }
-
-  return { active, dormant, inactive, newlyOnboarded }
+type StatusCountRow = {
+  activityStatus: 'ACTIVE' | 'DORMANT' | 'INACTIVE' | 'NEW'
+  count: number
 }
 
 export const platformAdminRepository = {
@@ -328,13 +317,28 @@ export const platformAdminRepository = {
       `
     )
 
-    const summaryRows = await prisma.$queryRaw<Array<Pick<BusinessDirectoryRow, 'activityStatus'>>>(
+    const summaryRows = await prisma.$queryRaw<StatusCountRow[]>(
       Prisma.sql`
         ${withRowsSql}
-        SELECT "activityStatus"
+        SELECT "activityStatus", count(*)::int AS count
         FROM rows
+        GROUP BY "activityStatus"
       `
     )
+
+    const summary = {
+      active: 0,
+      dormant: 0,
+      inactive: 0,
+      newlyOnboarded: 0,
+    }
+
+    for (const row of summaryRows) {
+      if (row.activityStatus === 'ACTIVE') summary.active = Number(row.count ?? 0)
+      if (row.activityStatus === 'DORMANT') summary.dormant = Number(row.count ?? 0)
+      if (row.activityStatus === 'INACTIVE') summary.inactive = Number(row.count ?? 0)
+      if (row.activityStatus === 'NEW') summary.newlyOnboarded = Number(row.count ?? 0)
+    }
 
     return {
       items: rows.map((row) => ({
@@ -352,7 +356,7 @@ export const platformAdminRepository = {
         activityStatus: row.activityStatus,
       })),
       total,
-      summary: toBusinessStatusSummary(summaryRows),
+      summary,
     }
   },
 }

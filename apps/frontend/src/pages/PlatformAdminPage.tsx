@@ -28,8 +28,10 @@ export const PlatformAdminPage = () => {
   const [status, setStatus] = useState<PlatformBusinessActivityStatus | undefined>(undefined)
   const [sort, setSort] = useState<'activity' | 'sales' | 'newest'>('activity')
   const [page, setPage] = useState(1)
+  const isAdminPortal = portal === 'ADMIN'
 
-  const overview = usePlatformAdminOverview(days, portal === 'ADMIN')
+  const overview = usePlatformAdminOverview(days, isAdminPortal)
+  const shouldLoadBusinesses = isAdminPortal && Boolean(overview.data)
   const businesses = usePlatformBusinessesDirectory(
     {
       page,
@@ -38,7 +40,7 @@ export const PlatformAdminPage = () => {
       status,
       sort,
     },
-    portal === 'ADMIN'
+    shouldLoadBusinesses
   )
 
   const peakDaily = useMemo(() => {

@@ -27,13 +27,34 @@ import { platformDevRouter } from './modules/platformDev/platformDev.route'
 
 const app = express()
 
+// Render/Netlify sit behind a reverse proxy. Trusting the first proxy
+// ensures req.ip resolves to the real client IP for rate limiting.
+if (env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1)
+}
+
+const normalizeOrigin = (value: string) => value.trim().replace(/\/+$/, '')
+const configuredOrigins = new Set(
+  [env.FRONTEND_URL, ...(env.FRONTEND_URLS?.split(',') ?? [])]
+    .map(normalizeOrigin)
+    .filter(Boolean)
+)
+
 // --- Security middleware ---
 // helmet sets 11 security headers automatically
 app.use(helmet())
 
 // cors only allows requests from our frontend URL
 app.use(cors({
-  origin: env.FRONTEND_URL,
+  origin: (origin, callback) => {
+    // Allow server-to-server or curl requests without an Origin header.
+    if (!origin) return callback(null, true)
+
+    const incoming = normalizeOrigin(origin)
+    if (configuredOrigins.has(incoming)) return callback(null, true)
+
+    return callback(new Error('Not allowed by CORS'))
+  },
   credentials: true,
 }))
 

@@ -18,6 +18,7 @@ const envSchema = z.object({
   PLATFORM_SEED_DEV_PASSWORD: z.string().min(8, 'PLATFORM_SEED_DEV_PASSWORD must be at least 8 characters').optional(),
   PLATFORM_SEED_DEV_NAME: z.string().min(2, 'PLATFORM_SEED_DEV_NAME is required').optional(),
   FRONTEND_URL: z.string().default('http://localhost:5173'),
+  FRONTEND_URLS: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)

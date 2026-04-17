@@ -11,4 +11,5 @@ export declare const env: {
     PLATFORM_SEED_DEV_PHONE?: string | undefined;
     PLATFORM_SEED_DEV_PASSWORD?: string | undefined;
     PLATFORM_SEED_DEV_NAME?: string | undefined;
+    FRONTEND_URLS?: string | undefined;
 };

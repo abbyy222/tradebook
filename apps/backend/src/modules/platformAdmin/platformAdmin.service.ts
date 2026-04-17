@@ -1,6 +1,34 @@
 import { PlatformAdminBusinessesQuery, PlatformAdminRangeQuery } from './platformAdmin.schema'
 import { platformAdminRepository } from './platformAdmin.repository'
 
+const OVERVIEW_CACHE_TTL_MS = 30_000
+const DIRECTORY_CACHE_TTL_MS = 20_000
+
+type CacheEntry<T> = {
+  expiresAt: number
+  value: T
+}
+
+const overviewCache = new Map<string, CacheEntry<any>>()
+const directoryCache = new Map<string, CacheEntry<any>>()
+
+const readFreshCache = <T>(cache: Map<string, CacheEntry<T>>, key: string): T | null => {
+  const hit = cache.get(key)
+  if (!hit) return null
+  if (Date.now() > hit.expiresAt) {
+    cache.delete(key)
+    return null
+  }
+  return hit.value
+}
+
+const writeCache = <T>(cache: Map<string, CacheEntry<T>>, key: string, value: T, ttlMs: number) => {
+  cache.set(key, {
+    expiresAt: Date.now() + ttlMs,
+    value,
+  })
+}
+
 const toDayKey = (value: Date) => value.toISOString().slice(0, 10)
 
 const buildDaily = (from: Date, days: number, rows: { salesByDay: Array<{ day: Date; count: number }>; expensesByDay: Array<{ day: Date; count: number }> }) => {
@@ -28,6 +56,10 @@ const buildDaily = (from: Date, days: number, rows: { salesByDay: Array<{ day: D
 
 export const platformAdminService = {
   async getOverview(query: PlatformAdminRangeQuery) {
+    const cacheKey = `overview:${query.days}`
+    const cached = readFreshCache(overviewCache, cacheKey)
+    if (cached) return cached
+
     const now = new Date()
     const from = new Date(now)
     from.setHours(0, 0, 0, 0)
@@ -35,7 +67,7 @@ export const platformAdminService = {
 
     const row = await platformAdminRepository.getOverview(from)
 
-    return {
+    const response = {
       data: {
         period: {
           days: query.days,
@@ -71,13 +103,19 @@ export const platformAdminService = {
       },
       error: null,
     }
+    writeCache(overviewCache, cacheKey, response, OVERVIEW_CACHE_TTL_MS)
+    return response
   },
 
   async getBusinessesDirectory(query: PlatformAdminBusinessesQuery) {
+    const cacheKey = `directory:${JSON.stringify(query)}`
+    const cached = readFreshCache(directoryCache, cacheKey)
+    if (cached) return cached
+
     const result = await platformAdminRepository.getBusinesses(query)
     const totalPages = Math.max(1, Math.ceil(result.total / query.pageSize))
 
-    return {
+    const response = {
       data: {
         items: result.items,
         summary: result.summary,
@@ -90,5 +128,7 @@ export const platformAdminService = {
       },
       error: null,
     }
+    writeCache(directoryCache, cacheKey, response, DIRECTORY_CACHE_TTL_MS)
+    return response
   },
 }
