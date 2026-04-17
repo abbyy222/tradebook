@@ -1,8 +1,10 @@
 let offlineUntil = 0
 let isNetworkHealthInitialized = false
+let offlineReloadTimer: number | null = null
 const OFFLINE_COOLDOWN_MS = 20000
 const OFFLINE_RELOAD_GUARD_KEY = 'tradebook:offline-reload-at'
 const OFFLINE_RELOAD_GUARD_MS = 15000
+const OFFLINE_RELOAD_DELAY_MS = 1200
 
 export const markNetworkFailure = () => {
   offlineUntil = Date.now() + OFFLINE_COOLDOWN_MS
@@ -35,8 +37,11 @@ const clearOfflineReloadMark = () => {
 
 const reloadForOfflineMode = () => {
   if (hasRecentOfflineReload()) return
+  const path = window.location.pathname.toLowerCase()
+  if (path === '/login' || path === '/register' || path === '/internal/login') return
+
   markOfflineReload()
-  window.setTimeout(() => window.location.reload(), 120)
+  window.location.reload()
 }
 
 export const initNetworkHealth = () => {
@@ -51,11 +56,24 @@ export const initNetworkHealth = () => {
 
   window.addEventListener('offline', () => {
     markNetworkFailure()
-    reloadForOfflineMode()
+    if (offlineReloadTimer !== null) {
+      window.clearTimeout(offlineReloadTimer)
+    }
+    // Wait briefly to avoid transient browser offline events canceling requests.
+    offlineReloadTimer = window.setTimeout(() => {
+      offlineReloadTimer = null
+      if (!navigator.onLine) {
+        reloadForOfflineMode()
+      }
+    }, OFFLINE_RELOAD_DELAY_MS)
   })
 
   window.addEventListener('online', () => {
     markNetworkSuccess()
     clearOfflineReloadMark()
+    if (offlineReloadTimer !== null) {
+      window.clearTimeout(offlineReloadTimer)
+      offlineReloadTimer = null
+    }
   })
 }

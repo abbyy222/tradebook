@@ -4,12 +4,12 @@ import type { RegisterDTO, LoginDTO, AuthResponseDTO, CreateSalespersonDTO, Trad
 
 export const authApi = {
   register: async (data: RegisterDTO) => {
-    const res = await apiClient.post<{ data: AuthResponseDTO }>('/auth/register', data)
+    const res = await apiClient.post<{ data: AuthResponseDTO }>('/auth/register', data, { timeout: 15000 })
     return res.data.data
   },
 
   login: async (data: LoginDTO) => {
-    const res = await apiClient.post<{ data: AuthResponseDTO }>('/auth/login', data)
+    const res = await apiClient.post<{ data: AuthResponseDTO }>('/auth/login', data, { timeout: 15000 })
     return res.data.data
   },
 

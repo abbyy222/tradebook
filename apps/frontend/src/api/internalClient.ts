@@ -7,7 +7,7 @@ let hasInternalAuthRedirected = false
 
 export const internalApiClient = axios.create({
   baseURL: `${env.API_URL}/api/v1`,
-  timeout: 2500,
+  timeout: 8000,
   headers: { 'Content-Type': 'application/json' },
 })
 

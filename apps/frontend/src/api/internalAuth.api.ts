@@ -8,7 +8,7 @@ import type {
 
 export const internalAuthApi = {
   login: async (data: InternalLoginDTO) => {
-    const res = await internalApiClient.post<{ data: InternalAuthResponseDTO }>('/internal-auth/login', data)
+    const res = await internalApiClient.post<{ data: InternalAuthResponseDTO }>('/internal-auth/login', data, { timeout: 15000 })
     return res.data.data
   },
 
@@ -27,4 +27,3 @@ export const internalAuthApi = {
     return res.data.data
   },
 }
-
