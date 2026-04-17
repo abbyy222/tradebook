@@ -14,8 +14,15 @@ export const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+const isAuthRequest = (url?: string) => {
+  if (!url) return false
+  return /(^|\/)(auth|internal-auth)(\/|$)/i.test(url)
+}
+
 apiClient.interceptors.request.use((config) => {
-  if (!isNetworkReachable()) {
+  // Never block auth endpoints with local offline heuristics.
+  // We must let login/register hit the server so users get a real response.
+  if (!isAuthRequest(config.url) && !isNetworkReachable()) {
     return Promise.reject(Object.assign(new Error('Offline mode active'), { code: 'OFFLINE_FAST_FAIL' }))
   }
 
