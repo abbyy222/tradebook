@@ -2,10 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authRepository = void 0;
 const client_1 = require("../../prisma/client");
+const phone_1 = require("../../utils/phone");
 exports.authRepository = {
     async findByPhone(phoneNumber) {
-        return client_1.prisma.trader.findUnique({
-            where: { phoneNumber },
+        const candidates = (0, phone_1.phoneLookupCandidates)(phoneNumber);
+        return client_1.prisma.trader.findFirst({
+            where: { phoneNumber: { in: candidates } },
         });
     },
     async create(data) {

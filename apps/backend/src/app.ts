@@ -11,6 +11,7 @@ import rateLimit from 'express-rate-limit'
 import { env } from './config/env'
 import { errorHandler } from './middleware/errorHandler'
 import { requestLogger } from './middleware/requestLogger'
+import { logger } from './utils/logger'
 
 // Route imports (we'll create these next)
 import { authRouter } from './modules/auth/auth.route'
@@ -40,6 +41,15 @@ const configuredOrigins = new Set(
     .filter(Boolean)
 )
 
+const isTrustedNetlifyOrigin = (origin: string) => {
+  try {
+    const host = new URL(origin).hostname.toLowerCase()
+    return host.endsWith('.netlify.app')
+  } catch {
+    return false
+  }
+}
+
 // --- Security middleware ---
 // helmet sets 11 security headers automatically
 app.use(helmet())
@@ -51,7 +61,15 @@ app.use(cors({
     if (!origin) return callback(null, true)
 
     const incoming = normalizeOrigin(origin)
-    if (configuredOrigins.has(incoming)) return callback(null, true)
+    if (configuredOrigins.has(incoming) || isTrustedNetlifyOrigin(incoming)) {
+      return callback(null, true)
+    }
+
+    logger.warn({
+      event: 'cors_origin_blocked',
+      origin: incoming,
+      allowedOrigins: Array.from(configuredOrigins),
+    })
 
     return callback(new Error('Not allowed by CORS'))
   },

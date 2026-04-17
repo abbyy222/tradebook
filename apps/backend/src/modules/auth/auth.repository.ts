@@ -2,11 +2,13 @@
 import { Prisma } from '@prisma/client'
 import { CreateSalespersonInput, RegisterInput } from './auth.schema'
 import { prisma } from '../../prisma/client'
+import { phoneLookupCandidates } from '../../utils/phone'
 
 export const authRepository = {
   async findByPhone(phoneNumber: string) {
-    return prisma.trader.findUnique({
-      where: { phoneNumber },
+    const candidates = phoneLookupCandidates(phoneNumber)
+    return prisma.trader.findFirst({
+      where: { phoneNumber: { in: candidates } },
     })
   },
 

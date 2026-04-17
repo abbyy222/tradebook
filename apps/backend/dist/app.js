@@ -16,6 +16,7 @@ const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const env_1 = require("./config/env");
 const errorHandler_1 = require("./middleware/errorHandler");
 const requestLogger_1 = require("./middleware/requestLogger");
+const logger_1 = require("./utils/logger");
 // Route imports (we'll create these next)
 const auth_route_1 = require("./modules/auth/auth.route");
 const sales_route_1 = require("./modules/sales/sales.route");
@@ -39,6 +40,15 @@ const normalizeOrigin = (value) => value.trim().replace(/\/+$/, '');
 const configuredOrigins = new Set([env_1.env.FRONTEND_URL, ...(env_1.env.FRONTEND_URLS?.split(',') ?? [])]
     .map(normalizeOrigin)
     .filter(Boolean));
+const isTrustedNetlifyOrigin = (origin) => {
+    try {
+        const host = new URL(origin).hostname.toLowerCase();
+        return host.endsWith('.netlify.app');
+    }
+    catch {
+        return false;
+    }
+};
 // --- Security middleware ---
 // helmet sets 11 security headers automatically
 app.use((0, helmet_1.default)());
@@ -49,8 +59,14 @@ app.use((0, cors_1.default)({
         if (!origin)
             return callback(null, true);
         const incoming = normalizeOrigin(origin);
-        if (configuredOrigins.has(incoming))
+        if (configuredOrigins.has(incoming) || isTrustedNetlifyOrigin(incoming)) {
             return callback(null, true);
+        }
+        logger_1.logger.warn({
+            event: 'cors_origin_blocked',
+            origin: incoming,
+            allowedOrigins: Array.from(configuredOrigins),
+        });
         return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,

@@ -14,6 +14,7 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const env_1 = require("../../config/env");
 const errorHandler_1 = require("../../middleware/errorHandler");
 const auth_repository_1 = require("./auth.repository");
+const phone_1 = require("../../utils/phone");
 // bcrypt cost factor — 12 is the recommended production value.
 // Higher = more secure but slower. 12 takes ~300ms which is
 // slow enough to defeat brute force but fast enough for UX.
@@ -30,21 +31,23 @@ const toTraderDTO = (trader) => ({
 });
 exports.authService = {
     async register(input) {
+        const normalizedPhoneNumber = (0, phone_1.normalizePhoneNumber)(input.phoneNumber);
         // 1. Check if phone already registered
-        const existing = await auth_repository_1.authRepository.findByPhone(input.phoneNumber);
+        const existing = await auth_repository_1.authRepository.findByPhone(normalizedPhoneNumber);
         if (existing) {
             throw new errorHandler_1.AppError('Phone number already registered', 409, 'CONFLICT');
         }
         // 2. Hash the PIN — never store it plain
         const pinHash = await bcryptjs_1.default.hash(input.pin, SALT_ROUNDS);
         // 3. Create the trader
-        const trader = await auth_repository_1.authRepository.create({ ...input, pinHash });
+        const trader = await auth_repository_1.authRepository.create({ ...input, phoneNumber: normalizedPhoneNumber, pinHash });
         // 4. Generate JWT
         const token = jsonwebtoken_1.default.sign({ traderId: trader.id, actorId: trader.id, role: trader.role, phoneNumber: trader.phoneNumber }, env_1.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
         return { token, trader: toTraderDTO(trader) };
     },
     async createSalesperson(ownerTraderId, input) {
-        const existing = await auth_repository_1.authRepository.findByPhone(input.phoneNumber);
+        const normalizedPhoneNumber = (0, phone_1.normalizePhoneNumber)(input.phoneNumber);
+        const existing = await auth_repository_1.authRepository.findByPhone(normalizedPhoneNumber);
         if (existing) {
             throw new errorHandler_1.AppError('Phone number already registered', 409, 'CONFLICT');
         }
@@ -56,7 +59,7 @@ exports.authService = {
             throw new errorHandler_1.AppError('Only business owners can add salespeople', 403, 'FORBIDDEN');
         }
         const pinHash = await bcryptjs_1.default.hash(input.pin, SALT_ROUNDS);
-        const salesperson = await auth_repository_1.authRepository.createSalesperson(ownerTraderId, { ...input, pinHash });
+        const salesperson = await auth_repository_1.authRepository.createSalesperson(ownerTraderId, { ...input, phoneNumber: normalizedPhoneNumber, pinHash });
         return toTraderDTO(salesperson);
     },
     async listSalespeople(ownerTraderId) {
@@ -71,8 +74,9 @@ exports.authService = {
         return rows.map(toTraderDTO);
     },
     async login(input) {
+        const normalizedPhoneNumber = (0, phone_1.normalizePhoneNumber)(input.phoneNumber);
         // 1. Find trader
-        const trader = await auth_repository_1.authRepository.findByPhone(input.phoneNumber);
+        const trader = await auth_repository_1.authRepository.findByPhone(normalizedPhoneNumber);
         // Security: same error for "not found" and "wrong PIN"
         // We never tell attackers which one it was
         if (!trader) {

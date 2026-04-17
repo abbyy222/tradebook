@@ -10,6 +10,7 @@ import { env } from '../../config/env'
 import { AppError } from '../../middleware/errorHandler'
 import { authRepository } from './auth.repository'
 import { RegisterInput, LoginInput, CreateSalespersonInput } from './auth.schema'
+import { normalizePhoneNumber } from '../../utils/phone'
 
 interface TraderDTO {
   id: string
@@ -44,8 +45,10 @@ const toTraderDTO = (trader: any): TraderDTO => ({
 
 export const authService = {
   async register(input: RegisterInput): Promise<AuthResponseDTO> {
+    const normalizedPhoneNumber = normalizePhoneNumber(input.phoneNumber)
+
     // 1. Check if phone already registered
-    const existing = await authRepository.findByPhone(input.phoneNumber)
+    const existing = await authRepository.findByPhone(normalizedPhoneNumber)
     if (existing) {
       throw new AppError('Phone number already registered', 409, 'CONFLICT')
     }
@@ -54,7 +57,7 @@ export const authService = {
     const pinHash = await bcrypt.hash(input.pin, SALT_ROUNDS)
 
     // 3. Create the trader
-    const trader = await authRepository.create({ ...input, pinHash })
+    const trader = await authRepository.create({ ...input, phoneNumber: normalizedPhoneNumber, pinHash })
 
     // 4. Generate JWT
     const token = jwt.sign(
@@ -67,7 +70,8 @@ export const authService = {
   },
 
   async createSalesperson(ownerTraderId: string, input: CreateSalespersonInput): Promise<TraderDTO> {
-    const existing = await authRepository.findByPhone(input.phoneNumber)
+    const normalizedPhoneNumber = normalizePhoneNumber(input.phoneNumber)
+    const existing = await authRepository.findByPhone(normalizedPhoneNumber)
     if (existing) {
       throw new AppError('Phone number already registered', 409, 'CONFLICT')
     }
@@ -82,7 +86,7 @@ export const authService = {
     }
 
     const pinHash = await bcrypt.hash(input.pin, SALT_ROUNDS)
-    const salesperson = await authRepository.createSalesperson(ownerTraderId, { ...input, pinHash })
+    const salesperson = await authRepository.createSalesperson(ownerTraderId, { ...input, phoneNumber: normalizedPhoneNumber, pinHash })
 
     return toTraderDTO(salesperson)
   },
@@ -102,8 +106,9 @@ export const authService = {
   },
 
   async login(input: LoginInput): Promise<AuthResponseDTO> {
+    const normalizedPhoneNumber = normalizePhoneNumber(input.phoneNumber)
     // 1. Find trader
-    const trader = await authRepository.findByPhone(input.phoneNumber)
+    const trader = await authRepository.findByPhone(normalizedPhoneNumber)
 
     // Security: same error for "not found" and "wrong PIN"
     // We never tell attackers which one it was
