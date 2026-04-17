@@ -13,5 +13,10 @@ declare namespace Express {
       phoneNumber: string
     }
     requestId?: string
+    internalUser?: {
+      internalUserId: string
+      role: 'PLATFORM_ADMIN' | 'PLATFORM_DEV'
+      phoneNumber: string
+    }
   }
 }

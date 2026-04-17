@@ -5,6 +5,7 @@ import { stockApi } from '@/api/stock.api'
 import { debtorsApi } from '@/api/debtors.api'
 import { savingsApi } from '@/api/savings.api'
 import { suppliersApi } from '@/api/suppliers.api'
+import { isNetworkReachable } from '@/services/networkHealth'
 
 const BATCH_SIZE = 50
 
@@ -284,7 +285,7 @@ export const initSyncEngine = () => {
     syncEngine.syncAll()
   })
 
-  if (navigator.onLine) {
+  if (isNetworkReachable()) {
     syncEngine.syncAll()
   }
 }

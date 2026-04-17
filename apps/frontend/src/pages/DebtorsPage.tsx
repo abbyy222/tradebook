@@ -78,12 +78,17 @@ const AddDebtorSheet = ({ onClose }: { onClose: () => void }) => {
   )
 }
 
-const PaymentSheet = ({ debtor, onClose }: { debtor: DebtorLike; onClose: () => void }) => {
+const PaymentSheet = ({
+  debtor,
+  onClose,
+}: {
+  debtor: DebtorLike
+  onClose: () => void
+}) => {
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [nextDueDate, setNextDueDate] = useState('')
-  const [success, setSuccess] = useState(false)
-  const [cleared, setCleared] = useState(false)
+  const [successState, setSuccessState] = useState<{ cleared: boolean; paymentAmount: number } | null>(null)
   const recordPayment = useRecordPayment(debtor.id)
   const updateSchedule = useUpdateDebtorSchedule(debtor.id)
 
@@ -99,12 +104,13 @@ const PaymentSheet = ({ debtor, onClose }: { debtor: DebtorLike; onClose: () => 
       await updateSchedule.mutateAsync(`${nextDueDate}T00:00:00.000Z`)
     }
 
-    setCleared(debtor.balance - paymentAmount <= 0.01)
-    setSuccess(true)
-    setTimeout(onClose, 1800)
+    const isCleared = debtor.balance - paymentAmount <= 0.01
+    setSuccessState({ cleared: isCleared, paymentAmount })
+    window.setTimeout(onClose, 2200)
   }
 
-  if (success) {
+  if (successState) {
+    const remainingBalance = Math.max(debtor.balance - successState.paymentAmount, 0)
     return (
       <div className="fixed inset-0 z-50 flex items-end" style={{ background: 'rgba(10,5,2,0.8)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
         <div className="w-full max-w-lg mx-auto rounded-t-3xl px-8 py-12 flex flex-col items-center gap-5 animate-slide-up" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.07)', borderBottom: 'none', paddingBottom: 'calc(3rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
@@ -112,13 +118,23 @@ const PaymentSheet = ({ debtor, onClose }: { debtor: DebtorLike; onClose: () => 
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </div>
           <div className="text-center">
-            <h2 className="font-display font-bold" style={{ fontSize: '1.7rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>
-              {cleared ? 'Debt cleared!' : 'Payment recorded!'}
+            <h2 className="font-display font-bold" style={{ fontSize: '1.75rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>
+              {successState.cleared ? 'Debt cleared!' : 'Payment recorded!'}
             </h2>
             <p className="font-body text-sm mt-1.5" style={{ color: 'rgba(245,237,224,0.4)' }}>
-              {cleared ? `${debtor.customerName} has fully paid.` : `Updated ${debtor.customerName}'s balance.`}
+              {successState.cleared ? `${debtor.customerName} has fully paid.` : `${debtor.customerName}'s balance has been updated.`}
             </p>
           </div>
+          <div className="w-full rounded-xl px-5 py-4 flex items-center justify-between" style={{ background: '#2e1c14', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <span className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.6)' }}>Amount paid</span>
+            <span className="font-display font-bold" style={{ fontSize: '1.1rem', color: '#4ecca3', fontVariationSettings: "'WONK' 1" }}>{fmt(successState.paymentAmount)}</span>
+          </div>
+          {!successState.cleared ? (
+            <div className="w-full rounded-xl px-5 py-3 flex items-center justify-between" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+              <span className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.58)' }}>Remaining balance</span>
+              <span className="font-display font-bold" style={{ fontSize: '1.05rem', color: '#f87171', fontVariationSettings: "'WONK' 1" }}>{fmt(remainingBalance)}</span>
+            </div>
+          ) : null}
         </div>
       </div>
     )
@@ -485,7 +501,12 @@ export const DebtorsPage = () => {
       </div>
 
       {addOpen && <AddDebtorSheet onClose={() => setAddOpen(false)} />}
-      {selectedDebtor && <PaymentSheet debtor={selectedDebtor} onClose={() => setSelectedDebtor(null)} />}
+      {selectedDebtor && (
+        <PaymentSheet
+          debtor={selectedDebtor}
+          onClose={() => setSelectedDebtor(null)}
+        />
+      )}
       {statementDebtor && <StatementSheet debtor={statementDebtor} onClose={() => setStatementDebtor(null)} />}
       {scheduleDebtor && <ScheduleSheet debtor={scheduleDebtor} onClose={() => setScheduleDebtor(null)} />}
     </div>

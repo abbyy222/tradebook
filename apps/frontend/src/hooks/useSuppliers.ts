@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import { v4 as uuidv4 } from 'uuid'
 import { suppliersApi } from '@/api/suppliers.api'
 import { db, type LocalSupplier } from '@/db'
+import { isNetworkReachable } from '@/services/networkHealth'
 import type { CreateSupplierDTO, CursorPaginatedResponse, SupplierDTO } from '@tradebook/shared-types'
 
 export const supplierKeys = {
@@ -77,7 +78,7 @@ export const useSuppliersList = (search?: string) => {
     queryFn: async ({ pageParam }) => {
       const cursor = pageParam as string | undefined
 
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         try {
           await syncPendingSuppliers()
           const serverPage = await suppliersApi.list({ cursor, pageSize: PAGE_SIZE, search })
@@ -116,7 +117,7 @@ export const useCreateSupplier = () => {
 
       await db.suppliers.put(localSupplier)
 
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         void suppliersApi
           .sync({ id, ...input })
           .then((synced) => db.suppliers.put({ ...synced, syncStatus: 'SYNCED' }))

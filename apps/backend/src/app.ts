@@ -21,6 +21,9 @@ import { stockRouter } from './modules/stock/stock.route'
 import { savingsRouter } from './modules/savings/savings.route'
 import { customersRouter } from './modules/customers/customers.route'
 import { suppliersRouter } from './modules/suppliers/suppliers.route'
+import { internalAuthRouter } from './modules/internalAuth/internalAuth.route'
+import { platformAdminRouter } from './modules/platformAdmin/platformAdmin.route'
+import { platformDevRouter } from './modules/platformDev/platformDev.route'
 
 const app = express()
 
@@ -83,6 +86,9 @@ app.use('/api/v1/stock', stockRouter)
 app.use('/api/v1/savings', savingsRouter)
 app.use('/api/v1/customers', customersRouter)
 app.use('/api/v1/suppliers', suppliersRouter)
+app.use('/api/v1/internal-auth', internalAuthRouter)
+app.use('/api/v1/platform-admin', platformAdminRouter)
+app.use('/api/v1/platform-dev', platformDevRouter)
 
 // --- 404 handler ---
 // Express 5's path matcher no longer accepts bare "*".

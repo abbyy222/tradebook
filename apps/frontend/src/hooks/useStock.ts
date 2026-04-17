@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { db, type LocalStockItem } from '@/db'
 import { stockApi } from '@/api/stock.api'
 import { dashboardKeys } from '@/hooks/useDashboard'
+import { isNetworkReachable } from '@/services/networkHealth'
 import type {
   CreateStockItemDTO,
   CursorPaginatedResponse,
@@ -277,7 +278,7 @@ export const useStockList = (filters: { lowStockOnly?: boolean; search?: string 
     queryFn: async ({ pageParam }) => {
       const cursor = pageParam as string | undefined
 
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         void syncPendingStockItems()
         void syncPendingStockAdjustments()
 
@@ -324,7 +325,7 @@ export const useCreateStockItem = () => {
         updatedAt: timestamp,
       })
 
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         void stockApi
           .sync(item)
           .then((synced) =>
@@ -377,8 +378,8 @@ export const useAdjustStock = () => {
         })
       })
 
-      if (navigator.onLine) {
-        await syncPendingStockAdjustments()
+      if (isNetworkReachable()) {
+        void syncPendingStockAdjustments()
       }
 
       return db.stockItems.get(input.stockItemId)

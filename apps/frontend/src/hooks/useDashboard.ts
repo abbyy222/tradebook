@@ -3,6 +3,7 @@ import { db, type LocalDebtor, type LocalStockItem } from '@/db'
 import { salesApi } from '@/api/sales.api'
 import { debtorsApi } from '@/api/debtors.api'
 import { stockApi } from '@/api/stock.api'
+import { isNetworkReachable } from '@/services/networkHealth'
 import type { DebtorDTO, ProfitLossSummaryDTO, StockItemDTO } from '@tradebook/shared-types'
 
 export const dashboardKeys = {
@@ -229,7 +230,7 @@ export const useDashboardOverview = () => {
   return useQuery({
     queryKey: dashboardKeys.overview(),
     queryFn: async () => {
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         try {
           const [stats, operatingSnapshot, debtorsPage, stockAlerts] = await Promise.all([
             salesApi.getDashboard(),

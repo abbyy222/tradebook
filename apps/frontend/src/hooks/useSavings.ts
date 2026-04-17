@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { v4 as uuidv4 } from 'uuid'
 import { savingsApi } from '@/api/savings.api'
 import { db, type LocalSavingsEntry } from '@/db'
+import { isNetworkReachable } from '@/services/networkHealth'
 import type { CursorPaginatedResponse, SavingsEntryDTO } from '@tradebook/shared-types'
 
 export const savingsKeys = {
@@ -85,7 +86,7 @@ export const useSavingsEntries = (filters: { from?: string; to?: string } = {}) 
     queryFn: async ({ pageParam }) => {
       const cursor = pageParam as string | undefined
 
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         try {
           await syncPendingSavings()
           const serverPage = await savingsApi.list({ ...filters, cursor, pageSize: SAVINGS_PAGE_SIZE })
@@ -108,7 +109,7 @@ export const useSavingsTodaySummary = () => {
   return useQuery({
     queryKey: savingsKeys.todaySummary(),
     queryFn: async () => {
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         try {
           await syncPendingSavings()
           const summary = await savingsApi.getTodaySummary()
@@ -157,7 +158,7 @@ export const useCreateSavingsEntry = () => {
 
       await db.savings.put(localEntry)
 
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         void savingsApi
           .sync({
             id,

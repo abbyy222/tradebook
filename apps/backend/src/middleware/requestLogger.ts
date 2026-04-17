@@ -6,6 +6,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { logger } from '../utils/logger'
+import { requestMetrics } from '../observability/requestMetrics'
 
 export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   const requestId = uuidv4()
@@ -16,6 +17,14 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
 
   res.on('finish', () => {
     const duration = Date.now() - start
+    requestMetrics.record({
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      durationMs: duration,
+      at: Date.now(),
+    })
+
     logger.info({
       requestId,
       method: req.method,

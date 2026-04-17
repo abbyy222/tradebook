@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { db, type LocalDebtor } from '@/db'
 import { debtorsApi } from '@/api/debtors.api'
 import { dashboardKeys } from '@/hooks/useDashboard'
+import { isNetworkReachable } from '@/services/networkHealth'
 import type {
   CreateDebtorDTO,
   CursorPaginatedResponse,
@@ -19,6 +20,8 @@ export const debtorKeys = {
 }
 
 const DEBTORS_PAGE_SIZE = 20
+let isSyncingDebtors = false
+let isSyncingDebtorPayments = false
 
 const normalizePhoneNumber = (phoneNumber?: string) => {
   if (!phoneNumber) return undefined
@@ -187,55 +190,69 @@ const mergeServerAndLocalDebtors = async (
 }
 
 const syncPendingDebtors = async () => {
+  if (isSyncingDebtors) return
+  isSyncingDebtors = true
+
   const retryable = await db.debtors
     .filter((debtor) => debtor.syncStatus === 'PENDING' || debtor.syncStatus === 'FAILED')
     .toArray()
 
-  if (retryable.length === 0) return
+  try {
+    if (retryable.length === 0) return
 
-  for (const debtor of retryable) {
-    try {
-      const created = await debtorsApi.create(toCreateDebtorPayload(debtor))
+    for (const debtor of retryable) {
+      try {
+        const created = await debtorsApi.create(toCreateDebtorPayload(debtor))
 
-      await db.debtors.put({
-        ...created,
-        syncStatus: 'SYNCED',
-        updatedAt: new Date().toISOString(),
-      })
-    } catch {
-      await db.debtors.update(debtor.id, { syncStatus: 'FAILED' })
+        await db.debtors.put({
+          ...created,
+          syncStatus: 'SYNCED',
+          updatedAt: new Date().toISOString(),
+        })
+      } catch {
+        await db.debtors.update(debtor.id, { syncStatus: 'FAILED' })
+      }
     }
+  } finally {
+    isSyncingDebtors = false
   }
 }
 
 const syncPendingDebtorPayments = async () => {
+  if (isSyncingDebtorPayments) return
+  isSyncingDebtorPayments = true
+
   const retryable = await db.debtorPayments
     .filter((payment) => payment.syncStatus === 'PENDING' || payment.syncStatus === 'FAILED')
     .sortBy('createdAt')
 
-  if (retryable.length === 0) return
+  try {
+    if (retryable.length === 0) return
 
-  for (const payment of retryable) {
-    try {
-      const updatedDebtor = await debtorsApi.recordPayment(
-        payment.debtorId,
-        toRecordPaymentPayload(payment)
-      )
+    for (const payment of retryable) {
+      try {
+        const updatedDebtor = await debtorsApi.recordPayment(
+          payment.debtorId,
+          toRecordPaymentPayload(payment)
+        )
 
-      await db.transaction('rw', db.debtorPayments, db.debtors, async () => {
-        await db.debtorPayments.update(payment.id, { syncStatus: 'SYNCED' })
-        await db.debtors.put({
-          ...updatedDebtor,
-          syncStatus: 'SYNCED',
-          updatedAt: new Date().toISOString(),
+        await db.transaction('rw', db.debtorPayments, db.debtors, async () => {
+          await db.debtorPayments.update(payment.id, { syncStatus: 'SYNCED' })
+          await db.debtors.put({
+            ...updatedDebtor,
+            syncStatus: 'SYNCED',
+            updatedAt: new Date().toISOString(),
+          })
         })
-      })
-    } catch {
-      await db.transaction('rw', db.debtorPayments, db.debtors, async () => {
-        await db.debtorPayments.update(payment.id, { syncStatus: 'FAILED' })
-        await db.debtors.update(payment.debtorId, { syncStatus: 'FAILED' })
-      })
+      } catch {
+        await db.transaction('rw', db.debtorPayments, db.debtors, async () => {
+          await db.debtorPayments.update(payment.id, { syncStatus: 'FAILED' })
+          await db.debtors.update(payment.debtorId, { syncStatus: 'FAILED' })
+        })
+      }
     }
+  } finally {
+    isSyncingDebtorPayments = false
   }
 }
 
@@ -245,7 +262,7 @@ export const useDebtorsList = (status?: 'ACTIVE' | 'PARTIAL' | 'CLEARED') => {
     queryFn: async ({ pageParam }) => {
       const cursor = pageParam as string | undefined
 
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         try {
           await syncPendingDebtors()
           await syncPendingDebtorPayments()
@@ -311,7 +328,7 @@ export const useCreateDebtor = () => {
         syncStatus: 'PENDING',
       })
 
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         void debtorsApi
           .create(debtor)
           .then((created) =>
@@ -363,7 +380,7 @@ export const useRecordPayment = (debtorId: string) => {
         await db.debtors.put(localUpdatedDebtor)
       })
 
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         void syncPendingDebtorPayments().catch(() => {
           // Keep the local payment queued for the sync engine to retry later.
         })

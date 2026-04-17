@@ -306,3 +306,203 @@ export interface CursorPaginatedResponse<T> {
   }
   error: null
 }
+
+export interface FeatureUsagePointDTO {
+  feature: 'Sales' | 'Expenses' | 'Debtors' | 'Savings'
+  count: number
+}
+
+export interface ActivityTrendPointDTO {
+  date: string
+  salesCount: number
+  expensesCount: number
+  debtorsCount: number
+  savingsCount: number
+}
+
+export interface BusinessInsightsDTO {
+  period: {
+    days: number
+    from: string
+    to: string
+  }
+  overview: {
+    teamSize: number
+    activeDebtors: number
+    customers: number
+    suppliers: number
+    stockItems: number
+    transactionsRecorded: number
+    salesAmount: number
+    expensesAmount: number
+    operatingProfit: number
+  }
+  featureUsage: FeatureUsagePointDTO[]
+  syncHealth: {
+    pending: number
+    failed: number
+  }
+  activityTrend: ActivityTrendPointDTO[]
+}
+
+export interface EndpointLatencyStatDTO {
+  endpoint: string
+  avgDurationMs: number
+  maxDurationMs: number
+  requests: number
+}
+
+export interface EndpointErrorStatDTO {
+  endpoint: string
+  errors: number
+}
+
+export interface DeveloperInsightsDTO {
+  uptimeSeconds: number
+  requestsLastHour: number
+  serverErrorsLastHour: number
+  errorRatePercent: number
+  avgResponseMs: number
+  p95ResponseMs: number
+  topSlowEndpoints: EndpointLatencyStatDTO[]
+  topErrorEndpoints: EndpointErrorStatDTO[]
+  process: {
+    rssMb: number
+    heapUsedMb: number
+  }
+  database: {
+    ok: boolean
+    latencyMs: number | null
+  }
+}
+
+export type InternalRole = 'PLATFORM_ADMIN' | 'PLATFORM_DEV'
+export type InternalPortal = 'ADMIN' | 'DEVELOPER'
+
+export interface InternalUserDTO {
+  id: string
+  phoneNumber: string
+  fullName: string
+  role: InternalRole
+  isActive: boolean
+  createdAt: string
+}
+
+export interface InternalAuthResponseDTO {
+  token: string
+  user: InternalUserDTO
+  portal: InternalPortal
+}
+
+export interface InternalLoginDTO {
+  phoneNumber: string
+  password: string
+  portal: InternalPortal
+}
+
+export interface CreatePlatformAdminDTO {
+  phoneNumber: string
+  fullName: string
+  password: string
+}
+
+export interface PlatformDailyActivityDTO {
+  date: string
+  salesCount: number
+  expensesCount: number
+}
+
+export interface PlatformModuleUsageDTO {
+  module: 'Sales' | 'Expenses' | 'Debtors' | 'Stock' | 'Savings'
+  count: number
+}
+
+export interface PlatformBusinessDTO {
+  id: string
+  label: string
+  createdAt: string
+}
+
+export interface PlatformAdminOverviewDTO {
+  period: {
+    days: number
+    from: string
+    to: string
+  }
+  overview: {
+    totalBusinesses: number
+    totalSalespeople: number
+    activeBusinesses: number
+    totalInternalAdmins: number
+    totalPlatformDevelopers: number
+    transactionsRecorded: number
+    salesAmount: number
+    expensesAmount: number
+    netFlow: number
+  }
+  operations: {
+    syncPending: number
+    syncFailed: number
+    overdueDebtors: number
+    recurringDueSoon: number
+  }
+  modulesUsage: PlatformModuleUsageDTO[]
+  dailyActivity: PlatformDailyActivityDTO[]
+  recentBusinesses: PlatformBusinessDTO[]
+}
+
+export type PlatformBusinessActivityStatus = 'ACTIVE' | 'DORMANT' | 'INACTIVE' | 'NEW'
+
+export interface PlatformBusinessDirectoryItemDTO {
+  id: string
+  label: string
+  ownerName: string
+  phoneNumber: string
+  createdAt: string
+  lastActivityAt: string | null
+  salespeopleCount: number
+  salesCount: number
+  salesAmount: number
+  expensesAmount: number
+  receivablesAmount: number
+  activityStatus: PlatformBusinessActivityStatus
+}
+
+export interface PlatformBusinessesDirectoryDTO {
+  items: PlatformBusinessDirectoryItemDTO[]
+  summary: {
+    active: number
+    dormant: number
+    inactive: number
+    newlyOnboarded: number
+  }
+  meta: {
+    total: number
+    page: number
+    pageSize: number
+    totalPages: number
+  }
+}
+
+export interface PlatformDevOverviewDTO {
+  uptimeSeconds: number
+  requestsLastHour: number
+  serverErrorsLastHour: number
+  errorRatePercent: number
+  avgResponseMs: number
+  p95ResponseMs: number
+  topSlowEndpoints: EndpointLatencyStatDTO[]
+  topErrorEndpoints: EndpointErrorStatDTO[]
+  process: {
+    rssMb: number
+    heapUsedMb: number
+  }
+  database: {
+    ok: boolean
+    latencyMs: number | null
+  }
+  internalAccess: {
+    admins: number
+    developers: number
+  }
+}

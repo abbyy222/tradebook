@@ -7,6 +7,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.requestLogger = void 0;
 const uuid_1 = require("uuid");
 const logger_1 = require("../utils/logger");
+const requestMetrics_1 = require("../observability/requestMetrics");
 const requestLogger = (req, res, next) => {
     const requestId = (0, uuid_1.v4)();
     const start = Date.now();
@@ -14,6 +15,13 @@ const requestLogger = (req, res, next) => {
     req.requestId = requestId;
     res.on('finish', () => {
         const duration = Date.now() - start;
+        requestMetrics_1.requestMetrics.record({
+            method: req.method,
+            path: req.path,
+            status: res.statusCode,
+            durationMs: duration,
+            at: Date.now(),
+        });
         logger_1.logger.info({
             requestId,
             method: req.method,

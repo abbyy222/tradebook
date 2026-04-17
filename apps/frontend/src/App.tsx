@@ -14,6 +14,11 @@ import { SavingsPage } from './pages/SavingsPage'
 import { MorePage } from './pages/MorePage'
 import { CustomersPage } from './pages/CustomersPage'
 import { SuppliersPage } from './pages/SuppliersPage'
+import { InternalAuthLayout } from './layouts/InternalAuthLayout'
+import { InternalLoginPage } from './pages/InternalLoginPage'
+import { InternalPortalLayout } from './layouts/InternalPortalLayout'
+import { PlatformAdminPage } from './pages/PlatformAdminPage'
+import { PlatformDeveloperPage } from './pages/PlatformDeveloperPage'
 
 function App() {
   return (
@@ -36,6 +41,18 @@ function App() {
         <Route path="/more" element={<MorePage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/suppliers" element={<SuppliersPage />} />
+      </Route>
+
+      <Route element={<InternalAuthLayout />}>
+        <Route path="/internal/login" element={<InternalLoginPage />} />
+      </Route>
+
+      <Route element={<InternalPortalLayout portal="ADMIN" />}>
+        <Route path="/platform/admin" element={<PlatformAdminPage />} />
+      </Route>
+
+      <Route element={<InternalPortalLayout portal="DEVELOPER" />}>
+        <Route path="/platform/dev" element={<PlatformDeveloperPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

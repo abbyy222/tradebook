@@ -9,6 +9,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { initSyncEngine } from '@/services/syncEngine'
+import { initNetworkHealth } from '@/services/networkHealth'
 import './index.css'
 
 // Configure TanStack Query globally.
@@ -36,6 +37,7 @@ const queryClient = new QueryClient({
 })
 
 // Start the sync engine — registers online/offline listeners
+initNetworkHealth()
 initSyncEngine()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

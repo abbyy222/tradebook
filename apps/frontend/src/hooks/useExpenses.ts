@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import { v4 as uuidv4 } from 'uuid'
 import { db, type LocalExpense } from '@/db'
 import { expensesApi } from '@/api/expenses.api'
+import { isNetworkReachable } from '@/services/networkHealth'
 import type {
   CreateExpenseDTO,
   CursorPaginatedResponse,
@@ -251,7 +252,7 @@ export const useExpensesList = (filters: ExpenseListFilters = {}) => {
     queryFn: async ({ pageParam }) => {
       const cursor = pageParam as string | undefined
 
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         try {
           void syncPendingExpenses()
           const serverPage = await expensesApi.list({ ...filters, cursor, pageSize: EXPENSES_PAGE_SIZE })
@@ -285,7 +286,7 @@ export const useCreateExpense = () => {
 
       await db.expenses.put(localExpense)
 
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         void expensesApi
           .sync({
             id: localExpense.id,

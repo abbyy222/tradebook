@@ -4,6 +4,7 @@ import { db, type LocalDebtor, type LocalSale } from '@/db'
 import { salesApi } from '@/api/sales.api'
 import { dashboardKeys } from '@/hooks/useDashboard'
 import { stockKeys } from '@/hooks/useStock'
+import { isNetworkReachable } from '@/services/networkHealth'
 import type { CreateSaleDTO, CursorPaginatedResponse, SaleDTO } from '@tradebook/shared-types'
 
 export const salesKeys = {
@@ -186,7 +187,7 @@ export const useSalesList = (filters: SalesListFilters) => {
     queryFn: async ({ pageParam }) => {
       const cursor = pageParam as string | undefined
 
-      if (navigator.onLine) {
+      if (isNetworkReachable()) {
         void syncPendingSales()
         try {
           const serverPage = await salesApi.list({ ...filters, cursor, pageSize: SALES_PAGE_SIZE })
@@ -273,7 +274,7 @@ export const useCreateSale = () => {
       const stockDependencyReady = stockItem.syncStatus === 'SYNCED'
       const debtorDependencyReady = sale.paymentType !== 'DEBT' || (await db.debtors.get(sale.debtorId!))?.syncStatus === 'SYNCED'
 
-      if (navigator.onLine && stockDependencyReady && debtorDependencyReady) {
+      if (isNetworkReachable() && stockDependencyReady && debtorDependencyReady) {
         void salesApi
           .sync({
             id: sale.id,

@@ -7,9 +7,6 @@ import { APP_NAV_ITEMS } from '@/components/AppNavigation'
 import { OnboardingQuest, ONBOARDING_STORAGE_KEY } from '@/components/OnboardingQuest'
 import { authApi } from '@/api/auth.api'
 
-const OFFLINE_RELOAD_KEY = 'tradebook:last-offline-reload-at'
-const OFFLINE_RELOAD_COOLDOWN_MS = 15000
-
 const TeamIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <circle cx="8" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.8" />
@@ -54,30 +51,6 @@ export const AppLayout = () => {
       setQuestOpen(true)
     }
   }, [isAuthenticated])
-
-  useEffect(() => {
-    const handleOffline = () => {
-      const now = Date.now()
-      const lastReloadAt = Number(sessionStorage.getItem(OFFLINE_RELOAD_KEY) ?? '0')
-
-      if (now - lastReloadAt < OFFLINE_RELOAD_COOLDOWN_MS) return
-
-      sessionStorage.setItem(OFFLINE_RELOAD_KEY, String(now))
-      window.setTimeout(() => window.location.reload(), 150)
-    }
-
-    const handleOnline = () => {
-      sessionStorage.removeItem(OFFLINE_RELOAD_KEY)
-    }
-
-    window.addEventListener('offline', handleOffline)
-    window.addEventListener('online', handleOnline)
-
-    return () => {
-      window.removeEventListener('offline', handleOffline)
-      window.removeEventListener('online', handleOnline)
-    }
-  }, [])
 
   const handleLogout = async () => {
     try {
