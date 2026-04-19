@@ -16,10 +16,13 @@ const requestLogger = (req, res, next) => {
     res.on('finish', () => {
         const duration = Date.now() - start;
         requestMetrics_1.requestMetrics.record({
+            requestId,
             method: req.method,
+            url: req.url,
             path: req.path,
             status: res.statusCode,
             durationMs: duration,
+            ip: req.ip,
             at: Date.now(),
         });
         logger_1.logger.info({

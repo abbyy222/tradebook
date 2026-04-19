@@ -9,11 +9,12 @@ import {
   updateDebtorScheduleSchema,
 } from './debtors.schema'
 import { debtorsService } from './debtors.service'
+import { enforceModuleWritable } from '../../middleware/enforceModuleWritable'
 
 export const debtorsRouter = Router()
 debtorsRouter.use(authenticate)
 
-debtorsRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
+debtorsRouter.post('/', enforceModuleWritable('DEBTORS'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = createDebtorSchema.parse(req.body)
     const debtor = await debtorsService.createDebtor(req.trader!.traderId, input)
@@ -58,7 +59,7 @@ debtorsRouter.get('/:id/payments', async (req: Request, res: Response, next: Nex
 })
 
 // POST /api/v1/debtors/:id/payments — record a payment
-debtorsRouter.post('/:id/payments', async (req: Request, res: Response, next: NextFunction) => {
+debtorsRouter.post('/:id/payments', enforceModuleWritable('DEBTORS'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = recordPaymentSchema.parse(req.body)
     const debtorId = Array.isArray(req.params.id)? req.params.id[0]:req.params.id
@@ -71,7 +72,7 @@ debtorsRouter.post('/:id/payments', async (req: Request, res: Response, next: Ne
   } catch (err) { next(err) }
 })
 
-debtorsRouter.patch('/:id/schedule', async (req: Request, res: Response, next: NextFunction) => {
+debtorsRouter.patch('/:id/schedule', enforceModuleWritable('DEBTORS'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const debtorId = Array.isArray(req.params.id)? req.params.id[0]:req.params.id
     const input = updateDebtorScheduleSchema.parse(req.body)
@@ -80,7 +81,7 @@ debtorsRouter.patch('/:id/schedule', async (req: Request, res: Response, next: N
   } catch (err) { next(err) }
 })
 
-debtorsRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+debtorsRouter.delete('/:id', enforceModuleWritable('DEBTORS'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const debtorId = Array.isArray(req.params.id)? req.params.id[0]: req.params.id
     const result = await debtorsService.deleteDebtor(debtorId, req.trader!.traderId)

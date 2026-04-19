@@ -4,6 +4,7 @@ import { db, type LocalDebtor } from '@/db'
 import { debtorsApi } from '@/api/debtors.api'
 import { dashboardKeys } from '@/hooks/useDashboard'
 import { isNetworkReachable } from '@/services/networkHealth'
+import { syncEngine } from '@/services/syncEngine'
 import type {
   CreateDebtorDTO,
   CursorPaginatedResponse,
@@ -167,7 +168,8 @@ const mergeServerAndLocalDebtors = async (
 
   for (const debtor of [...localUnsynced, ...locallyMutatedDebtors]) {
     if (matchesDebtorFilters(debtor, filters)) {
-      merged.set(debtor.id, { ...debtor, syncStatus: 'SYNCED' })
+      // Preserve local sync state so queued/failed debtors are visible in UI.
+      merged.set(debtor.id, { ...debtor, syncStatus: debtor.syncStatus })
     }
   }
 
@@ -264,8 +266,6 @@ export const useDebtorsList = (status?: 'ACTIVE' | 'PARTIAL' | 'CLEARED') => {
 
       if (isNetworkReachable()) {
         try {
-          await syncPendingDebtors()
-          await syncPendingDebtorPayments()
           const serverPage = await debtorsApi.list({
             status,
             cursor,
@@ -282,7 +282,7 @@ export const useDebtorsList = (status?: 'ACTIVE' | 'PARTIAL' | 'CLEARED') => {
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.meta.nextCursor ?? undefined,
-    staleTime: 30_000,
+    staleTime: 120_000,
   })
 }
 
@@ -329,18 +329,7 @@ export const useCreateDebtor = () => {
       })
 
       if (isNetworkReachable()) {
-        void debtorsApi
-          .create(debtor)
-          .then((created) =>
-            db.debtors.put({
-              ...created,
-              syncStatus: 'SYNCED',
-              updatedAt: new Date().toISOString(),
-            })
-          )
-          .catch(() => {
-            // Leave the local debtor as PENDING so the next sync cycle can retry it.
-          })
+        void syncEngine.syncIfQueueThresholdReached()
       }
 
       return debtor
@@ -381,9 +370,7 @@ export const useRecordPayment = (debtorId: string) => {
       })
 
       if (isNetworkReachable()) {
-        void syncPendingDebtorPayments().catch(() => {
-          // Keep the local payment queued for the sync engine to retry later.
-        })
+        void syncEngine.syncIfQueueThresholdReached()
       }
 
       return localUpdatedDebtor

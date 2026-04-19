@@ -5,9 +5,10 @@ const express_1 = require("express");
 const authenticate_1 = require("../../middleware/authenticate");
 const sales_schema_1 = require("./sales.schema");
 const sales_service_1 = require("./sales.service");
+const enforceModuleWritable_1 = require("../../middleware/enforceModuleWritable");
 exports.salesRouter = (0, express_1.Router)();
 exports.salesRouter.use(authenticate_1.authenticate);
-exports.salesRouter.post('/sync', async (req, res, next) => {
+exports.salesRouter.post('/sync', (0, enforceModuleWritable_1.enforceModuleWritable)('SALES'), async (req, res, next) => {
     try {
         const traderId = req.trader.traderId;
         const input = sales_schema_1.createSaleSchema.parse(req.body);
@@ -18,7 +19,7 @@ exports.salesRouter.post('/sync', async (req, res, next) => {
         next(err);
     }
 });
-exports.salesRouter.post('/sync/batch', async (req, res, next) => {
+exports.salesRouter.post('/sync/batch', (0, enforceModuleWritable_1.enforceModuleWritable)('SALES'), async (req, res, next) => {
     try {
         const traderId = req.trader.traderId;
         const input = sales_schema_1.syncSalesSchema.parse(req.body);

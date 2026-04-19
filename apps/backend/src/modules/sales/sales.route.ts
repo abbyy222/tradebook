@@ -7,11 +7,12 @@ import {
   profitLossQuerySchema,
 } from './sales.schema'
 import { salesService } from './sales.service'
+import { enforceModuleWritable } from '../../middleware/enforceModuleWritable'
 
 export const salesRouter = Router()
 salesRouter.use(authenticate)
 
-salesRouter.post('/sync', async (req: Request, res: Response, next: NextFunction) => {
+salesRouter.post('/sync', enforceModuleWritable('SALES'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const traderId = req.trader!.traderId
     const input = createSaleSchema.parse(req.body)
@@ -23,7 +24,7 @@ salesRouter.post('/sync', async (req: Request, res: Response, next: NextFunction
   }
 })
 
-salesRouter.post('/sync/batch', async (req: Request, res: Response, next: NextFunction) => {
+salesRouter.post('/sync/batch', enforceModuleWritable('SALES'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const traderId = req.trader!.traderId
     const input = syncSalesSchema.parse(req.body)

@@ -452,6 +452,7 @@ export interface PlatformAdminOverviewDTO {
 }
 
 export type PlatformBusinessActivityStatus = 'ACTIVE' | 'DORMANT' | 'INACTIVE' | 'NEW'
+export type PlatformBusinessAccountStatus = 'ACTIVE' | 'SUSPENDED'
 
 export interface PlatformBusinessDirectoryItemDTO {
   id: string
@@ -466,6 +467,9 @@ export interface PlatformBusinessDirectoryItemDTO {
   expensesAmount: number
   receivablesAmount: number
   activityStatus: PlatformBusinessActivityStatus
+  accountStatus: PlatformBusinessAccountStatus
+  suspensionReason: string | null
+  suspensionUpdatedAt: string | null
 }
 
 export interface PlatformBusinessesDirectoryDTO {
@@ -476,6 +480,32 @@ export interface PlatformBusinessesDirectoryDTO {
     inactive: number
     newlyOnboarded: number
   }
+  meta: {
+    total: number
+    page: number
+    pageSize: number
+    totalPages: number
+  }
+}
+
+export interface PlatformBusinessStatusUpdateDTO {
+  accountStatus: PlatformBusinessAccountStatus
+  reason: string
+}
+
+export interface PlatformBusinessActionLogItemDTO {
+  id: string
+  traderId: string
+  actionType: string
+  reason: string
+  accountStatus: PlatformBusinessAccountStatus
+  actorName: string | null
+  actorPhone: string | null
+  createdAt: string
+}
+
+export interface PlatformBusinessActionLogsDTO {
+  items: PlatformBusinessActionLogItemDTO[]
   meta: {
     total: number
     page: number
@@ -505,4 +535,87 @@ export interface PlatformDevOverviewDTO {
     admins: number
     developers: number
   }
+}
+
+export interface PlatformDevErrorEventDTO {
+  requestId: string
+  endpoint: string
+  status: number
+  durationMs: number
+  at: string
+}
+
+export interface PlatformDevRequestTraceDTO {
+  requestId: string
+  method: string
+  path: string
+  url: string
+  status: number
+  durationMs: number
+  ip: string
+  at: string
+}
+
+export interface PlatformDevSyncHealthDTO {
+  totals: {
+    pending: number
+    failed: number
+    salesPending: number
+    salesFailed: number
+    expensesPending: number
+    expensesFailed: number
+    stockPending: number
+    stockFailed: number
+  }
+  operationalRisks: {
+    recurringDueSoon: number
+    overdueDebtors: number
+  }
+  topFailedBusinesses: Array<{
+    traderId: string
+    label: string
+    failedRecords: number
+  }>
+}
+
+export type PlatformModuleKey =
+  | 'SALES'
+  | 'EXPENSES'
+  | 'STOCK'
+  | 'DEBTORS'
+  | 'SAVINGS'
+  | 'SUPPLIERS'
+  | 'CUSTOMERS'
+
+export interface PlatformKillSwitchDTO {
+  module: PlatformModuleKey
+  enabled: boolean
+}
+
+export interface PlatformDeadLetterRecordDTO {
+  module: PlatformModuleKey
+  recordId: string
+  traderId: string
+  businessLabel: string
+  amount: number | null
+  happenedAt: string
+}
+
+export interface PlatformTenantRiskDTO {
+  traderId: string
+  businessLabel: string
+  pendingRecords: number
+  failedRecords: number
+  overdueDebtors: number
+  recurringDueSoon: number
+  riskScore: number
+}
+
+export interface PlatformForceResyncResultDTO {
+  traderId: string | null
+  totalRequeued: number
+  results: Array<{
+    module: PlatformModuleKey
+    requeued: number
+  }>
 }

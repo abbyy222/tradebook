@@ -17,3 +17,20 @@ export const platformAdminBusinessesQuerySchema = z.object({
 })
 
 export type PlatformAdminBusinessesQuery = z.infer<typeof platformAdminBusinessesQuerySchema>
+
+export const businessAccountStatusSchema = z.enum(['ACTIVE', 'SUSPENDED'])
+
+export const platformBusinessStatusUpdateSchema = z.object({
+  accountStatus: businessAccountStatusSchema,
+  reason: z.string().trim().min(3).max(240),
+})
+
+export const platformAdminBusinessActionLogQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(5).max(50).default(10),
+  traderId: z.string().uuid().optional(),
+})
+
+export type BusinessAccountStatus = z.infer<typeof businessAccountStatusSchema>
+export type PlatformBusinessStatusUpdateInput = z.infer<typeof platformBusinessStatusUpdateSchema>
+export type PlatformAdminBusinessActionLogQuery = z.infer<typeof platformAdminBusinessActionLogQuerySchema>

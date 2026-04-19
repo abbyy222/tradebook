@@ -29,6 +29,11 @@ const writeCache = <T>(cache: Map<string, CacheEntry<T>>, key: string, value: T,
   })
 }
 
+const clearAdminCaches = () => {
+  overviewCache.clear()
+  directoryCache.clear()
+}
+
 const toDayKey = (value: Date) => value.toISOString().slice(0, 10)
 
 const buildDaily = (from: Date, days: number, rows: { salesByDay: Array<{ day: Date; count: number }>; expensesByDay: Array<{ day: Date; count: number }> }) => {
@@ -130,5 +135,34 @@ export const platformAdminService = {
     }
     writeCache(directoryCache, cacheKey, response, DIRECTORY_CACHE_TTL_MS)
     return response
+  },
+
+  async updateBusinessStatus(input: {
+    traderId: string
+    accountStatus: 'ACTIVE' | 'SUSPENDED'
+    reason: string
+    actorInternalUserId: string
+  }) {
+    const result = await platformAdminRepository.updateBusinessStatus(input)
+    clearAdminCaches()
+    return { data: result, error: null }
+  },
+
+  async getBusinessActionLogs(query: { page: number; pageSize: number; traderId?: string }) {
+    const result = await platformAdminRepository.listBusinessActionLogs(query)
+    const totalPages = Math.max(1, Math.ceil(result.total / query.pageSize))
+
+    return {
+      data: {
+        items: result.items,
+        meta: {
+          total: result.total,
+          page: query.page,
+          pageSize: query.pageSize,
+          totalPages,
+        },
+      },
+      error: null,
+    }
   },
 }

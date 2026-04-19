@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { savingsApi } from '@/api/savings.api'
 import { db, type LocalSavingsEntry } from '@/db'
 import { isNetworkReachable } from '@/services/networkHealth'
+import { syncEngine } from '@/services/syncEngine'
 import type { CursorPaginatedResponse, SavingsEntryDTO } from '@tradebook/shared-types'
 
 export const savingsKeys = {
@@ -51,26 +52,6 @@ const storeServerSavings = async (entries: SavingsEntryDTO[]) => {
   await db.savings.bulkPut(rows)
 }
 
-const syncPendingSavings = async () => {
-  const retryable = await db.savings.filter((entry) => entry.syncStatus === 'PENDING' || entry.syncStatus === 'FAILED').toArray()
-  if (retryable.length === 0) return
-
-  for (const entry of retryable) {
-    try {
-      const synced = await savingsApi.sync({
-        id: entry.id,
-        amount: entry.amount,
-        savedAt: entry.savedAt,
-        note: entry.note,
-      })
-
-      await db.savings.put({ ...synced, syncStatus: 'SYNCED' })
-    } catch {
-      await db.savings.update(entry.id, { syncStatus: 'FAILED' })
-    }
-  }
-}
-
 const getTodayBounds = () => {
   const now = new Date()
   const from = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -88,7 +69,6 @@ export const useSavingsEntries = (filters: { from?: string; to?: string } = {}) 
 
       if (isNetworkReachable()) {
         try {
-          await syncPendingSavings()
           const serverPage = await savingsApi.list({ ...filters, cursor, pageSize: SAVINGS_PAGE_SIZE })
           await storeServerSavings(serverPage.data)
           return listSavingsFromDexie(filters, cursor)
@@ -101,7 +81,7 @@ export const useSavingsEntries = (filters: { from?: string; to?: string } = {}) 
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: CursorPaginatedResponse<SavingsEntryDTO>) => lastPage.meta.nextCursor ?? undefined,
-    staleTime: 30_000,
+    staleTime: 120_000,
   })
 }
 
@@ -111,7 +91,6 @@ export const useSavingsTodaySummary = () => {
     queryFn: async () => {
       if (isNetworkReachable()) {
         try {
-          await syncPendingSavings()
           const summary = await savingsApi.getTodaySummary()
           return summary
         } catch {
@@ -137,7 +116,7 @@ export const useSavingsTodaySummary = () => {
         total,
       }
     },
-    staleTime: 30_000,
+    staleTime: 120_000,
   })
 }
 
@@ -159,17 +138,7 @@ export const useCreateSavingsEntry = () => {
       await db.savings.put(localEntry)
 
       if (isNetworkReachable()) {
-        void savingsApi
-          .sync({
-            id,
-            amount: input.amount,
-            savedAt: input.savedAt,
-            note: input.note,
-          })
-          .then((synced) => db.savings.put({ ...synced, syncStatus: 'SYNCED' }))
-          .catch(() => {
-            // keep pending for retry
-          })
+        void syncEngine.syncIfQueueThresholdReached()
       }
 
       return localEntry

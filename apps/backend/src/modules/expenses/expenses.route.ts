@@ -10,12 +10,14 @@ import {
 import { expensesService } from './expenses.service'
 import { z } from 'zod'
 import { logger } from '../../utils/logger'
+import { enforceModuleWritable } from '../../middleware/enforceModuleWritable'
 
 export const expensesRouter = Router()
 expensesRouter.use(authenticate)
 
 expensesRouter.post(
   '/sync',
+  enforceModuleWritable('EXPENSES'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const traderId = req.trader!.traderId
@@ -36,6 +38,7 @@ expensesRouter.post(
 
 expensesRouter.post(
   '/sync/batch',
+  enforceModuleWritable('EXPENSES'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const traderId = req.trader!.traderId

@@ -1,6 +1,11 @@
 import { Prisma } from '@prisma/client'
+import crypto from 'crypto'
 import { prisma } from '../../prisma/client'
-import { PlatformAdminBusinessesQuery } from './platformAdmin.schema'
+import {
+  BusinessAccountStatus,
+  PlatformAdminBusinessActionLogQuery,
+  PlatformAdminBusinessesQuery,
+} from './platformAdmin.schema'
 
 type CountByDayRow = {
   day: Date
@@ -20,6 +25,50 @@ type BusinessDirectoryRow = {
   expensesAmount: Prisma.Decimal | number | null
   receivablesAmount: Prisma.Decimal | number | null
   activityStatus: 'ACTIVE' | 'DORMANT' | 'INACTIVE' | 'NEW'
+  accountStatus: BusinessAccountStatus
+  suspensionReason: string | null
+  suspensionUpdatedAt: Date | null
+}
+
+type BusinessActionLogRow = {
+  id: string
+  trader_id: string
+  action_type: string
+  reason: string
+  account_status: BusinessAccountStatus
+  actor_name: string | null
+  actor_phone: string | null
+  created_at: Date
+}
+
+let adminOpsSchemaEnsured = false
+
+const ensureAdminOpsSchema = async () => {
+  if (adminOpsSchemaEnsured) return
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS platform_business_controls (
+      trader_id TEXT PRIMARY KEY,
+      account_status TEXT NOT NULL DEFAULT 'ACTIVE',
+      suspension_reason TEXT,
+      updated_by_internal_user_id TEXT,
+      updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS platform_admin_business_actions (
+      id TEXT PRIMARY KEY,
+      trader_id TEXT NOT NULL,
+      action_type TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      account_status TEXT NOT NULL,
+      actor_internal_user_id TEXT NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )
+  `)
+
+  adminOpsSchemaEnsured = true
 }
 
 const getSalesCountByDay = (from: Date) =>
@@ -123,6 +172,9 @@ const getBusinessesRowsCte = (search?: string) => {
         COALESCE(sa.sales_amount, 0) AS "salesAmount",
         COALESCE(ea.expenses_amount, 0) AS "expensesAmount",
         COALESCE(da.receivables_amount, 0) AS "receivablesAmount",
+        COALESCE(pbc.account_status, 'ACTIVE') AS "accountStatus",
+        pbc.suspension_reason AS "suspensionReason",
+        pbc.updated_at AS "suspensionUpdatedAt",
         CASE
           WHEN (
             SELECT max(v.ts)
@@ -166,6 +218,7 @@ const getBusinessesRowsCte = (search?: string) => {
       LEFT JOIN expenses_agg ea ON ea.trader_id = ob.id
       LEFT JOIN savings_agg sva ON sva.trader_id = ob.id
       LEFT JOIN debtors_agg da ON da.trader_id = ob.id
+      LEFT JOIN platform_business_controls pbc ON pbc.trader_id = ob.id
     )
   `
 }
@@ -284,6 +337,8 @@ export const platformAdminRepository = {
   },
 
   async getBusinesses(query: PlatformAdminBusinessesQuery) {
+    await ensureAdminOpsSchema()
+
     const offset = (query.page - 1) * query.pageSize
     const withRowsSql = getBusinessesRowsCte(query.search)
     const statusFilterSql = query.status
@@ -354,9 +409,149 @@ export const platformAdminRepository = {
         expensesAmount: Number(row.expensesAmount ?? 0),
         receivablesAmount: Number(row.receivablesAmount ?? 0),
         activityStatus: row.activityStatus,
+        accountStatus: row.accountStatus,
+        suspensionReason: row.suspensionReason,
+        suspensionUpdatedAt: row.suspensionUpdatedAt ? row.suspensionUpdatedAt.toISOString() : null,
       })),
       total,
       summary,
     }
+  },
+
+  async updateBusinessStatus(input: {
+    traderId: string
+    accountStatus: BusinessAccountStatus
+    reason: string
+    actorInternalUserId: string
+  }) {
+    await ensureAdminOpsSchema()
+
+    const actionType = input.accountStatus === 'SUSPENDED' ? 'SUSPEND_ACCOUNT' : 'REACTIVATE_ACCOUNT'
+    const actionId = crypto.randomUUID()
+
+    await prisma.$transaction([
+      prisma.$executeRawUnsafe(
+        `INSERT INTO platform_business_controls (trader_id, account_status, suspension_reason, updated_by_internal_user_id, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (trader_id)
+         DO UPDATE SET
+           account_status = EXCLUDED.account_status,
+           suspension_reason = EXCLUDED.suspension_reason,
+           updated_by_internal_user_id = EXCLUDED.updated_by_internal_user_id,
+           updated_at = NOW()`,
+        input.traderId,
+        input.accountStatus,
+        input.reason,
+        input.actorInternalUserId
+      ),
+      prisma.$executeRawUnsafe(
+        `INSERT INTO platform_admin_business_actions
+         (id, trader_id, action_type, reason, account_status, actor_internal_user_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        actionId,
+        input.traderId,
+        actionType,
+        input.reason,
+        input.accountStatus,
+        input.actorInternalUserId
+      ),
+    ])
+
+    const updated = await prisma.$queryRawUnsafe<Array<{
+      trader_id: string
+      account_status: BusinessAccountStatus
+      suspension_reason: string | null
+      updated_at: Date
+    }>>(
+      `SELECT trader_id, account_status, suspension_reason, updated_at
+       FROM platform_business_controls
+       WHERE trader_id = $1
+       LIMIT 1`,
+      input.traderId
+    )
+
+    const row = updated[0]
+    return {
+      traderId: row.trader_id,
+      accountStatus: row.account_status,
+      reason: row.suspension_reason ?? '',
+      updatedAt: row.updated_at.toISOString(),
+    }
+  },
+
+  async listBusinessActionLogs(query: PlatformAdminBusinessActionLogQuery) {
+    await ensureAdminOpsSchema()
+
+    const offset = (query.page - 1) * query.pageSize
+    const params: unknown[] = []
+    const where: string[] = []
+
+    if (query.traderId) {
+      params.push(query.traderId)
+      where.push(`a.trader_id = $${params.length}`)
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+
+    params.push(query.pageSize)
+    const limitPlaceholder = `$${params.length}`
+    params.push(offset)
+    const offsetPlaceholder = `$${params.length}`
+
+    const rows = await prisma.$queryRawUnsafe<BusinessActionLogRow[]>(
+      `SELECT
+         a.id,
+         a.trader_id,
+         a.action_type,
+         a.reason,
+         a.account_status,
+         iu.full_name AS actor_name,
+         iu.phone_number AS actor_phone,
+         a.created_at
+       FROM platform_admin_business_actions a
+       LEFT JOIN internal_users iu ON iu.id = a.actor_internal_user_id
+       ${whereSql}
+       ORDER BY a.created_at DESC
+       LIMIT ${limitPlaceholder}
+       OFFSET ${offsetPlaceholder}`,
+      ...params
+    )
+
+    const totalParams: unknown[] = []
+    const totalWhere: string[] = []
+    if (query.traderId) {
+      totalParams.push(query.traderId)
+      totalWhere.push(`trader_id = $${totalParams.length}`)
+    }
+    const totalWhereSql = totalWhere.length ? `WHERE ${totalWhere.join(' AND ')}` : ''
+    const totalRows = await prisma.$queryRawUnsafe<Array<{ total: number }>>(
+      `SELECT count(*)::int AS total FROM platform_admin_business_actions ${totalWhereSql}`,
+      ...totalParams
+    )
+
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        traderId: row.trader_id,
+        actionType: row.action_type,
+        reason: row.reason,
+        accountStatus: row.account_status,
+        actorName: row.actor_name,
+        actorPhone: row.actor_phone,
+        createdAt: row.created_at.toISOString(),
+      })),
+      total: totalRows[0]?.total ?? 0,
+    }
+  },
+
+  async getBusinessAccountStatus(traderId: string) {
+    await ensureAdminOpsSchema()
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ account_status: BusinessAccountStatus }>>(
+      `SELECT account_status FROM platform_business_controls WHERE trader_id = $1 LIMIT 1`,
+      traderId
+    )
+
+    return rows[0]?.account_status ?? 'ACTIVE'
   },
 }

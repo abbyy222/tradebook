@@ -20,7 +20,7 @@ export const useCustomersList = (search?: string) => {
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: CursorPaginatedResponse<CustomerDTO>) => lastPage.meta.nextCursor ?? undefined,
-    staleTime: 30_000,
+    staleTime: 120_000,
   })
 }
 

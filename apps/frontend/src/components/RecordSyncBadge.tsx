@@ -1,12 +1,12 @@
-import type { CSSProperties } from 'react'
+﻿import { useEffect, useState, type CSSProperties } from 'react'
 
 type SyncStatus = 'PENDING' | 'SYNCED' | 'FAILED'
 
 const THEMES: Record<SyncStatus, { label: string; shortLabel: string; icon: string; style: CSSProperties }> = {
   PENDING: {
-    label: 'Saved offline',
-    shortLabel: 'Offline',
-    icon: '○',
+    label: 'Queued',
+    shortLabel: 'Queued',
+    icon: 'o',
     style: {
       background: 'rgba(117,133,200,0.12)',
       color: '#9aaad8',
@@ -42,7 +42,27 @@ export const RecordSyncBadge = ({
   syncStatus?: SyncStatus
   onRetry?: () => void
 }) => {
-  const theme = THEMES[syncStatus ?? 'SYNCED']
+  const [online, setOnline] = useState<boolean>(() => (typeof navigator !== 'undefined' ? navigator.onLine : true))
+
+  useEffect(() => {
+    const handleOnline = () => setOnline(true)
+    const handleOffline = () => setOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  const status = syncStatus ?? 'SYNCED'
+  const theme = status === 'PENDING'
+    ? {
+      ...THEMES.PENDING,
+      label: online ? 'Queued' : 'Saved offline',
+      shortLabel: online ? 'Queued' : 'Offline',
+    }
+    : THEMES[status]
 
   return (
     <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -60,7 +80,7 @@ export const RecordSyncBadge = ({
         <span className="hidden sm:inline">{theme.label}</span>
         <span className="sm:hidden">{theme.shortLabel}</span>
       </span>
-      {syncStatus === 'FAILED' && onRetry && (
+      {status === 'FAILED' && onRetry && (
         <button
           onClick={onRetry}
           className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-ui font-bold text-[10px]"

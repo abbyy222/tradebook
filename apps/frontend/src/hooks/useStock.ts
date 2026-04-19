@@ -4,6 +4,7 @@ import { db, type LocalStockItem } from '@/db'
 import { stockApi } from '@/api/stock.api'
 import { dashboardKeys } from '@/hooks/useDashboard'
 import { isNetworkReachable } from '@/services/networkHealth'
+import { syncEngine } from '@/services/syncEngine'
 import type {
   CreateStockItemDTO,
   CursorPaginatedResponse,
@@ -279,9 +280,6 @@ export const useStockList = (filters: { lowStockOnly?: boolean; search?: string 
       const cursor = pageParam as string | undefined
 
       if (isNetworkReachable()) {
-        void syncPendingStockItems()
-        void syncPendingStockAdjustments()
-
         try {
           const serverPage = await stockApi.list({
             cursor,
@@ -300,7 +298,7 @@ export const useStockList = (filters: { lowStockOnly?: boolean; search?: string 
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.meta.nextCursor ?? undefined,
-    staleTime: 30_000,
+    staleTime: 120_000,
   })
 }
 
@@ -326,17 +324,7 @@ export const useCreateStockItem = () => {
       })
 
       if (isNetworkReachable()) {
-        void stockApi
-          .sync(item)
-          .then((synced) =>
-            db.stockItems.put({
-              ...normalizeStockItem(synced),
-              syncStatus: 'SYNCED',
-            }),
-          )
-          .catch(() => {
-            // Keep the local item as PENDING so the next sync cycle can retry it.
-          })
+        void syncEngine.syncIfQueueThresholdReached()
       }
 
       return normalizeStockItem({
@@ -379,7 +367,7 @@ export const useAdjustStock = () => {
       })
 
       if (isNetworkReachable()) {
-        void syncPendingStockAdjustments()
+        void syncEngine.syncIfQueueThresholdReached()
       }
 
       return db.stockItems.get(input.stockItemId)

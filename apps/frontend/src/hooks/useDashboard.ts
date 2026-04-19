@@ -260,8 +260,12 @@ export const useDashboardOverview = () => {
 
       return getLocalDashboardOverview()
     },
-    staleTime: 30_000,
-    refetchInterval: 5 * 60_000,
+    staleTime: 120_000,
+    refetchInterval: () => {
+      if (typeof document === 'undefined') return false
+      return document.visibilityState === 'visible' && isNetworkReachable() ? 15 * 60_000 : false
+    },
+    refetchIntervalInBackground: false,
   })
 }
 

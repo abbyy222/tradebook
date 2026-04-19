@@ -7,9 +7,10 @@ const authenticate_1 = require("../../middleware/authenticate");
 const authorizeRole_1 = require("../../middleware/authorizeRole");
 const stock_schema_1 = require("./stock.schema");
 const stock_service_1 = require("./stock.service");
+const enforceModuleWritable_1 = require("../../middleware/enforceModuleWritable");
 exports.stockRouter = (0, express_1.Router)();
 exports.stockRouter.use(authenticate_1.authenticate);
-exports.stockRouter.post('/sync', (0, authorizeRole_1.authorizeRole)('OWNER'), async (req, res, next) => {
+exports.stockRouter.post('/sync', (0, authorizeRole_1.authorizeRole)('OWNER'), (0, enforceModuleWritable_1.enforceModuleWritable)('STOCK'), async (req, res, next) => {
     try {
         const input = stock_schema_1.createStockItemSchema.parse(req.body);
         const item = await stock_service_1.stockService.syncItem(req.trader.traderId, input);
@@ -19,7 +20,7 @@ exports.stockRouter.post('/sync', (0, authorizeRole_1.authorizeRole)('OWNER'), a
         next(err);
     }
 });
-exports.stockRouter.post('/sync/batch', (0, authorizeRole_1.authorizeRole)('OWNER'), async (req, res, next) => {
+exports.stockRouter.post('/sync/batch', (0, authorizeRole_1.authorizeRole)('OWNER'), (0, enforceModuleWritable_1.enforceModuleWritable)('STOCK'), async (req, res, next) => {
     try {
         const input = stock_schema_1.syncStockSchema.parse(req.body);
         const result = await stock_service_1.stockService.syncBatch(req.trader.traderId, input);
@@ -50,7 +51,7 @@ exports.stockRouter.get('/alerts', async (req, res, next) => {
     }
 });
 // PATCH /api/v1/stock/:id/adjust — atomic quantity change
-exports.stockRouter.patch('/:id/adjust', (0, authorizeRole_1.authorizeRole)('OWNER'), async (req, res, next) => {
+exports.stockRouter.patch('/:id/adjust', (0, authorizeRole_1.authorizeRole)('OWNER'), (0, enforceModuleWritable_1.enforceModuleWritable)('STOCK'), async (req, res, next) => {
     try {
         const input = stock_schema_1.adjustStockSchema.parse(req.body);
         const stockId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;

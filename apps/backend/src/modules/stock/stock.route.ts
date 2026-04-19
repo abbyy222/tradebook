@@ -10,11 +10,12 @@ import {
   listStockQuerySchema,
 } from './stock.schema'
 import { stockService } from './stock.service'
+import { enforceModuleWritable } from '../../middleware/enforceModuleWritable'
 
 export const stockRouter = Router()
 stockRouter.use(authenticate)
 
-stockRouter.post('/sync', authorizeRole('OWNER'), async (req: Request, res: Response, next: NextFunction) => {
+stockRouter.post('/sync', authorizeRole('OWNER'), enforceModuleWritable('STOCK'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = createStockItemSchema.parse(req.body)
     const item = await stockService.syncItem(req.trader!.traderId, input)
@@ -22,7 +23,7 @@ stockRouter.post('/sync', authorizeRole('OWNER'), async (req: Request, res: Resp
   } catch (err) { next(err) }
 })
 
-stockRouter.post('/sync/batch', authorizeRole('OWNER'), async (req: Request, res: Response, next: NextFunction) => {
+stockRouter.post('/sync/batch', authorizeRole('OWNER'), enforceModuleWritable('STOCK'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = syncStockSchema.parse(req.body)
     const result = await stockService.syncBatch(req.trader!.traderId, input)
@@ -47,7 +48,7 @@ stockRouter.get('/alerts', async (req: Request, res: Response, next: NextFunctio
 })
 
 // PATCH /api/v1/stock/:id/adjust — atomic quantity change
-stockRouter.patch('/:id/adjust', authorizeRole('OWNER'), async (req: Request, res: Response, next: NextFunction) => {
+stockRouter.patch('/:id/adjust', authorizeRole('OWNER'), enforceModuleWritable('STOCK'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = adjustStockSchema.parse(req.body)
     const stockId = Array.isArray(req.params.id)? req.params.id[0]:req.params.id

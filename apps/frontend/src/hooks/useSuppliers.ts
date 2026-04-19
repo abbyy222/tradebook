@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { suppliersApi } from '@/api/suppliers.api'
 import { db, type LocalSupplier } from '@/db'
 import { isNetworkReachable } from '@/services/networkHealth'
+import { syncEngine } from '@/services/syncEngine'
 import type { CreateSupplierDTO, CursorPaginatedResponse, SupplierDTO } from '@tradebook/shared-types'
 
 export const supplierKeys = {
@@ -51,27 +52,6 @@ const storeServerSuppliers = async (suppliers: SupplierDTO[]) => {
   await db.suppliers.bulkPut(rows)
 }
 
-const syncPendingSuppliers = async () => {
-  const retryable = await db.suppliers.filter((supplier) => supplier.syncStatus === 'PENDING' || supplier.syncStatus === 'FAILED').toArray()
-  if (retryable.length === 0) return
-
-  for (const supplier of retryable) {
-    try {
-      const synced = await suppliersApi.sync({
-        id: supplier.id,
-        name: supplier.name,
-        phoneNumber: supplier.phoneNumber ?? undefined,
-        itemCategory: supplier.itemCategory ?? undefined,
-        note: supplier.note ?? undefined,
-      })
-
-      await db.suppliers.put({ ...synced, syncStatus: 'SYNCED' })
-    } catch {
-      await db.suppliers.update(supplier.id, { syncStatus: 'FAILED' })
-    }
-  }
-}
-
 export const useSuppliersList = (search?: string) => {
   return useInfiniteQuery({
     queryKey: supplierKeys.list({ search }),
@@ -80,7 +60,6 @@ export const useSuppliersList = (search?: string) => {
 
       if (isNetworkReachable()) {
         try {
-          await syncPendingSuppliers()
           const serverPage = await suppliersApi.list({ cursor, pageSize: PAGE_SIZE, search })
           await storeServerSuppliers(serverPage.data)
           return listSuppliersFromDexie(search, cursor)
@@ -93,7 +72,7 @@ export const useSuppliersList = (search?: string) => {
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: CursorPaginatedResponse<SupplierDTO>) => lastPage.meta.nextCursor ?? undefined,
-    staleTime: 30_000,
+    staleTime: 120_000,
   })
 }
 
@@ -118,12 +97,7 @@ export const useCreateSupplier = () => {
       await db.suppliers.put(localSupplier)
 
       if (isNetworkReachable()) {
-        void suppliersApi
-          .sync({ id, ...input })
-          .then((synced) => db.suppliers.put({ ...synced, syncStatus: 'SYNCED' }))
-          .catch(() => {
-            // keep pending for retry
-          })
+        void syncEngine.syncIfQueueThresholdReached()
       }
 
       return localSupplier

@@ -11,6 +11,7 @@ import { AppError } from '../../middleware/errorHandler'
 import { authRepository } from './auth.repository'
 import { RegisterInput, LoginInput, CreateSalespersonInput } from './auth.schema'
 import { normalizePhoneNumber } from '../../utils/phone'
+import { platformAdminRepository } from '../platformAdmin/platformAdmin.repository'
 
 interface TraderDTO {
   id: string
@@ -123,6 +124,10 @@ export const authService = {
     }
 
     const scopeTraderId = trader.ownerTraderId ?? trader.id
+    const accountStatus = await platformAdminRepository.getBusinessAccountStatus(scopeTraderId)
+    if (accountStatus === 'SUSPENDED') {
+      throw new AppError('This business account is suspended. Contact support.', 403, 'ACCOUNT_SUSPENDED')
+    }
 
     // 3. Generate JWT
     const token = jwt.sign(

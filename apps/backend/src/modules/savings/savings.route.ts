@@ -6,11 +6,12 @@ import {
   updateSavingsEntrySchema,
 } from './savings.schema'
 import { savingsService } from './savings.service'
+import { enforceModuleWritable } from '../../middleware/enforceModuleWritable'
 
 export const savingsRouter = Router()
 savingsRouter.use(authenticate)
 
-savingsRouter.post('/sync', async (req: Request, res: Response, next: NextFunction) => {
+savingsRouter.post('/sync', enforceModuleWritable('SAVINGS'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = createSavingsEntrySchema.parse(req.body)
     const entry = await savingsService.createOrSync(
@@ -44,7 +45,7 @@ savingsRouter.get('/summary/today', async (req: Request, res: Response, next: Ne
   }
 })
 
-savingsRouter.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
+savingsRouter.patch('/:id', enforceModuleWritable('SAVINGS'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
     const input = updateSavingsEntrySchema.parse(req.body)
@@ -55,7 +56,7 @@ savingsRouter.patch('/:id', async (req: Request, res: Response, next: NextFuncti
   }
 })
 
-savingsRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+savingsRouter.delete('/:id', enforceModuleWritable('SAVINGS'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
     const result = await savingsService.remove(id, req.trader!.traderId, req.trader!.role)

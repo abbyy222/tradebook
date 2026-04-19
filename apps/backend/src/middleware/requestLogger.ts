@@ -18,10 +18,13 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
   res.on('finish', () => {
     const duration = Date.now() - start
     requestMetrics.record({
+      requestId,
       method: req.method,
+      url: req.url,
       path: req.path,
       status: res.statusCode,
       durationMs: duration,
+      ip: req.ip,
       at: Date.now(),
     })
 

@@ -8,9 +8,10 @@ const expenses_schema_1 = require("./expenses.schema");
 const expenses_service_1 = require("./expenses.service");
 const zod_1 = require("zod");
 const logger_1 = require("../../utils/logger");
+const enforceModuleWritable_1 = require("../../middleware/enforceModuleWritable");
 exports.expensesRouter = (0, express_1.Router)();
 exports.expensesRouter.use(authenticate_1.authenticate);
-exports.expensesRouter.post('/sync', async (req, res, next) => {
+exports.expensesRouter.post('/sync', (0, enforceModuleWritable_1.enforceModuleWritable)('EXPENSES'), async (req, res, next) => {
     try {
         const traderId = req.trader.traderId;
         const input = expenses_schema_1.createExpenseSchema.parse(req.body);
@@ -27,7 +28,7 @@ exports.expensesRouter.post('/sync', async (req, res, next) => {
         next(err);
     }
 });
-exports.expensesRouter.post('/sync/batch', async (req, res, next) => {
+exports.expensesRouter.post('/sync/batch', (0, enforceModuleWritable_1.enforceModuleWritable)('EXPENSES'), async (req, res, next) => {
     try {
         const traderId = req.trader.traderId;
         const input = expenses_schema_1.syncExpensesSchema.parse(req.body);

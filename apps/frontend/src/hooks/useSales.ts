@@ -5,6 +5,7 @@ import { salesApi } from '@/api/sales.api'
 import { dashboardKeys } from '@/hooks/useDashboard'
 import { stockKeys } from '@/hooks/useStock'
 import { isNetworkReachable } from '@/services/networkHealth'
+import { syncEngine } from '@/services/syncEngine'
 import type { CreateSaleDTO, CursorPaginatedResponse, SaleDTO } from '@tradebook/shared-types'
 
 export const salesKeys = {
@@ -188,7 +189,6 @@ export const useSalesList = (filters: SalesListFilters) => {
       const cursor = pageParam as string | undefined
 
       if (isNetworkReachable()) {
-        void syncPendingSales()
         try {
           const serverPage = await salesApi.list({ ...filters, cursor, pageSize: SALES_PAGE_SIZE })
           await storeServerSales(serverPage.data)
@@ -202,7 +202,7 @@ export const useSalesList = (filters: SalesListFilters) => {
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.meta.nextCursor ?? undefined,
-    staleTime: 30_000,
+    staleTime: 120_000,
   })
 }
 
@@ -271,26 +271,8 @@ export const useCreateSale = () => {
         }
       })
 
-      const stockDependencyReady = stockItem.syncStatus === 'SYNCED'
-      const debtorDependencyReady = sale.paymentType !== 'DEBT' || (await db.debtors.get(sale.debtorId!))?.syncStatus === 'SYNCED'
-
-      if (isNetworkReachable() && stockDependencyReady && debtorDependencyReady) {
-        void salesApi
-          .sync({
-            id: sale.id,
-            itemName: sale.itemName,
-            stockItemId: sale.stockItemId,
-            quantity: sale.quantity,
-            unitPrice: sale.unitPrice,
-            amount: sale.amount,
-            paymentType: sale.paymentType,
-            debtorId: sale.debtorId,
-            soldAt: sale.soldAt,
-          })
-          .then(() => db.sales.update(sale.id, { syncStatus: 'SYNCED' }))
-          .catch(() => {
-            // Keep the local sale pending so the sync engine can retry after dependencies are synced.
-          })
+      if (isNetworkReachable()) {
+        void syncEngine.syncIfQueueThresholdReached()
       }
 
       return sale

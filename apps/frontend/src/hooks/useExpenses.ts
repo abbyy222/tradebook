@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { db, type LocalExpense } from '@/db'
 import { expensesApi } from '@/api/expenses.api'
 import { isNetworkReachable } from '@/services/networkHealth'
+import { syncEngine } from '@/services/syncEngine'
 import type {
   CreateExpenseDTO,
   CursorPaginatedResponse,
@@ -254,7 +255,6 @@ export const useExpensesList = (filters: ExpenseListFilters = {}) => {
 
       if (isNetworkReachable()) {
         try {
-          void syncPendingExpenses()
           const serverPage = await expensesApi.list({ ...filters, cursor, pageSize: EXPENSES_PAGE_SIZE })
           await storeServerExpenses(serverPage.data)
           return listExpensesFromDexie(filters, cursor)
@@ -267,7 +267,7 @@ export const useExpensesList = (filters: ExpenseListFilters = {}) => {
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.meta.nextCursor ?? undefined,
-    staleTime: 30_000,
+    staleTime: 120_000,
   })
 }
 
@@ -287,24 +287,7 @@ export const useCreateExpense = () => {
       await db.expenses.put(localExpense)
 
       if (isNetworkReachable()) {
-        void expensesApi
-          .sync({
-            id: localExpense.id,
-            description: localExpense.description,
-            amount: localExpense.amount,
-            category: localExpense.category,
-            expenseType: localExpense.expenseType,
-            frequency: localExpense.frequency,
-            note: localExpense.note,
-            spentAt: localExpense.spentAt,
-            startDate: localExpense.startDate,
-            endDate: localExpense.endDate,
-            nextDueDate: localExpense.nextDueDate,
-          })
-          .then((serverExpense) => db.expenses.put({ ...normalizeExpenseRecord(serverExpense), syncStatus: 'SYNCED' }))
-          .catch(() => {
-            // Keep it pending locally so background sync can retry later.
-          })
+        void syncEngine.syncIfQueueThresholdReached()
       }
 
       return localExpense

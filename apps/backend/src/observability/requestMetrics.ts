@@ -1,8 +1,11 @@
 type RequestSample = {
+  requestId?: string
   method: string
+  url?: string
   path: string
   status: number
   durationMs: number
+  ip?: string
   at: number
 }
 
@@ -112,5 +115,49 @@ export const requestMetrics = {
       topErrorEndpoints,
     }
   },
-}
 
+  getRecentErrorEvents(windowMs = 60 * 60 * 1000, endpoint?: string, limit = 50) {
+    const from = Date.now() - windowMs
+    const normalizedEndpoint = endpoint?.trim().toLowerCase()
+
+    return samples
+      .filter((sample) => sample.at >= from && sample.status >= 500)
+      .filter((sample) => {
+        if (!normalizedEndpoint) return true
+        return endpointKey(sample).toLowerCase().includes(normalizedEndpoint)
+      })
+      .sort((a, b) => b.at - a.at)
+      .slice(0, limit)
+      .map((sample) => ({
+        requestId: sample.requestId ?? '',
+        endpoint: endpointKey(sample),
+        status: sample.status,
+        durationMs: sample.durationMs,
+        at: new Date(sample.at).toISOString(),
+      }))
+  },
+
+  getRecentRequestTraces(windowMs = 60 * 60 * 1000, endpoint?: string, limit = 100) {
+    const from = Date.now() - windowMs
+    const normalizedEndpoint = endpoint?.trim().toLowerCase()
+
+    return samples
+      .filter((sample) => sample.at >= from)
+      .filter((sample) => {
+        if (!normalizedEndpoint) return true
+        return endpointKey(sample).toLowerCase().includes(normalizedEndpoint)
+      })
+      .sort((a, b) => b.at - a.at)
+      .slice(0, limit)
+      .map((sample) => ({
+        requestId: sample.requestId ?? '',
+        method: sample.method,
+        path: sample.path,
+        url: sample.url ?? sample.path,
+        status: sample.status,
+        durationMs: sample.durationMs,
+        ip: sample.ip ?? '',
+        at: new Date(sample.at).toISOString(),
+      }))
+  },
+}

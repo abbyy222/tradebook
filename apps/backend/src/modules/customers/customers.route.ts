@@ -3,11 +3,12 @@ import { authenticate } from '../../middleware/authenticate'
 import { authorizeRole } from '../../middleware/authorizeRole'
 import { createCustomerSchema, listCustomersQuerySchema, updateCustomerSchema } from './customers.schema'
 import { customersService } from './customers.service'
+import { enforceModuleWritable } from '../../middleware/enforceModuleWritable'
 
 export const customersRouter = Router()
 customersRouter.use(authenticate)
 
-customersRouter.post('/sync', async (req: Request, res: Response, next: NextFunction) => {
+customersRouter.post('/sync', enforceModuleWritable('CUSTOMERS'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = createCustomerSchema.parse(req.body)
     const customer = await customersService.createOrSync(req.trader!.traderId, input)
@@ -31,7 +32,7 @@ customersRouter.get('/:id', async (req: Request, res: Response, next: NextFuncti
   } catch (err) { next(err) }
 })
 
-customersRouter.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
+customersRouter.patch('/:id', enforceModuleWritable('CUSTOMERS'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
     const input = updateCustomerSchema.parse(req.body)
@@ -40,7 +41,7 @@ customersRouter.patch('/:id', async (req: Request, res: Response, next: NextFunc
   } catch (err) { next(err) }
 })
 
-customersRouter.delete('/:id', authorizeRole('OWNER'), async (req: Request, res: Response, next: NextFunction) => {
+customersRouter.delete('/:id', authorizeRole('OWNER'), enforceModuleWritable('CUSTOMERS'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
     const result = await customersService.remove(id, req.trader!.traderId)

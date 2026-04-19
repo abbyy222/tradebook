@@ -15,6 +15,7 @@ const env_1 = require("../../config/env");
 const errorHandler_1 = require("../../middleware/errorHandler");
 const auth_repository_1 = require("./auth.repository");
 const phone_1 = require("../../utils/phone");
+const platformAdmin_repository_1 = require("../platformAdmin/platformAdmin.repository");
 // bcrypt cost factor — 12 is the recommended production value.
 // Higher = more secure but slower. 12 takes ~300ms which is
 // slow enough to defeat brute force but fast enough for UX.
@@ -88,6 +89,10 @@ exports.authService = {
             throw new errorHandler_1.AppError('Invalid credentials', 401, 'UNAUTHORIZED');
         }
         const scopeTraderId = trader.ownerTraderId ?? trader.id;
+        const accountStatus = await platformAdmin_repository_1.platformAdminRepository.getBusinessAccountStatus(scopeTraderId);
+        if (accountStatus === 'SUSPENDED') {
+            throw new errorHandler_1.AppError('This business account is suspended. Contact support.', 403, 'ACCOUNT_SUSPENDED');
+        }
         // 3. Generate JWT
         const token = jsonwebtoken_1.default.sign({
             traderId: scopeTraderId,

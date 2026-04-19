@@ -19,6 +19,10 @@ import { InternalLoginPage } from './pages/InternalLoginPage'
 import { InternalPortalLayout } from './layouts/InternalPortalLayout'
 import { PlatformAdminPage } from './pages/PlatformAdminPage'
 import { PlatformDeveloperPage } from './pages/PlatformDeveloperPage'
+import { PlatformDeveloperOverviewPage } from './pages/PlatformDeveloperOverviewPage'
+import { PlatformDeveloperReliabilityPage } from './pages/PlatformDeveloperReliabilityPage'
+import { PlatformDeveloperOperationsPage } from './pages/PlatformDeveloperOperationsPage'
+import { PlatformDeveloperAccessPage } from './pages/PlatformDeveloperAccessPage'
 
 function App() {
   return (
@@ -52,7 +56,13 @@ function App() {
       </Route>
 
       <Route element={<InternalPortalLayout portal="DEVELOPER" />}>
-        <Route path="/platform/dev" element={<PlatformDeveloperPage />} />
+        <Route path="/platform/dev" element={<PlatformDeveloperPage />}>
+          <Route index element={<Navigate to="/platform/dev/overview" replace />} />
+          <Route path="overview" element={<PlatformDeveloperOverviewPage />} />
+          <Route path="reliability" element={<PlatformDeveloperReliabilityPage />} />
+          <Route path="operations" element={<PlatformDeveloperOperationsPage />} />
+          <Route path="access" element={<PlatformDeveloperAccessPage />} />
+        </Route>
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

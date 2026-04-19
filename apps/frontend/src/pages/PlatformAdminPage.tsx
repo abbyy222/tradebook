@@ -1,7 +1,12 @@
 import { useMemo, useState } from 'react'
-import { usePlatformAdminOverview, usePlatformBusinessesDirectory } from '@/hooks/usePlatformAdmin'
+import {
+  usePlatformAdminOverview,
+  usePlatformBusinessesDirectory,
+  usePlatformBusinessActionLogs,
+  useUpdatePlatformBusinessStatus,
+} from '@/hooks/usePlatformAdmin'
 import { useInternalAuthStore } from '@/stores/internalAuthStore'
-import type { PlatformBusinessActivityStatus } from '@tradebook/shared-types'
+import type { PlatformBusinessAccountStatus, PlatformBusinessActivityStatus, PlatformBusinessDirectoryItemDTO } from '@tradebook/shared-types'
 
 const fmtMoney = (value: number) => `NGN ${value.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`
 
@@ -10,6 +15,11 @@ const ACTIVITY_STATUS_THEME: Record<PlatformBusinessActivityStatus, { label: str
   DORMANT: { label: 'Dormant', color: '#f0bc5a', bg: 'rgba(240,188,90,0.12)', border: 'rgba(240,188,90,0.24)' },
   INACTIVE: { label: 'Inactive', color: '#f87171', bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.24)' },
   NEW: { label: 'New', color: '#9fb0ff', bg: 'rgba(159,176,255,0.14)', border: 'rgba(159,176,255,0.26)' },
+}
+
+const ACCOUNT_STATUS_THEME: Record<PlatformBusinessAccountStatus, { label: string; color: string; bg: string; border: string }> = {
+  ACTIVE: { label: 'Active', color: '#4ecca3', bg: 'rgba(78,204,163,0.12)', border: 'rgba(78,204,163,0.24)' },
+  SUSPENDED: { label: 'Suspended', color: '#f87171', bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.24)' },
 }
 
 const Stat = ({ label, value, hint }: { label: string; value: string; hint?: string }) => (
@@ -28,6 +38,12 @@ export const PlatformAdminPage = () => {
   const [status, setStatus] = useState<PlatformBusinessActivityStatus | undefined>(undefined)
   const [sort, setSort] = useState<'activity' | 'sales' | 'newest'>('activity')
   const [page, setPage] = useState(1)
+  const [actionsPage, setActionsPage] = useState(1)
+  const [statusModal, setStatusModal] = useState<{
+    business: PlatformBusinessDirectoryItemDTO
+    targetStatus: PlatformBusinessAccountStatus
+  } | null>(null)
+  const [statusReason, setStatusReason] = useState('')
   const isAdminPortal = portal === 'ADMIN'
 
   const overview = usePlatformAdminOverview(days, isAdminPortal)
@@ -42,6 +58,8 @@ export const PlatformAdminPage = () => {
     },
     shouldLoadBusinesses
   )
+  const actionsLog = usePlatformBusinessActionLogs({ page: actionsPage, pageSize: 8 }, isAdminPortal)
+  const updateBusinessStatus = useUpdatePlatformBusinessStatus()
 
   const peakDaily = useMemo(() => {
     if (!overview.data?.dailyActivity?.length) return 1
@@ -49,6 +67,16 @@ export const PlatformAdminPage = () => {
   }, [overview.data?.dailyActivity])
 
   const totalPages = businesses.data?.meta.totalPages ?? 1
+  const actionsTotalPages = actionsLog.data?.meta.totalPages ?? 1
+
+  const openStatusModal = (business: PlatformBusinessDirectoryItemDTO, targetStatus: PlatformBusinessAccountStatus) => {
+    setStatusReason(
+      targetStatus === 'SUSPENDED'
+        ? `Payment verification pending for ${business.label}`
+        : `Account restored after review for ${business.label}`
+    )
+    setStatusModal({ business, targetStatus })
+  }
 
   return (
     <div className="space-y-4 overflow-x-hidden">
@@ -298,16 +326,22 @@ export const PlatformAdminPage = () => {
           <div className="space-y-2">
             {businesses.data.items.map((biz) => {
               const statusTheme = ACTIVITY_STATUS_THEME[biz.activityStatus]
+              const accountTheme = ACCOUNT_STATUS_THEME[biz.accountStatus]
               return (
                 <div key={biz.id} className="rounded-xl border border-white/10 bg-[#2a1912] px-3 py-3">
                   <div className="mb-2 flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-ui text-sm font-bold text-primary">{biz.label}</p>
-                      <p className="mt-0.5 break-all text-xs text-secondary">{biz.ownerName} · {biz.phoneNumber}</p>
+                      <p className="mt-0.5 break-all text-xs text-secondary">{biz.ownerName} | {biz.phoneNumber}</p>
                     </div>
-                    <span className="inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em]" style={{ color: statusTheme.color, background: statusTheme.bg, border: `1px solid ${statusTheme.border}` }}>
-                      {statusTheme.label}
-                    </span>
+                    <div className="flex flex-wrap justify-end gap-1.5">
+                      <span className="inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em]" style={{ color: statusTheme.color, background: statusTheme.bg, border: `1px solid ${statusTheme.border}` }}>
+                        {statusTheme.label}
+                      </span>
+                      <span className="inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em]" style={{ color: accountTheme.color, background: accountTheme.bg, border: `1px solid ${accountTheme.border}` }}>
+                        {accountTheme.label}
+                      </span>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
                     <div className="min-w-0">
@@ -330,6 +364,26 @@ export const PlatformAdminPage = () => {
                   <p className="mt-2 text-[11px] text-secondary">
                     Last activity: {biz.lastActivityAt ? new Date(biz.lastActivityAt).toLocaleString('en-NG') : 'No transactions yet'}
                   </p>
+                  {biz.suspensionReason ? (
+                    <p className="mt-1 text-[11px] text-[#f87171]">Reason: {biz.suspensionReason}</p>
+                  ) : null}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {biz.accountStatus === 'ACTIVE' ? (
+                      <button
+                        onClick={() => openStatusModal(biz, 'SUSPENDED')}
+                        className="rounded-full border border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.08)] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#f87171]"
+                      >
+                        Suspend
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => openStatusModal(biz, 'ACTIVE')}
+                        className="rounded-full border border-[rgba(78,204,163,0.35)] bg-[rgba(78,204,163,0.08)] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#4ecca3]"
+                      >
+                        Reactivate
+                      </button>
+                    )}
+                  </div>
                 </div>
               )
             })}
@@ -358,6 +412,112 @@ export const PlatformAdminPage = () => {
           </div>
         </div>
       </section>
+
+      <section className="rounded-2xl border border-white/10 bg-[#231510] px-4 py-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div>
+            <p className="label-base mb-1">Audit Trail</p>
+            <h3 className="font-ui text-base font-bold text-primary">Business Status Actions</h3>
+          </div>
+          <button onClick={() => void actionsLog.refetch()} className="btn-ghost !min-h-0 !px-3 !py-2 text-xs uppercase">
+            Refresh
+          </button>
+        </div>
+
+        {actionsLog.isLoading || !actionsLog.data ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((idx) => <div key={idx} className="h-16 rounded-xl skeleton" />)}
+          </div>
+        ) : actionsLog.data.items.length === 0 ? (
+          <div className="rounded-xl border border-white/10 bg-[#2a1912] px-4 py-3 text-sm text-secondary">
+            No status actions recorded yet.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {actionsLog.data.items.map((item) => {
+              const stateTheme = ACCOUNT_STATUS_THEME[item.accountStatus]
+              return (
+                <div key={item.id} className="rounded-xl border border-white/10 bg-[#2a1912] px-3 py-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="break-all text-xs text-secondary">Trader: {item.traderId}</p>
+                      <p className="truncate font-ui text-sm font-bold text-primary">{item.actorName ?? 'Unknown admin'}</p>
+                    </div>
+                    <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em]" style={{ color: stateTheme.color, background: stateTheme.bg, border: `1px solid ${stateTheme.border}` }}>
+                      {stateTheme.label}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-secondary">{item.reason}</p>
+                  <p className="mt-1 text-[11px] text-secondary">{new Date(item.createdAt).toLocaleString('en-NG')}</p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="mt-3 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+          <p className="text-xs text-secondary">
+            Page {actionsLog.data?.meta.page ?? actionsPage} of {actionsTotalPages} · {actionsLog.data?.meta.total ?? 0} actions
+          </p>
+          <div className="flex w-full gap-2 sm:w-auto">
+            <button
+              className="btn-ghost !min-h-0 !flex-1 !px-3 !py-2 text-xs uppercase disabled:opacity-40 sm:!flex-none"
+              disabled={actionsPage <= 1}
+              onClick={() => setActionsPage((p) => Math.max(1, p - 1))}
+            >
+              Prev
+            </button>
+            <button
+              className="btn-ghost !min-h-0 !flex-1 !px-3 !py-2 text-xs uppercase disabled:opacity-40 sm:!flex-none"
+              disabled={actionsPage >= actionsTotalPages}
+              onClick={() => setActionsPage((p) => Math.min(actionsTotalPages, p + 1))}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {statusModal ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 px-3 pb-4 sm:items-center">
+          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#231510] p-4">
+            <p className="label-base mb-1">Account Control</p>
+            <h3 className="font-ui text-base font-bold text-primary">
+              {statusModal.targetStatus === 'SUSPENDED' ? 'Suspend Business' : 'Reactivate Business'}
+            </h3>
+            <p className="mt-1 text-xs text-secondary">Business: {statusModal.business.label}</p>
+            <textarea
+              value={statusReason}
+              onChange={(e) => setStatusReason(e.target.value)}
+              className="input-base mt-3 !min-h-[96px] w-full resize-none"
+              placeholder="State reason for this action"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                onClick={() => setStatusModal(null)}
+                className="rounded-full border border-white/10 bg-[rgba(255,255,255,0.04)] px-4 py-2 text-xs font-bold uppercase tracking-[0.08em] text-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!statusModal) return
+                  await updateBusinessStatus.mutateAsync({
+                    traderId: statusModal.business.id,
+                    accountStatus: statusModal.targetStatus,
+                    reason: statusReason.trim(),
+                  })
+                  setStatusModal(null)
+                }}
+                disabled={statusReason.trim().length < 3 || updateBusinessStatus.isPending}
+                className="btn-primary !min-h-0 !px-4 !py-2 text-xs uppercase disabled:opacity-60"
+              >
+                {updateBusinessStatus.isPending ? 'Saving...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
