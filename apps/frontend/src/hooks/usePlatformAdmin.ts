@@ -11,6 +11,8 @@ export const platformAdminKeys = {
     [...platformAdminKeys.all, 'business-actions', params] as const,
 }
 
+export const repairModules = ['SALES', 'EXPENSES', 'STOCK', 'DEBTORS', 'SAVINGS', 'SUPPLIERS'] as const
+
 export const usePlatformAdminOverview = (days: number, enabled: boolean) =>
   useQuery({
     queryKey: platformAdminKeys.overview(days),
@@ -49,6 +51,17 @@ export const useUpdatePlatformBusinessStatus = () => {
         accountStatus: input.accountStatus,
         reason: input.reason,
       }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: platformAdminKeys.all })
+    },
+  })
+}
+
+export const useRepairPlatformBusiness = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { traderId: string; reason: string }) =>
+      platformAdminApi.repairBusinessSync(input.traderId, { reason: input.reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: platformAdminKeys.all })
     },

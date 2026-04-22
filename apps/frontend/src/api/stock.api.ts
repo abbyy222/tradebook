@@ -23,8 +23,11 @@ export const stockApi = {
     return res.data.data
   },
 
-  adjust: async (id: string, delta: number, reason: string) => {
-    const res = await apiClient.patch<{ data: StockItemDTO }>(`/stock/${id}/adjust`, { delta, reason })
+  adjust: async (
+    id: string,
+    input: { delta: number; reason: string; unitPrice?: number; costPrice?: number; lowStockThreshold?: number },
+  ) => {
+    const res = await apiClient.patch<{ data: StockItemDTO }>(`/stock/${id}/adjust`, input)
     return res.data.data
   },
 }

@@ -18,6 +18,13 @@ const debtorSelect = {
     createdAt: true,
     updatedAt: true,
 };
+const computeDebtorStatus = (totalOwed, totalPaid) => {
+    if (totalPaid >= totalOwed - 0.01)
+        return 'CLEARED';
+    if (totalPaid > 0)
+        return 'PARTIAL';
+    return 'ACTIVE';
+};
 exports.debtorsRepository = {
     async upsert(traderId, data) {
         return client_2.prisma.debtor.upsert({
@@ -195,12 +202,30 @@ exports.debtorsRepository = {
         });
     },
     async getStatement(debtorId, traderId) {
-        const debtor = await client_2.prisma.debtor.findFirst({
+        let debtor = await client_2.prisma.debtor.findFirst({
             where: { id: debtorId, traderId },
             select: debtorSelect,
         });
         if (!debtor)
             return null;
+        const paymentsAggregate = await client_2.prisma.payment.aggregate({
+            where: { debtorId },
+            _sum: { amount: true },
+        });
+        const storedTotalPaid = Number(debtor.totalPaid);
+        const recomputedTotalPaid = Number(paymentsAggregate._sum.amount ?? 0);
+        const needsReconciliation = Math.abs(storedTotalPaid - recomputedTotalPaid) > 0.01;
+        if (needsReconciliation) {
+            const totalOwed = Number(debtor.totalOwed);
+            debtor = await client_2.prisma.debtor.update({
+                where: { id: debtorId },
+                data: {
+                    totalPaid: new client_1.Prisma.Decimal(recomputedTotalPaid),
+                    status: computeDebtorStatus(totalOwed, recomputedTotalPaid),
+                },
+                select: debtorSelect,
+            });
+        }
         const [sales, payments] = await Promise.all([
             client_2.prisma.sale.findMany({
                 where: { traderId, debtorId },
@@ -223,7 +248,7 @@ exports.debtorsRepository = {
                 orderBy: { paidAt: 'asc' },
             }),
         ]);
-        return { debtor, sales, payments };
+        return { debtor, sales, payments, reconciled: needsReconciliation };
     },
     async updateSchedule(debtorId, traderId, input) {
         const updated = await client_2.prisma.debtor.updateMany({

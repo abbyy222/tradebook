@@ -97,6 +97,7 @@ export declare const debtorsRepository: {
             note: string | null;
             paidAt: Date;
         }[];
+        reconciled: boolean;
     } | null>;
     updateSchedule(debtorId: string, traderId: string, input: UpdateDebtorScheduleInput): Promise<{
         status: import(".prisma/client").$Enums.DebtStatus;

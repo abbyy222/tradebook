@@ -80,6 +80,29 @@ export interface TraderDTO {
   createdAt: string
 }
 
+export const FEEDBACK_CATEGORIES = [
+  'App bug',
+  'Sync issue',
+  'Slow performance',
+  'Payment/debtor issue',
+  'Feature request',
+  'Other',
+] as const
+
+export type FeedbackCategory = (typeof FEEDBACK_CATEGORIES)[number]
+
+export interface SubmitFeedbackDTO {
+  category: FeedbackCategory
+  message: string
+  reporterName?: string
+  pagePath: string
+}
+
+export interface SubmitFeedbackResultDTO {
+  delivered: true
+  sentAt: string
+}
+
 export interface CreateSaleDTO {
   id: string
   itemName: string
@@ -101,7 +124,7 @@ export interface SaleDTO {
   amount: number
   paymentType: 'CASH' | 'TRANSFER' | 'DEBT'
   debtorId?: string
-  syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
+  syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
   soldAt: string
   createdAt: string
 }
@@ -128,7 +151,7 @@ export interface ExpenseDTO {
   expenseType: ExpenseType
   frequency?: ExpenseFrequency
   note?: string
-  syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
+  syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
   spentAt: string
   startDate?: string
   endDate?: string
@@ -155,7 +178,7 @@ export interface StockItemDTO {
   retailValue: number
   expectedGrossProfit: number
   lowStockThreshold: number
-  syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
+  syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
   updatedAt: string
 }
 
@@ -181,6 +204,7 @@ export interface DebtorDTO {
   status: 'ACTIVE' | 'PARTIAL' | 'CLEARED'
   dueDate?: string | null
   createdAt: string
+  updatedAt: string
 }
 
 export interface RecordPaymentDTO {

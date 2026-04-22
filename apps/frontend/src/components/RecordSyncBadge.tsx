@@ -1,11 +1,23 @@
-﻿import { useEffect, useState, type CSSProperties } from 'react'
+import { type CSSProperties } from 'react'
+import type { SyncStatus } from '@/services/syncStatus'
 
-type SyncStatus = 'PENDING' | 'SYNCED' | 'FAILED'
-
-const THEMES: Record<SyncStatus, { label: string; shortLabel: string; icon: string; style: CSSProperties }> = {
-  PENDING: {
+const THEMES: Record<
+  SyncStatus,
+  { label: string; shortLabel: string; icon: string; style: CSSProperties }
+> = {
+  QUEUED: {
     label: 'Queued',
     shortLabel: 'Queued',
+    icon: 'o',
+    style: {
+      background: 'rgba(117,133,200,0.12)',
+      color: '#9aaad8',
+      border: '1px solid rgba(117,133,200,0.22)',
+    },
+  },
+  PENDING: {
+    label: 'Saved offline',
+    shortLabel: 'Offline',
     icon: 'o',
     style: {
       background: 'rgba(117,133,200,0.12)',
@@ -42,27 +54,8 @@ export const RecordSyncBadge = ({
   syncStatus?: SyncStatus
   onRetry?: () => void
 }) => {
-  const [online, setOnline] = useState<boolean>(() => (typeof navigator !== 'undefined' ? navigator.onLine : true))
-
-  useEffect(() => {
-    const handleOnline = () => setOnline(true)
-    const handleOffline = () => setOnline(false)
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
-    return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-    }
-  }, [])
-
   const status = syncStatus ?? 'SYNCED'
-  const theme = status === 'PENDING'
-    ? {
-      ...THEMES.PENDING,
-      label: online ? 'Queued' : 'Saved offline',
-      shortLabel: online ? 'Queued' : 'Offline',
-    }
-    : THEMES[status]
+  const theme = THEMES[status]
 
   return (
     <div className="flex items-center gap-2 flex-wrap justify-end">

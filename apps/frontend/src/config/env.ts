@@ -20,6 +20,8 @@ if (import.meta.env.PROD && !/^https?:\/\//i.test(rawApiUrl)) {
 const env = {
   API_URL: apiUrl,
   APP_ENV: import.meta.env.MODE,
+  SUPPORT_EMAIL: import.meta.env.VITE_SUPPORT_EMAIL ?? 'support@tradebook.app',
+  DEV_SUPPORT_EMAIL: import.meta.env.VITE_DEV_SUPPORT_EMAIL ?? 'dev@tradebook.app',
 } as const
 
 export default env

@@ -13,6 +13,9 @@ export const createStockItemSchema = z.object({
 export const adjustStockSchema = z.object({
   delta: z.number().int().refine(val => val !== 0, 'Delta cannot be zero'),
   reason: z.enum(['restock', 'sale_adjustment', 'damage', 'correction']),
+  unitPrice: z.number().positive().multipleOf(0.01).optional(),
+  costPrice: z.number().nonnegative().multipleOf(0.01).optional(),
+  lowStockThreshold: z.number().int().min(0).optional(),
 })
 
 export const updateStockItemSchema = z.object({

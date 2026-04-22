@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { suppliersApi } from '@/api/suppliers.api'
 import { db, type LocalSupplier } from '@/db'
 import { isNetworkReachable } from '@/services/networkHealth'
+import { getInitialSyncStatus } from '@/services/syncStatus'
 import { syncEngine } from '@/services/syncEngine'
 import type { CreateSupplierDTO, CursorPaginatedResponse, SupplierDTO } from '@tradebook/shared-types'
 
@@ -44,11 +45,19 @@ const listSuppliersFromDexie = async (search?: string, cursor?: string): Promise
 const storeServerSuppliers = async (suppliers: SupplierDTO[]) => {
   if (suppliers.length === 0) return
 
-  const rows: LocalSupplier[] = suppliers.map((supplier) => ({
-    ...supplier,
-    syncStatus: 'SYNCED',
-  }))
+  const localProtected = await db.suppliers
+    .filter((supplier) => supplier.syncStatus !== 'SYNCED')
+    .primaryKeys()
+  const protectedIds = new Set(localProtected as string[])
 
+  const rows: LocalSupplier[] = suppliers
+    .filter((supplier) => !protectedIds.has(supplier.id))
+    .map((supplier) => ({
+      ...supplier,
+      syncStatus: 'SYNCED',
+    }))
+
+  if (rows.length === 0) return
   await db.suppliers.bulkPut(rows)
 }
 
@@ -91,7 +100,7 @@ export const useCreateSupplier = () => {
         note: input.note,
         createdAt: now,
         updatedAt: now,
-        syncStatus: 'PENDING',
+        syncStatus: getInitialSyncStatus(),
       }
 
       await db.suppliers.put(localSupplier)

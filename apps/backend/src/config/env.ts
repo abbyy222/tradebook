@@ -19,6 +19,11 @@ const envSchema = z.object({
   PLATFORM_SEED_DEV_NAME: z.string().min(2, 'PLATFORM_SEED_DEV_NAME is required').optional(),
   FRONTEND_URL: z.string().default('http://localhost:5173'),
   FRONTEND_URLS: z.string().optional(),
+  BREVO_API_KEY: z.string().min(1, 'BREVO_API_KEY is required'),
+  BREVO_SENDER_EMAIL: z.email('BREVO_SENDER_EMAIL must be a valid email address'),
+  BREVO_SENDER_NAME: z.string().min(2, 'BREVO_SENDER_NAME is required'),
+  FEEDBACK_ADMIN_EMAIL: z.email('FEEDBACK_ADMIN_EMAIL must be a valid email address'),
+  FEEDBACK_DEV_EMAIL: z.email('FEEDBACK_DEV_EMAIL must be a valid email address'),
 })
 
 const parsed = envSchema.safeParse(process.env)

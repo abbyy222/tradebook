@@ -5,6 +5,7 @@ import { salesApi } from '@/api/sales.api'
 import { dashboardKeys } from '@/hooks/useDashboard'
 import { stockKeys } from '@/hooks/useStock'
 import { isNetworkReachable } from '@/services/networkHealth'
+import { getInitialSyncStatus } from '@/services/syncStatus'
 import { syncEngine } from '@/services/syncEngine'
 import type { CreateSaleDTO, CursorPaginatedResponse, SaleDTO } from '@tradebook/shared-types'
 
@@ -134,7 +135,7 @@ const mergeServerAndLocalSales = async (serverSales: SaleDTO[], filters: SalesLi
 }
 
 const syncPendingSales = async () => {
-  const retryable = await db.sales.filter((sale) => sale.syncStatus === 'PENDING' || sale.syncStatus === 'FAILED').toArray()
+  const retryable = await db.sales.filter((sale) => sale.syncStatus !== 'SYNCED').toArray()
   if (retryable.length === 0) return
 
   const payload: CreateSaleDTO[] = retryable.map((sale) => {
@@ -163,7 +164,16 @@ const syncPendingSales = async () => {
 
 const storeServerSales = async (sales: SaleDTO[]) => {
   if (sales.length === 0) return
-  const rows: LocalSale[] = sales.map((sale) => ({ ...normalizeSale(sale), syncStatus: 'SYNCED' }))
+  const localProtected = await db.sales
+    .filter((sale) => sale.syncStatus !== 'SYNCED')
+    .primaryKeys()
+  const protectedIds = new Set(localProtected as string[])
+
+  const rows: LocalSale[] = sales
+    .filter((sale) => !protectedIds.has(sale.id))
+    .map((sale) => ({ ...normalizeSale(sale), syncStatus: 'SYNCED' }))
+
+  if (rows.length === 0) return
   await db.sales.bulkPut(rows)
 }
 
@@ -239,7 +249,7 @@ export const useCreateSale = () => {
         unitPrice: stockItem.unitPrice,
         amount: canonicalAmount,
         createdAt,
-        syncStatus: 'PENDING',
+        syncStatus: getInitialSyncStatus(),
       })
 
       if (sale.paymentType === 'DEBT' && !sale.debtorId) {
@@ -253,7 +263,7 @@ export const useCreateSale = () => {
           throw new Error('Not enough stock. Available: ' + latestStock.quantity)
         }
 
-        await db.sales.add({ ...sale, syncStatus: 'PENDING' })
+        await db.sales.add({ ...sale, syncStatus: getInitialSyncStatus() })
         await db.stockItems.update(latestStock.id, {
           quantity: latestStock.quantity - input.quantity,
           stockValue: (latestStock.quantity - input.quantity) * latestStock.costPrice,

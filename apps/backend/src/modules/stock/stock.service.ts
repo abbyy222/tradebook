@@ -41,7 +41,7 @@ export const stockService = {
 
   async adjustStock(id: string, traderId: string, input: AdjustStockInput) {
     try {
-      const updated = await stockRepository.adjustQuantity(id, traderId, input.delta)
+      const updated = await stockRepository.adjustQuantity(id, traderId, input)
       if (!updated) {
         throw new AppError('Stock item not found', 404, 'NOT_FOUND')
       }
@@ -53,6 +53,9 @@ export const stockService = {
         delta: input.delta,
         reason: input.reason,
         newQuantity: updated.quantity,
+        unitPrice: input.unitPrice,
+        costPrice: input.costPrice,
+        lowStockThreshold: input.lowStockThreshold,
       })
 
       return toStockDTO(updated)

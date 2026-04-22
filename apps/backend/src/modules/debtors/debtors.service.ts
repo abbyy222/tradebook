@@ -99,6 +99,15 @@ export const debtorsService = {
 
     const debtor = toDebtorDTO(statement.debtor)
 
+    if (statement.reconciled) {
+      logger.warn({
+        event: 'debtor_statement_reconciled',
+        traderId,
+        debtorId,
+        message: 'Debtor totals were auto-reconciled from payment ledger while generating statement.',
+      })
+    }
+
     const timeline = [
       ...statement.sales.map((sale) => ({
         id: sale.id,
@@ -117,7 +126,14 @@ export const debtorsService = {
       })),
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-    let runningBalance = 0
+    const totalSalesOnCredit = statement.sales.reduce((sum, sale) => sum + Number(sale.amount), 0)
+    const totalPayments = statement.payments.reduce((sum, payment) => sum + Number(payment.amount), 0)
+
+    // Support legacy/manual debtors that started with opening debt not tied to a sale row.
+    // totalOwed can be greater than total credit-sale rows; that difference is opening balance.
+    const openingBalance = Math.max(Number((debtor.totalOwed - totalSalesOnCredit).toFixed(2)), 0)
+
+    let runningBalance = openingBalance
     const entries = timeline.map((entry) => {
       if (entry.type === 'SALE') runningBalance += entry.amount
       if (entry.type === 'PAYMENT') runningBalance -= entry.amount
@@ -128,8 +144,9 @@ export const debtorsService = {
       }
     })
 
-    const totalSalesOnCredit = statement.sales.reduce((sum, sale) => sum + Number(sale.amount), 0)
-    const totalPayments = statement.payments.reduce((sum, payment) => sum + Number(payment.amount), 0)
+    const statementBalance = entries.length > 0
+      ? entries[entries.length - 1].balanceAfter
+      : Math.max(Number((openingBalance + totalSalesOnCredit - totalPayments).toFixed(2)), 0)
 
     return {
       debtor,
@@ -138,7 +155,7 @@ export const debtorsService = {
       totals: {
         totalSalesOnCredit,
         totalPayments,
-        balance: debtor.balance,
+        balance: statementBalance,
       },
     }
   },

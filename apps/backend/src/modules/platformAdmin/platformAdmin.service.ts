@@ -1,5 +1,6 @@
 import { PlatformAdminBusinessesQuery, PlatformAdminRangeQuery } from './platformAdmin.schema'
 import { platformAdminRepository } from './platformAdmin.repository'
+import { platformDevService } from '../platformDev/platformDev.service'
 
 const OVERVIEW_CACHE_TTL_MS = 30_000
 const DIRECTORY_CACHE_TTL_MS = 20_000
@@ -161,6 +162,28 @@ export const platformAdminService = {
           pageSize: query.pageSize,
           totalPages,
         },
+      },
+      error: null,
+    }
+  },
+
+  async repairBusinessSync(input: {
+    traderId: string
+    reason: string
+    actorInternalUserId: string
+  }) {
+    const result = await platformDevService.forceResync({
+      traderId: input.traderId,
+      modules: ['SALES', 'EXPENSES', 'STOCK', 'DEBTORS', 'SAVINGS', 'SUPPLIERS'],
+    })
+
+    return {
+      data: {
+        traderId: input.traderId,
+        reason: input.reason,
+        actorInternalUserId: input.actorInternalUserId,
+        repairedAt: new Date().toISOString(),
+        requeue: result.data,
       },
       error: null,
     }

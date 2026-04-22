@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type Dexie from 'dexie'
 import { db } from '@/db'
 import { syncEngine } from '@/services/syncEngine'
 
@@ -33,6 +34,9 @@ export const SyncStatusBanner = () => {
     let cancelled = false
 
     const readSnapshot = async () => {
+      const countQueuedOrPending = <T extends { syncStatus: string }>(table: Dexie.Table<T, string>) =>
+        table.filter((row) => row.syncStatus === 'QUEUED' || row.syncStatus === 'PENDING').count()
+
       const [
         salesPending,
         salesFailed,
@@ -49,19 +53,19 @@ export const SyncStatusBanner = () => {
         suppliersPending,
         suppliersFailed,
       ] = await Promise.all([
-        db.sales.where('syncStatus').equals('PENDING').count(),
+        countQueuedOrPending(db.sales),
         db.sales.where('syncStatus').equals('FAILED').count(),
-        db.expenses.where('syncStatus').equals('PENDING').count(),
+        countQueuedOrPending(db.expenses),
         db.expenses.where('syncStatus').equals('FAILED').count(),
-        db.stockItems.where('syncStatus').equals('PENDING').count(),
+        countQueuedOrPending(db.stockItems),
         db.stockItems.where('syncStatus').equals('FAILED').count(),
-        db.stockAdjustments.where('syncStatus').equals('PENDING').count(),
+        countQueuedOrPending(db.stockAdjustments),
         db.stockAdjustments.where('syncStatus').equals('FAILED').count(),
-        db.debtors.where('syncStatus').equals('PENDING').count(),
+        countQueuedOrPending(db.debtors),
         db.debtors.where('syncStatus').equals('FAILED').count(),
-        db.savings.where('syncStatus').equals('PENDING').count(),
+        countQueuedOrPending(db.savings),
         db.savings.where('syncStatus').equals('FAILED').count(),
-        db.suppliers.where('syncStatus').equals('PENDING').count(),
+        countQueuedOrPending(db.suppliers),
         db.suppliers.where('syncStatus').equals('FAILED').count(),
       ])
 

@@ -10,15 +10,15 @@ import type {
 } from '@tradebook/shared-types'
 
 export interface LocalSale extends Omit<SaleDTO, 'syncStatus'> {
-  syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
+  syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
 }
 
 export interface LocalExpense extends Omit<ExpenseDTO, 'syncStatus'> {
-  syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
+  syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
 }
 
 export interface LocalStockItem extends Omit<StockItemDTO, 'syncStatus'> {
-  syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
+  syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
 }
 
 export interface LocalStockAdjustment {
@@ -26,12 +26,15 @@ export interface LocalStockAdjustment {
   stockItemId: string
   delta: number
   reason: 'restock' | 'sale_adjustment' | 'damage' | 'correction'
+  unitPrice?: number
+  costPrice?: number
+  lowStockThreshold?: number
   createdAt: string
-  syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
+  syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
 }
 
 export interface LocalDebtor extends DebtorDTO {
-  syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
+  syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
   updatedAt: string
 }
 
@@ -42,16 +45,16 @@ export interface LocalDebtorPayment {
   paidAt: string
   note?: string
   createdAt: string
-  syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
+  syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
 }
 
 export interface LocalSavingsEntry extends Omit<SavingsEntryDTO, 'createdByTraderId'> {
   createdByTraderId?: string
-  syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
+  syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
 }
 
 export interface LocalSupplier extends SupplierDTO {
-  syncStatus: 'PENDING' | 'SYNCED' | 'FAILED'
+  syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
 }
 
 class TradeBookDB extends Dexie {

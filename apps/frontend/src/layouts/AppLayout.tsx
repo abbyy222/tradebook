@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { BottomNav } from '@/components/BottomNav'
 import { APP_NAV_ITEMS } from '@/components/AppNavigation'
 import { OnboardingQuest, ONBOARDING_STORAGE_KEY } from '@/components/OnboardingQuest'
+import { FeedbackWidget } from '@/components/FeedbackWidget'
 import { authApi } from '@/api/auth.api'
 
 const TeamIcon = () => (
@@ -141,6 +142,7 @@ export const AppLayout = () => {
         </main>
       </div>
       <BottomNav />
+      <FeedbackWidget />
       <OnboardingQuest
         open={questOpen}
         onClose={() => setQuestOpen(false)}

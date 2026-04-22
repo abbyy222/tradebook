@@ -3,6 +3,7 @@ import { prisma } from '../../prisma/client'
 import {
   CreateStockItemInput,
   ListStockQuery,
+  AdjustStockInput,
 } from './stock.schema'
 
 const stockSelect = {
@@ -74,7 +75,7 @@ export const stockRepository = {
     )
   },
 
-  async adjustQuantity(id: string, traderId: string, delta: number) {
+  async adjustQuantity(id: string, traderId: string, input: AdjustStockInput) {
     const item = await prisma.stockItem.findFirst({
       where: { id, traderId },
       select: { id: true, quantity: true, lowStockThreshold: true },
@@ -82,14 +83,17 @@ export const stockRepository = {
 
     if (!item) return null
 
-    if (delta < 0 && item.quantity + delta < 0) {
-      throw new Error(`Insufficient stock. Current: ${item.quantity}, Requested: ${Math.abs(delta)}`)
+    if (input.delta < 0 && item.quantity + input.delta < 0) {
+      throw new Error(`Insufficient stock. Current: ${item.quantity}, Requested: ${Math.abs(input.delta)}`)
     }
 
     return prisma.stockItem.update({
       where: { id },
       data: {
-        quantity: { increment: delta },
+        quantity: { increment: input.delta },
+        ...(input.unitPrice != null ? { unitPrice: new Prisma.Decimal(input.unitPrice) } : {}),
+        ...(input.costPrice != null ? { costPrice: new Prisma.Decimal(input.costPrice) } : {}),
+        ...(input.lowStockThreshold != null ? { lowStockThreshold: input.lowStockThreshold } : {}),
         syncStatus: 'SYNCED',
       },
       select: stockSelect,

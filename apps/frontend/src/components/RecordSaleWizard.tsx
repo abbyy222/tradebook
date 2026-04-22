@@ -20,10 +20,44 @@ const QUICK_QUANTITIES = [1, 2, 3, 5, 10]
 
 const fmt = (n: number) => '?' + n.toLocaleString('en-NG')
 
+const CashIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <rect x="3" y="6" width="18" height="12" rx="2.5" stroke="currentColor" strokeWidth="1.7" />
+    <circle cx="12" cy="12" r="2.8" stroke="currentColor" strokeWidth="1.7" />
+    <path d="M7 10h.01M17 14h.01" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+  </svg>
+)
+
+const TransferIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M7 7h10M7 12h10M7 17h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <path d="m14 15 3 3 3-3M17 18v-7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+const CreditIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.7" />
+    <path d="M4.5 18a5.5 5.5 0 0 1 9 0M16 8v6m-3-3h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </svg>
+)
+
+const ArrowLeftIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M15 6 9 12l6 6M10 12h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+const ArrowRightIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M9 6l6 6-6 6M4 12h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
 const PAYMENT_OPTIONS = [
-  { type: 'CASH' as const, label: 'Cash', desc: 'Paid in hand', emoji: '??', color: '#4ecca3', bg: 'rgba(78,204,163,0.1)' },
-  { type: 'TRANSFER' as const, label: 'Transfer', desc: 'Bank or mobile money', emoji: '??', color: '#7585c8', bg: 'rgba(117,133,200,0.1)' },
-  { type: 'DEBT' as const, label: 'Credit', desc: 'They owe you', emoji: '??', color: '#f87171', bg: 'rgba(248,113,113,0.1)' },
+  { type: 'CASH' as const, label: 'Cash', desc: 'Paid in hand', icon: <CashIcon />, color: '#4ecca3', bg: 'rgba(78,204,163,0.1)' },
+  { type: 'TRANSFER' as const, label: 'Transfer', desc: 'Bank or mobile money', icon: <TransferIcon />, color: '#7585c8', bg: 'rgba(117,133,200,0.1)' },
+  { type: 'DEBT' as const, label: 'Credit', desc: 'They owe you', icon: <CreditIcon />, color: '#f87171', bg: 'rgba(248,113,113,0.1)' },
 ]
 
 const ProgressBar = ({ current }: { current: number }) => (
@@ -291,7 +325,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end animate-fade-in" style={{ background: 'rgba(10,5,2,0.75)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
-      <div className="w-full max-w-lg mx-auto rounded-t-3xl px-6 pt-5 animate-slide-up" style={{ background: '#1e1208', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none', paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg mx-auto rounded-t-3xl px-4 pt-4 animate-slide-up max-h-[92vh] overflow-y-auto sm:px-6 sm:pt-5" style={{ background: '#1e1208', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none', paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
         <div className="rounded-full mx-auto mb-5" style={{ width: 36, height: 4, background: 'rgba(255,255,255,0.15)' }} />
         <div className="flex items-center justify-between mb-4">
           <p className="font-ui font-bold uppercase text-xs tracking-widest" style={{ color: 'rgba(245,237,224,0.35)' }}>Step {stepIndex + 1} of {STEPS.length} - {STEP_LABELS[stepIndex]}</p>
@@ -323,7 +357,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
                 })
               )}
             </div>
-            <button className="btn-primary" disabled={!selectedStockItem} onClick={goNext}>Next ?</button>
+            <button className="btn-primary inline-flex items-center justify-center gap-2" disabled={!selectedStockItem} onClick={goNext}>Next <ArrowRightIcon /></button>
           </div>
         )}
 
@@ -347,7 +381,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
               <p className="font-display font-bold" style={{ color: '#e8a838', fontSize: '1.4rem', fontVariationSettings: "'WONK' 1" }}>{fmt(amount)}</p>
               {quantityError && <p className="font-body text-xs mt-2" style={{ color: '#f87171' }}>{quantityError}</p>}
             </div>
-            <div className="flex gap-3"><button className="btn-ghost flex-shrink-0" onClick={goBack}>? Back</button><button className="btn-primary flex-1" disabled={Boolean(quantityError)} onClick={goNext}>Next ?</button></div>
+            <div className="flex gap-3"><button className="btn-ghost flex-shrink-0 inline-flex items-center gap-2" onClick={goBack}><ArrowLeftIcon /> Back</button><button className="btn-primary flex-1 inline-flex items-center justify-center gap-2" disabled={Boolean(quantityError)} onClick={goNext}>Next <ArrowRightIcon /></button></div>
           </div>
         )}
 
@@ -359,7 +393,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
                 const isSelected = paymentType === option.type
                 return (
                   <button key={option.type} onClick={() => { setPaymentType(option.type); if (option.type !== 'DEBT') { setSelectedDebtorId(''); setSelectedCustomerId('') } }} className="flex items-center gap-4 rounded-xl p-4 w-full text-left transition-all duration-150 active:scale-98" style={{ background: isSelected ? option.bg : 'rgba(255,255,255,0.03)', border: isSelected ? '1.5px solid ' + option.color + '55' : '1.5px solid rgba(255,255,255,0.07)' }}>
-                    <span style={{ fontSize: '1.5rem', flexShrink: 0 }}>{option.emoji}</span>
+                    <span style={{ flexShrink: 0, color: isSelected ? option.color : 'rgba(245,237,224,0.55)' }}>{option.icon}</span>
                     <div className="flex-1"><p className="font-ui font-bold text-sm" style={{ color: isSelected ? option.color : '#f5ede0' }}>{option.label}</p><p className="font-body text-xs mt-0.5" style={{ color: 'rgba(245,237,224,0.35)' }}>{option.desc}</p></div>
                   </button>
                 )
@@ -469,7 +503,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
                 )}
               </div>
             )}
-            <div className="flex gap-3"><button className="btn-ghost flex-shrink-0" onClick={goBack}>? Back</button><button className="btn-primary flex-1" onClick={goNext} disabled={paymentType === 'DEBT' && !selectedDebtorId}>Review ?</button></div>
+            <div className="flex gap-3"><button className="btn-ghost flex-shrink-0 inline-flex items-center gap-2" onClick={goBack}><ArrowLeftIcon /> Back</button><button className="btn-primary flex-1 inline-flex items-center justify-center gap-2" onClick={goNext} disabled={paymentType === 'DEBT' && !selectedDebtorId}>Review <ArrowRightIcon /></button></div>
           </div>
         )}
 
@@ -492,7 +526,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
               ))}
             </div>
             {error && <p className="font-body text-sm" style={{ color: '#f87171' }}>{error}</p>}
-            <div className="flex gap-3"><button className="btn-ghost flex-shrink-0" onClick={goBack}>? Back</button><button className="btn-primary flex-1" disabled={createSale.isPending || Boolean(quantityError) || (paymentType === 'DEBT' && !selectedDebtorId)} onClick={handleConfirm}>{createSale.isPending ? <span className="rounded-full border-2 border-white/30 border-t-white" style={{ width: 20, height: 20, animation: 'spin 0.7s linear infinite' }} /> : '? Record sale'}</button></div>
+            <div className="flex gap-3"><button className="btn-ghost flex-shrink-0 inline-flex items-center gap-2" onClick={goBack}><ArrowLeftIcon /> Back</button><button className="btn-primary flex-1 inline-flex items-center justify-center gap-2" disabled={createSale.isPending || Boolean(quantityError) || (paymentType === 'DEBT' && !selectedDebtorId)} onClick={handleConfirm}>{createSale.isPending ? <span className="rounded-full border-2 border-white/30 border-t-white" style={{ width: 20, height: 20, animation: 'spin 0.7s linear infinite' }} /> : <>Record sale <ArrowRightIcon /></>}</button></div>
             <p className="text-center font-body text-xs" style={{ color: 'rgba(245,237,224,0.25)' }}>{navigator.onLine ? 'Will save and sync immediately' : 'Will save offline and sync when you are online'}</p>
           </div>
         )}

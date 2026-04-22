@@ -3,6 +3,7 @@ import {
   usePlatformAdminOverview,
   usePlatformBusinessesDirectory,
   usePlatformBusinessActionLogs,
+  useRepairPlatformBusiness,
   useUpdatePlatformBusinessStatus,
 } from '@/hooks/usePlatformAdmin'
 import { useInternalAuthStore } from '@/stores/internalAuthStore'
@@ -60,6 +61,7 @@ export const PlatformAdminPage = () => {
   )
   const actionsLog = usePlatformBusinessActionLogs({ page: actionsPage, pageSize: 8 }, isAdminPortal)
   const updateBusinessStatus = useUpdatePlatformBusinessStatus()
+  const repairBusiness = useRepairPlatformBusiness()
 
   const peakDaily = useMemo(() => {
     if (!overview.data?.dailyActivity?.length) return 1
@@ -368,6 +370,19 @@ export const PlatformAdminPage = () => {
                     <p className="mt-1 text-[11px] text-[#f87171]">Reason: {biz.suspensionReason}</p>
                   ) : null}
                   <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      onClick={async () => {
+                        const result = await repairBusiness.mutateAsync({
+                          traderId: biz.id,
+                          reason: `Admin support repair for ${biz.label}`,
+                        })
+                        window.alert(`Repair started. ${result.requeue.totalRequeued} failed records requeued for retry.`)
+                      }}
+                      disabled={repairBusiness.isPending}
+                      className="rounded-full border border-[rgba(117,133,200,0.35)] bg-[rgba(117,133,200,0.1)] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#9fb0ff] disabled:opacity-60"
+                    >
+                      {repairBusiness.isPending ? 'Repairing...' : 'Repair Sync'}
+                    </button>
                     {biz.accountStatus === 'ACTIVE' ? (
                       <button
                         onClick={() => openStatusModal(biz, 'SUSPENDED')}

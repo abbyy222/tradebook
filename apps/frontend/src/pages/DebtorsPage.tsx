@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { RecordSyncBadge } from '@/components/RecordSyncBadge'
 import {
   useDebtorsList,
@@ -19,8 +19,24 @@ type DebtorLike = {
   balance: number
   status: 'ACTIVE' | 'PARTIAL' | 'CLEARED'
   dueDate?: string
-  syncStatus?: 'PENDING' | 'SYNCED' | 'FAILED'
+  syncStatus?: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
 }
+
+type DebtorSuccessState =
+  | {
+      kind: 'created'
+      customerName: string
+      totalOwed: number
+      dueDate?: string
+      queued: boolean
+    }
+  | {
+      kind: 'payment'
+      customerName: string
+      cleared: boolean
+      paymentAmount: number
+      remainingBalance: number
+    }
 
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString('en-NG', {
@@ -41,12 +57,123 @@ const toDateInputValue = (value?: string | null) => {
   return `${y}-${m}-${d}`
 }
 
-const AddDebtorSheet = ({ onClose }: { onClose: () => void }) => {
+const parseNairaInput = (value: string) => {
+  const trimmed = value.trim().toLowerCase()
+  if (!trimmed) return NaN
+
+  const normalized = trimmed.replace(/,/g, '').replace(/\s+/g, '')
+  let multiplier = 1
+  let numericPart = normalized
+
+  if (normalized.endsWith('k')) {
+    multiplier = 1_000
+    numericPart = normalized.slice(0, -1)
+  } else if (normalized.endsWith('m')) {
+    multiplier = 1_000_000
+    numericPart = normalized.slice(0, -1)
+  }
+
+  const parsed = Number(numericPart)
+  if (!Number.isFinite(parsed)) return NaN
+  return parsed * multiplier
+}
+
+const DebtorSuccessSheet = ({
+  successState,
+  onClose,
+}: {
+  successState: DebtorSuccessState
+  onClose: () => void
+}) => {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end" style={{ background: 'rgba(10,5,2,0.8)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
+      <div className="w-full max-w-lg mx-auto rounded-t-3xl px-8 py-12 flex flex-col items-center gap-5 animate-slide-up" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.07)', borderBottom: 'none', paddingBottom: 'calc(3rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
+        <div className="rounded-full flex items-center justify-center" style={{ width: 80, height: 80, background: 'linear-gradient(135deg, #c04818, #e8a838)', boxShadow: '0 0 0 12px rgba(196,98,45,0.12), 0 0 0 24px rgba(196,98,45,0.06)' }}>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </div>
+
+        {successState.kind === 'created' ? (
+          <>
+            <div className="text-center">
+              <h2 className="font-display font-bold" style={{ fontSize: '1.75rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>
+                Debtor added!
+              </h2>
+              <p className="font-body text-sm mt-1.5" style={{ color: 'rgba(245,237,224,0.4)' }}>
+                {successState.queued
+                  ? `${successState.customerName} was saved locally and will sync when you are online.`
+                  : `${successState.customerName} is now on your debtors list.`}
+              </p>
+            </div>
+            <div className="w-full rounded-xl px-5 py-4 flex items-center justify-between" style={{ background: '#2e1c14', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <span className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.6)' }}>Amount owed</span>
+              <span className="font-display font-bold" style={{ fontSize: '1.1rem', color: '#f87171', fontVariationSettings: "'WONK' 1" }}>{fmt(successState.totalOwed)}</span>
+            </div>
+            {successState.dueDate ? (
+              <div className="w-full rounded-xl px-5 py-3 flex items-center justify-between" style={{ background: 'rgba(232,168,56,0.08)', border: '1px solid rgba(232,168,56,0.2)' }}>
+                <span className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.58)' }}>Due date</span>
+                <span className="font-ui font-bold text-sm" style={{ color: '#f0bc5a' }}>
+                  {new Date(successState.dueDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <div className="text-center">
+              <h2 className="font-display font-bold" style={{ fontSize: '1.75rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>
+                {successState.cleared ? 'Debt cleared!' : 'Payment recorded!'}
+              </h2>
+              <p className="font-body text-sm mt-1.5" style={{ color: 'rgba(245,237,224,0.4)' }}>
+                {successState.cleared ? `${successState.customerName} has fully paid.` : `${successState.customerName}'s balance has been updated.`}
+              </p>
+            </div>
+            <div className="w-full rounded-xl px-5 py-4 flex items-center justify-between" style={{ background: '#2e1c14', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <span className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.6)' }}>Amount paid</span>
+              <span className="font-display font-bold" style={{ fontSize: '1.1rem', color: '#4ecca3', fontVariationSettings: "'WONK' 1" }}>{fmt(successState.paymentAmount)}</span>
+            </div>
+            {!successState.cleared ? (
+              <div className="w-full rounded-xl px-5 py-3 flex items-center justify-between" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+                <span className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.58)' }}>Remaining balance</span>
+                <span className="font-display font-bold" style={{ fontSize: '1.05rem', color: '#f87171', fontVariationSettings: "'WONK' 1" }}>{fmt(successState.remainingBalance)}</span>
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const AddDebtorSheet = ({ onClose, onSuccess }: { onClose: () => void; onSuccess: (state: DebtorSuccessState) => void }) => {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [amount, setAmount] = useState('')
   const [dueDate, setDueDate] = useState('')
   const createDebtor = useCreateDebtor()
+
+  const handleSubmit = async () => {
+    const totalOwed = parseNairaInput(amount)
+    if (!name.trim() || !Number.isFinite(totalOwed) || totalOwed <= 0) return
+
+    const createdDebtor = await createDebtor.mutateAsync({
+      customerName: name.trim(),
+      phoneNumber: phone || undefined,
+      totalOwed,
+      dueDate: dueDate || undefined,
+    } as any)
+    const queued =
+      'syncStatus' in createdDebtor &&
+      (createdDebtor.syncStatus === 'PENDING' || createdDebtor.syncStatus === 'FAILED')
+
+    onClose()
+    onSuccess({
+      kind: 'created',
+      customerName: createdDebtor.customerName ?? name.trim(),
+      totalOwed,
+      dueDate: createdDebtor.dueDate ?? (dueDate || undefined),
+      queued,
+    })
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end animate-fade-in" style={{ background: 'rgba(10,5,2,0.8)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
@@ -67,8 +194,8 @@ const AddDebtorSheet = ({ onClose }: { onClose: () => void }) => {
         ))}
 
         <button
-          onClick={() => createDebtor.mutate({ customerName: name.trim(), phoneNumber: phone || undefined, totalOwed: parseFloat(amount), dueDate: dueDate || undefined } as any, { onSuccess: onClose })}
-          disabled={!name.trim() || !amount || createDebtor.isPending}
+          onClick={() => void handleSubmit()}
+          disabled={!name.trim() || !amount || !Number.isFinite(parseNairaInput(amount)) || parseNairaInput(amount) <= 0 || createDebtor.isPending}
           className="btn-primary mt-2"
         >
           {createDebtor.isPending ? <span className="rounded-full border-2 border-white/30 border-t-white" style={{ width: 20, height: 20, animation: 'spin 0.7s linear infinite' }} /> : 'Add debtor'}
@@ -81,63 +208,71 @@ const AddDebtorSheet = ({ onClose }: { onClose: () => void }) => {
 const PaymentSheet = ({
   debtor,
   onClose,
+  onSuccess,
 }: {
   debtor: DebtorLike
   onClose: () => void
+  onSuccess: (state: DebtorSuccessState) => void
 }) => {
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [nextDueDate, setNextDueDate] = useState('')
-  const [successState, setSuccessState] = useState<{ cleared: boolean; paymentAmount: number } | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const recordPayment = useRecordPayment(debtor.id)
   const updateSchedule = useUpdateDebtorSchedule(debtor.id)
 
   const handleSubmit = async () => {
-    const paymentAmount = parseFloat(amount)
-    await recordPayment.mutateAsync({
-      amount: paymentAmount,
-      paidAt: new Date().toISOString(),
-      note: note || undefined,
-    })
+    const paymentAmount = parseNairaInput(amount)
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) return
+    setErrorMessage(null)
 
-    if (nextDueDate) {
-      await updateSchedule.mutateAsync(`${nextDueDate}T00:00:00.000Z`)
+    try {
+      await recordPayment.mutateAsync({
+        amount: paymentAmount,
+        paidAt: new Date().toISOString(),
+        note: note || undefined,
+      })
+
+      if (nextDueDate) {
+        try {
+          await updateSchedule.mutateAsync(`${nextDueDate}T00:00:00.000Z`)
+        } catch (scheduleError) {
+          // Do not fail payment success because schedule update can require network.
+          console.warn('Debtor schedule update skipped after payment', {
+            debtorId: debtor.id,
+            nextDueDate,
+            scheduleError,
+          })
+        }
+      }
+
+      const isCleared = debtor.balance - paymentAmount <= 0.01
+      onClose()
+      onSuccess({
+        kind: 'payment',
+        customerName: debtor.customerName,
+        cleared: isCleared,
+        paymentAmount,
+        remainingBalance: Math.max(debtor.balance - paymentAmount, 0),
+      })
+    } catch (error: any) {
+      const apiMessage =
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        error?.message
+
+      const fallback = 'Payment could not be recorded. Please try again.'
+      const finalMessage = typeof apiMessage === 'string' && apiMessage.trim() ? apiMessage : fallback
+      setErrorMessage(finalMessage)
+
+      console.error('Debtor payment failed', {
+        debtorId: debtor.id,
+        amount: paymentAmount,
+        note,
+        nextDueDate,
+        error,
+      })
     }
-
-    const isCleared = debtor.balance - paymentAmount <= 0.01
-    setSuccessState({ cleared: isCleared, paymentAmount })
-    window.setTimeout(onClose, 2200)
-  }
-
-  if (successState) {
-    const remainingBalance = Math.max(debtor.balance - successState.paymentAmount, 0)
-    return (
-      <div className="fixed inset-0 z-50 flex items-end" style={{ background: 'rgba(10,5,2,0.8)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
-        <div className="w-full max-w-lg mx-auto rounded-t-3xl px-8 py-12 flex flex-col items-center gap-5 animate-slide-up" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.07)', borderBottom: 'none', paddingBottom: 'calc(3rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
-          <div className="rounded-full flex items-center justify-center" style={{ width: 80, height: 80, background: 'linear-gradient(135deg, #c04818, #e8a838)', boxShadow: '0 0 0 12px rgba(196,98,45,0.12), 0 0 0 24px rgba(196,98,45,0.06)' }}>
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </div>
-          <div className="text-center">
-            <h2 className="font-display font-bold" style={{ fontSize: '1.75rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>
-              {successState.cleared ? 'Debt cleared!' : 'Payment recorded!'}
-            </h2>
-            <p className="font-body text-sm mt-1.5" style={{ color: 'rgba(245,237,224,0.4)' }}>
-              {successState.cleared ? `${debtor.customerName} has fully paid.` : `${debtor.customerName}'s balance has been updated.`}
-            </p>
-          </div>
-          <div className="w-full rounded-xl px-5 py-4 flex items-center justify-between" style={{ background: '#2e1c14', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <span className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.6)' }}>Amount paid</span>
-            <span className="font-display font-bold" style={{ fontSize: '1.1rem', color: '#4ecca3', fontVariationSettings: "'WONK' 1" }}>{fmt(successState.paymentAmount)}</span>
-          </div>
-          {!successState.cleared ? (
-            <div className="w-full rounded-xl px-5 py-3 flex items-center justify-between" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
-              <span className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.58)' }}>Remaining balance</span>
-              <span className="font-display font-bold" style={{ fontSize: '1.05rem', color: '#f87171', fontVariationSettings: "'WONK' 1" }}>{fmt(remainingBalance)}</span>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -152,7 +287,7 @@ const PaymentSheet = ({
         </div>
         <div className="flex flex-col gap-2">
           <label className="label-base">Payment amount (N)</label>
-          <input type="number" inputMode="decimal" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="input-base" style={{ fontFamily: "'Fraunces', serif", fontSize: '1.25rem', fontVariationSettings: "'WONK' 1" }} />
+          <input type="text" inputMode="decimal" placeholder="e.g. 65000 or 65k" value={amount} onChange={(e) => setAmount(e.target.value)} className="input-base" style={{ fontFamily: "'Fraunces', serif", fontSize: '1.25rem', fontVariationSettings: "'WONK' 1" }} />
         </div>
         <div className="flex flex-col gap-2">
           <label className="label-base">Note (optional)</label>
@@ -165,9 +300,21 @@ const PaymentSheet = ({
             Tip: set this for installment 1, 2, or 3. You can update again later.
           </p>
         </div>
+        {errorMessage ? (
+          <div
+            className="rounded-xl px-3 py-2 text-xs font-body"
+            style={{
+              background: 'rgba(248,113,113,0.12)',
+              border: '1px solid rgba(248,113,113,0.22)',
+              color: '#fca5a5',
+            }}
+          >
+            {errorMessage}
+          </div>
+        ) : null}
         <button
           onClick={() => void handleSubmit()}
-          disabled={!amount || parseFloat(amount) <= 0 || recordPayment.isPending || updateSchedule.isPending}
+          disabled={!amount || !Number.isFinite(parseNairaInput(amount)) || parseNairaInput(amount) <= 0 || recordPayment.isPending || updateSchedule.isPending}
           className="btn-primary"
         >
           {recordPayment.isPending || updateSchedule.isPending ? <span className="rounded-full border-2 border-white/30 border-t-white" style={{ width: 20, height: 20, animation: 'spin 0.7s linear infinite' }} /> : 'Record payment'}
@@ -421,6 +568,7 @@ export const DebtorsPage = () => {
   const [selectedDebtor, setSelectedDebtor] = useState<DebtorLike | null>(null)
   const [statementDebtor, setStatementDebtor] = useState<DebtorLike | null>(null)
   const [scheduleDebtor, setScheduleDebtor] = useState<DebtorLike | null>(null)
+  const [successState, setSuccessState] = useState<DebtorSuccessState | null>(null)
   const [activeTab, setActiveTab] = useState<DebtorTab>('OWING')
   const retryDebtorSync = useRetryDebtorSync()
   const { data, isLoading } = useDebtorsList()
@@ -437,6 +585,12 @@ export const DebtorsPage = () => {
     CLEARED: debtors.filter((debtor: any) => debtor.balance === 0 || debtor.status === 'CLEARED').length,
     ALL: debtors.length,
   }
+
+  useEffect(() => {
+    if (!successState) return
+    const timer = window.setTimeout(() => setSuccessState(null), 2600)
+    return () => window.clearTimeout(timer)
+  }, [successState])
 
   return (
     <div className="min-h-screen">
@@ -500,15 +654,17 @@ export const DebtorsPage = () => {
         ))}
       </div>
 
-      {addOpen && <AddDebtorSheet onClose={() => setAddOpen(false)} />}
+      {addOpen && <AddDebtorSheet onClose={() => setAddOpen(false)} onSuccess={setSuccessState} />}
       {selectedDebtor && (
         <PaymentSheet
           debtor={selectedDebtor}
           onClose={() => setSelectedDebtor(null)}
+          onSuccess={setSuccessState}
         />
       )}
       {statementDebtor && <StatementSheet debtor={statementDebtor} onClose={() => setStatementDebtor(null)} />}
       {scheduleDebtor && <ScheduleSheet debtor={scheduleDebtor} onClose={() => setScheduleDebtor(null)} />}
+      {successState && <DebtorSuccessSheet successState={successState} onClose={() => setSuccessState(null)} />}
     </div>
   )
 }

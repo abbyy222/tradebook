@@ -1,14 +1,14 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { v4 as uuidv4 } from 'uuid'
-import { db, type LocalDebtor } from '@/db'
+import { db, type LocalDebtor, type LocalDebtorPayment, type LocalSale } from '@/db'
 import { debtorsApi } from '@/api/debtors.api'
 import { dashboardKeys } from '@/hooks/useDashboard'
 import { isNetworkReachable } from '@/services/networkHealth'
-import { syncEngine } from '@/services/syncEngine'
 import type {
   CreateDebtorDTO,
   CursorPaginatedResponse,
   DebtorDTO,
+  DebtorStatementDTO,
   RecordPaymentDTO,
 } from '@tradebook/shared-types'
 
@@ -76,7 +76,8 @@ const matchesDebtorFilters = (
 
 const applyLocalPaymentToDebtor = (
   debtor: LocalDebtor,
-  payment: RecordPaymentDTO
+  payment: RecordPaymentDTO,
+  syncStatus: LocalDebtor['syncStatus'] = 'PENDING'
 ): LocalDebtor => {
   const totalPaid = debtor.totalPaid + payment.amount
   const balance = Math.max(debtor.totalOwed - totalPaid, 0)
@@ -94,6 +95,99 @@ const applyLocalPaymentToDebtor = (
     balance,
     status,
     updatedAt: payment.paidAt,
+    syncStatus,
+  }
+}
+
+const hasLocalUnsyncedStatementChanges = async (debtorId: string) => {
+  const [unsyncedPaymentsCount, unsyncedCreditSalesCount] = await Promise.all([
+    db.debtorPayments
+      .filter((payment) => payment.debtorId === debtorId && payment.syncStatus !== 'SYNCED')
+      .count(),
+    db.sales
+      .filter(
+        (sale) =>
+          sale.debtorId === debtorId &&
+          sale.paymentType === 'DEBT' &&
+          sale.syncStatus !== 'SYNCED'
+      )
+      .count(),
+  ])
+
+  return unsyncedPaymentsCount > 0 || unsyncedCreditSalesCount > 0
+}
+
+const buildLocalStatement = async (debtorId: string): Promise<DebtorStatementDTO> => {
+  const debtor = await db.debtors.get(debtorId)
+  if (!debtor) {
+    throw new Error('Debtor not found locally')
+  }
+
+  const [sales, payments] = await Promise.all([
+    db.sales
+      .filter((sale) => sale.debtorId === debtorId && sale.paymentType === 'DEBT')
+      .toArray(),
+    db.debtorPayments.filter((payment) => payment.debtorId === debtorId).toArray(),
+  ])
+
+  const timeline: Array<{
+    id: string
+    type: 'SALE' | 'PAYMENT'
+    amount: number
+    date: string
+    reference?: string
+    note?: string
+  }> = [
+    ...sales.map((sale: LocalSale) => ({
+      id: sale.id,
+      type: 'SALE' as const,
+      amount: sale.amount,
+      date: sale.soldAt,
+      reference: sale.itemName,
+      note: sale.syncStatus === 'SYNCED' ? 'Credit sale' : 'Credit sale (queued)',
+    })),
+    ...payments.map((payment: LocalDebtorPayment) => ({
+      id: payment.id,
+      type: 'PAYMENT' as const,
+      amount: payment.amount,
+      date: payment.paidAt,
+      note:
+        payment.note ??
+        (payment.syncStatus === 'SYNCED' ? undefined : 'Payment recorded locally (queued)'),
+    })),
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+  const totalSalesOnCredit = sales.reduce((sum, sale) => sum + sale.amount, 0)
+  const totalPayments = payments.reduce((sum, payment) => sum + payment.amount, 0)
+  const openingBalance = Math.max(
+    Number((debtor.totalOwed - totalSalesOnCredit).toFixed(2)),
+    0
+  )
+
+  let runningBalance = openingBalance
+  const entries = timeline.map((entry) => {
+    if (entry.type === 'SALE') runningBalance += entry.amount
+    if (entry.type === 'PAYMENT') runningBalance -= entry.amount
+
+    return {
+      ...entry,
+      balanceAfter: Math.max(Number(runningBalance.toFixed(2)), 0),
+    }
+  })
+
+  const statementBalance = entries.length > 0
+    ? entries[entries.length - 1].balanceAfter
+    : Math.max(Number((openingBalance + totalSalesOnCredit - totalPayments).toFixed(2)), 0)
+
+  return {
+    debtor,
+    generatedAt: new Date().toISOString(),
+    entries,
+    totals: {
+      totalSalesOnCredit,
+      totalPayments,
+      balance: statementBalance,
+    },
   }
 }
 
@@ -127,13 +221,39 @@ const listDebtorsFromDexie = async (
 const storeServerDebtors = async (debtors: DebtorDTO[]) => {
   if (debtors.length === 0) return
 
-  const now = new Date().toISOString()
-  const rows: LocalDebtor[] = debtors.map((debtor) => ({
-    ...debtor,
-    syncStatus: 'SYNCED',
-    updatedAt: now,
-  }))
+  const [locallyUnsyncedDebtors, unsyncedPayments, existingDebtors] = await Promise.all([
+    db.debtors.filter((debtor) => debtor.syncStatus !== 'SYNCED').toArray(),
+    db.debtorPayments.filter((payment) => payment.syncStatus !== 'SYNCED').toArray(),
+    db.debtors.toArray(),
+  ])
+  const localLockIds = new Set<string>([
+    ...locallyUnsyncedDebtors.map((debtor) => debtor.id),
+    ...unsyncedPayments.map((payment) => payment.debtorId),
+  ])
+  const existingById = new Map(existingDebtors.map((debtor) => [debtor.id, debtor]))
 
+  const now = new Date().toISOString()
+  const rows: LocalDebtor[] = debtors
+    .filter((serverDebtor) => {
+      if (localLockIds.has(serverDebtor.id)) return false
+
+      const local = existingById.get(serverDebtor.id)
+      if (!local) return true
+
+      // Extra guard: even synced local rows should not be replaced by older server snapshots.
+      if (new Date(local.updatedAt).getTime() > new Date(serverDebtor.updatedAt).getTime()) {
+        return false
+      }
+
+      return true
+    })
+    .map((debtor) => ({
+      ...debtor,
+      syncStatus: 'SYNCED',
+      updatedAt: now,
+    }))
+
+  if (rows.length === 0) return
   await db.debtors.bulkPut(rows)
 }
 
@@ -158,7 +278,7 @@ const mergeServerAndLocalDebtors = async (
     .filter((debtor) => locallyMutatedIds.has(debtor.id))
     .toArray()
 
-  const merged = new Map<string, DebtorDTO & { syncStatus?: 'PENDING' | 'SYNCED' | 'FAILED' }>()
+  const merged = new Map<string, DebtorDTO & { syncStatus?: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED' }>()
 
   for (const debtor of serverDebtors) {
     if (matchesDebtorFilters(debtor, filters)) {
@@ -196,7 +316,7 @@ const syncPendingDebtors = async () => {
   isSyncingDebtors = true
 
   const retryable = await db.debtors
-    .filter((debtor) => debtor.syncStatus === 'PENDING' || debtor.syncStatus === 'FAILED')
+    .filter((debtor) => debtor.syncStatus !== 'SYNCED')
     .toArray()
 
   try {
@@ -225,7 +345,7 @@ const syncPendingDebtorPayments = async () => {
   isSyncingDebtorPayments = true
 
   const retryable = await db.debtorPayments
-    .filter((payment) => payment.syncStatus === 'PENDING' || payment.syncStatus === 'FAILED')
+    .filter((payment) => payment.syncStatus !== 'SYNCED')
     .sortBy('createdAt')
 
   try {
@@ -305,7 +425,22 @@ export const usePaymentHistory = (debtorId: string) => {
 export const useDebtorStatement = (debtorId: string) => {
   return useQuery({
     queryKey: [...debtorKeys.detail(debtorId), 'statement'],
-    queryFn: () => debtorsApi.getStatement(debtorId),
+    queryFn: async () => {
+      const debtor = await db.debtors.get(debtorId)
+      const hasUnsyncedChanges = await hasLocalUnsyncedStatementChanges(debtorId)
+      const shouldUseLocal =
+        !isNetworkReachable() || hasUnsyncedChanges || (debtor && debtor.syncStatus !== 'SYNCED')
+
+      if (shouldUseLocal) {
+        return buildLocalStatement(debtorId)
+      }
+
+      try {
+        return await debtorsApi.getStatement(debtorId)
+      } catch {
+        return buildLocalStatement(debtorId)
+      }
+    },
     enabled: !!debtorId,
   })
 }
@@ -318,6 +453,20 @@ export const useCreateDebtor = () => {
       const debtor = toCreateDebtorPayload({ ...input, id: uuidv4() })
       const timestamp = new Date().toISOString()
 
+      if (isNetworkReachable()) {
+        try {
+          const created = await debtorsApi.create(debtor)
+          await db.debtors.put({
+            ...created,
+            syncStatus: 'SYNCED',
+            updatedAt: new Date().toISOString(),
+          })
+          return created
+        } catch {
+          // fall back to offline save so trader can keep working
+        }
+      }
+
       await db.debtors.add({
         ...debtor,
         totalPaid: 0,
@@ -327,10 +476,6 @@ export const useCreateDebtor = () => {
         updatedAt: timestamp,
         syncStatus: 'PENDING',
       })
-
-      if (isNetworkReachable()) {
-        void syncEngine.syncIfQueueThresholdReached()
-      }
 
       return debtor
     },
@@ -353,7 +498,44 @@ export const useRecordPayment = (debtorId: string) => {
         throw new Error('Debtor not found locally')
       }
 
-      const localUpdatedDebtor = applyLocalPaymentToDebtor(debtor, payment)
+      const canAttemptServer =
+        isNetworkReachable() && (typeof navigator === 'undefined' || navigator.onLine)
+
+      if (canAttemptServer) {
+        try {
+          const updatedDebtor = await debtorsApi.recordPayment(
+            debtorId,
+            toRecordPaymentPayload(payment)
+          )
+
+          await db.transaction('rw', db.debtors, db.debtorPayments, async () => {
+            await db.debtorPayments.add({
+              id: uuidv4(),
+              debtorId,
+              amount: payment.amount,
+              paidAt: payment.paidAt,
+              note: payment.note,
+              createdAt: new Date().toISOString(),
+              syncStatus: 'SYNCED',
+            })
+            await db.debtors.put({
+              ...updatedDebtor,
+              syncStatus: 'SYNCED',
+              updatedAt: new Date().toISOString(),
+            })
+          })
+
+          return {
+            ...updatedDebtor,
+            syncStatus: 'SYNCED' as const,
+            updatedAt: new Date().toISOString(),
+          }
+        } catch {
+          // fall back to offline queue so operation does not block trader
+        }
+      }
+
+      const localUpdatedDebtor = applyLocalPaymentToDebtor(debtor, payment, 'PENDING')
       const queuedPayment = {
         id: uuidv4(),
         debtorId,
@@ -369,15 +551,12 @@ export const useRecordPayment = (debtorId: string) => {
         await db.debtors.put(localUpdatedDebtor)
       })
 
-      if (isNetworkReachable()) {
-        void syncEngine.syncIfQueueThresholdReached()
-      }
-
       return localUpdatedDebtor
     },
     onSuccess: async (updatedDebtor) => {
       queryClient.setQueryData(debtorKeys.detail(debtorId), updatedDebtor)
       queryClient.invalidateQueries({ queryKey: debtorKeys.payments(debtorId) })
+      queryClient.invalidateQueries({ queryKey: [...debtorKeys.detail(debtorId), 'statement'] })
       queryClient.invalidateQueries({ queryKey: debtorKeys.lists() })
       queryClient.invalidateQueries({ queryKey: dashboardKeys.overview() })
     },

@@ -40,7 +40,7 @@ export declare const debtorsService: {
         totals: {
             totalSalesOnCredit: number;
             totalPayments: number;
-            balance: any;
+            balance: number;
         };
     }>;
     getDebtor(id: string, traderId: string): Promise<any>;

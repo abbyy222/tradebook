@@ -128,7 +128,10 @@ export const salesService = {
     }
 
     if (normalizedInput.stockItemId) {
-      await stockRepository.adjustQuantity(normalizedInput.stockItemId, traderId, -normalizedInput.quantity)
+      await stockRepository.adjustQuantity(normalizedInput.stockItemId, traderId, {
+        delta: -normalizedInput.quantity,
+        reason: 'sale_adjustment',
+      })
     }
 
     if (normalizedInput.paymentType === 'DEBT' && normalizedInput.debtorId) {

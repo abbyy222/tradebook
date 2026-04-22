@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { db, type LocalExpense } from '@/db'
 import { expensesApi } from '@/api/expenses.api'
 import { isNetworkReachable } from '@/services/networkHealth'
+import { getInitialSyncStatus } from '@/services/syncStatus'
 import { syncEngine } from '@/services/syncEngine'
 import type {
   CreateExpenseDTO,
@@ -166,7 +167,7 @@ const listExpensesFromDexie = async (
 
 const syncPendingExpenses = async () => {
   const retryable = await db.expenses
-    .filter((expense) => expense.syncStatus === 'PENDING' || expense.syncStatus === 'FAILED')
+    .filter((expense) => expense.syncStatus !== 'SYNCED')
     .toArray()
 
   if (retryable.length === 0) return
@@ -204,11 +205,19 @@ const syncPendingExpenses = async () => {
 const storeServerExpenses = async (expenses: ExpenseDTO[]) => {
   if (expenses.length === 0) return
 
-  const rows: LocalExpense[] = expenses.map((expense) => ({
-    ...normalizeExpenseRecord(expense),
-    syncStatus: expense.syncStatus ?? 'SYNCED',
-  }))
+  const localProtected = await db.expenses
+    .filter((expense) => expense.syncStatus !== 'SYNCED')
+    .primaryKeys()
+  const protectedIds = new Set(localProtected as string[])
 
+  const rows: LocalExpense[] = expenses
+    .filter((expense) => !protectedIds.has(expense.id))
+    .map((expense) => ({
+      ...normalizeExpenseRecord(expense),
+      syncStatus: expense.syncStatus ?? 'SYNCED',
+    }))
+
+  if (rows.length === 0) return
   await db.expenses.bulkPut(rows)
 }
 
@@ -280,7 +289,7 @@ export const useCreateExpense = () => {
       const normalized = normalizeExpenseRecord({ ...input, id })
       const localExpense: LocalExpense = {
         ...normalized,
-        syncStatus: 'PENDING',
+        syncStatus: getInitialSyncStatus(),
         createdAt: new Date().toISOString(),
       }
 

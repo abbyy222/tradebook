@@ -5,6 +5,7 @@ import {
   platformAdminBusinessesQuerySchema,
   platformAdminBusinessActionLogQuerySchema,
   platformAdminRangeQuerySchema,
+  platformBusinessRepairSchema,
   platformBusinessStatusUpdateSchema,
 } from './platformAdmin.schema'
 import { platformAdminService } from './platformAdmin.service'
@@ -39,6 +40,21 @@ platformAdminRouter.patch('/businesses/:id/status', async (req: Request, res: Re
     const result = await platformAdminService.updateBusinessStatus({
       traderId,
       accountStatus: input.accountStatus,
+      reason: input.reason,
+      actorInternalUserId: req.internalUser!.internalUserId,
+    })
+    res.status(200).json(result)
+  } catch (err) {
+    next(err)
+  }
+})
+
+platformAdminRouter.post('/businesses/:id/repair', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const traderId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    const input = platformBusinessRepairSchema.parse(req.body ?? {})
+    const result = await platformAdminService.repairBusinessSync({
+      traderId,
       reason: input.reason,
       actorInternalUserId: req.internalUser!.internalUserId,
     })

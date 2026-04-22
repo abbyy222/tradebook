@@ -24,6 +24,12 @@ const debtorSelect = {
   updatedAt: true,
 } satisfies Prisma.DebtorSelect
 
+const computeDebtorStatus = (totalOwed: number, totalPaid: number) => {
+  if (totalPaid >= totalOwed - 0.01) return 'CLEARED'
+  if (totalPaid > 0) return 'PARTIAL'
+  return 'ACTIVE'
+}
+
 export const debtorsRepository = {
 
   async upsert(traderId: string, data: CreateDebtorInput) {
@@ -233,11 +239,32 @@ export const debtorsRepository = {
   },
 
   async getStatement(debtorId: string, traderId: string) {
-    const debtor = await prisma.debtor.findFirst({
+    let debtor = await prisma.debtor.findFirst({
       where: { id: debtorId, traderId },
       select: debtorSelect,
     })
     if (!debtor) return null
+
+    const paymentsAggregate = await prisma.payment.aggregate({
+      where: { debtorId },
+      _sum: { amount: true },
+    })
+
+    const storedTotalPaid = Number(debtor.totalPaid)
+    const recomputedTotalPaid = Number(paymentsAggregate._sum.amount ?? 0)
+    const needsReconciliation = Math.abs(storedTotalPaid - recomputedTotalPaid) > 0.01
+
+    if (needsReconciliation) {
+      const totalOwed = Number(debtor.totalOwed)
+      debtor = await prisma.debtor.update({
+        where: { id: debtorId },
+        data: {
+          totalPaid: new Prisma.Decimal(recomputedTotalPaid),
+          status: computeDebtorStatus(totalOwed, recomputedTotalPaid),
+        },
+        select: debtorSelect,
+      })
+    }
 
     const [sales, payments] = await Promise.all([
       prisma.sale.findMany({
@@ -262,7 +289,7 @@ export const debtorsRepository = {
       }),
     ])
 
-    return { debtor, sales, payments }
+    return { debtor, sales, payments, reconciled: needsReconciliation }
   },
 
   async updateSchedule(debtorId: string, traderId: string, input: UpdateDebtorScheduleInput) {

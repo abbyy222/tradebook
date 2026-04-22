@@ -6,6 +6,7 @@ import { debtorsApi } from '@/api/debtors.api'
 import { savingsApi } from '@/api/savings.api'
 import { suppliersApi } from '@/api/suppliers.api'
 import { isNetworkReachable } from '@/services/networkHealth'
+import { isQueueSyncStatus, isRetryableSyncStatus } from '@/services/syncStatus'
 
 const BATCH_SIZE = 50
 const SYNC_QUEUE_THRESHOLD = 10
@@ -38,9 +39,9 @@ class SyncEngine {
   private nextAllowedSyncAt = 0
   private scheduledThresholdSync: ReturnType<typeof setTimeout> | null = null
 
-  async syncAll() {
+  private async syncAllInternal(options?: { bypassCooldown?: boolean }) {
     if (this.isSyncing) return
-    if (Date.now() < this.nextAllowedSyncAt) return
+    if (!options?.bypassCooldown && Date.now() < this.nextAllowedSyncAt) return
     this.isSyncing = true
 
     try {
@@ -58,13 +59,40 @@ class SyncEngine {
     }
   }
 
+  async syncAll() {
+    await this.syncAllInternal()
+  }
+
+  async handleReconnect() {
+    if (!isNetworkReachable()) return
+
+    // Debtors are intentionally non-queued:
+    // offline saves should sync immediately once network returns.
+    await this.syncDebtorPipeline()
+
+    await this.promoteOfflineSavedRecordsToQueued()
+
+    const queueCount = await this.getQueueRecordCount()
+    if (queueCount >= SYNC_QUEUE_THRESHOLD) {
+      if (this.scheduledThresholdSync) {
+        clearTimeout(this.scheduledThresholdSync)
+        this.scheduledThresholdSync = null
+      }
+      this.nextAllowedSyncAt = 0
+      await this.syncAllInternal({ bypassCooldown: true })
+      return
+    }
+
+    // Keep under-threshold records as QUEUED and locked locally.
+  }
+
   async syncIfQueueThresholdReached() {
     if (!isNetworkReachable()) return false
     if (this.isSyncing) return false
     if (this.scheduledThresholdSync) return false
     if (Date.now() < this.nextAllowedSyncAt) return false
 
-    const queued = await this.getQueuedRecordCount()
+    const queued = await this.getQueueRecordCount()
     if (queued < SYNC_QUEUE_THRESHOLD) return false
 
     const jitterMs = this.getRandomInt(SYNC_JITTER_MIN_MS, SYNC_JITTER_MAX_MS)
@@ -76,23 +104,34 @@ class SyncEngine {
     return true
   }
 
-  private async getQueuedRecordCount() {
+  private async getQueueRecordCount() {
     const [sales, expenses, stockItems, stockAdjustments, debtors, debtorPayments, savings, suppliers] = await Promise.all([
-      db.sales.filter((row) => row.syncStatus === 'PENDING' || row.syncStatus === 'FAILED').count(),
-      db.expenses.filter((row) => row.syncStatus === 'PENDING' || row.syncStatus === 'FAILED').count(),
-      db.stockItems.filter((row) => row.syncStatus === 'PENDING' || row.syncStatus === 'FAILED').count(),
-      db.stockAdjustments.filter((row) => row.syncStatus === 'PENDING' || row.syncStatus === 'FAILED').count(),
-      db.debtors.filter((row) => row.syncStatus === 'PENDING' || row.syncStatus === 'FAILED').count(),
-      db.debtorPayments.filter((row) => row.syncStatus === 'PENDING' || row.syncStatus === 'FAILED').count(),
-      db.savings.filter((row) => row.syncStatus === 'PENDING' || row.syncStatus === 'FAILED').count(),
-      db.suppliers.filter((row) => row.syncStatus === 'PENDING' || row.syncStatus === 'FAILED').count(),
+      db.sales.filter((row) => isQueueSyncStatus(row.syncStatus)).count(),
+      db.expenses.filter((row) => isQueueSyncStatus(row.syncStatus)).count(),
+      db.stockItems.filter((row) => isQueueSyncStatus(row.syncStatus)).count(),
+      db.stockAdjustments.filter((row) => isQueueSyncStatus(row.syncStatus)).count(),
+      db.debtors.filter((row) => isQueueSyncStatus(row.syncStatus)).count(),
+      db.debtorPayments.filter((row) => isQueueSyncStatus(row.syncStatus)).count(),
+      db.savings.filter((row) => isQueueSyncStatus(row.syncStatus)).count(),
+      db.suppliers.filter((row) => isQueueSyncStatus(row.syncStatus)).count(),
     ])
 
     return sales + expenses + stockItems + stockAdjustments + debtors + debtorPayments + savings + suppliers
   }
 
+  private async promoteOfflineSavedRecordsToQueued() {
+    await Promise.all([
+      db.sales.filter((row) => row.syncStatus === 'PENDING').modify({ syncStatus: 'QUEUED' }),
+      db.expenses.filter((row) => row.syncStatus === 'PENDING').modify({ syncStatus: 'QUEUED' }),
+      db.stockItems.filter((row) => row.syncStatus === 'PENDING').modify({ syncStatus: 'QUEUED' }),
+      db.stockAdjustments.filter((row) => row.syncStatus === 'PENDING').modify({ syncStatus: 'QUEUED' }),
+      db.savings.filter((row) => row.syncStatus === 'PENDING').modify({ syncStatus: 'QUEUED' }),
+      db.suppliers.filter((row) => row.syncStatus === 'PENDING').modify({ syncStatus: 'QUEUED' }),
+    ])
+  }
+
   private async syncSales() {
-    const retryable = await db.sales.filter((sale) => sale.syncStatus === 'PENDING' || sale.syncStatus === 'FAILED').toArray()
+    const retryable = await db.sales.filter((sale) => isRetryableSyncStatus(sale.syncStatus)).toArray()
     if (retryable.length === 0) return
 
     const capped = retryable.slice(0, BATCH_SIZE * MAX_BATCHES_PER_ENTITY_PER_CYCLE)
@@ -128,7 +167,7 @@ class SyncEngine {
   }
 
   private async syncExpenses() {
-    const retryable = await db.expenses.filter((expense) => expense.syncStatus === 'PENDING' || expense.syncStatus === 'FAILED').toArray()
+    const retryable = await db.expenses.filter((expense) => isRetryableSyncStatus(expense.syncStatus)).toArray()
     if (retryable.length === 0) return
 
     const capped = retryable.slice(0, BATCH_SIZE * MAX_BATCHES_PER_ENTITY_PER_CYCLE)
@@ -176,7 +215,7 @@ class SyncEngine {
 
   private async syncStockItems() {
     const retryable = await db.stockItems
-      .filter((item) => item.syncStatus === 'PENDING' || item.syncStatus === 'FAILED')
+      .filter((item) => isRetryableSyncStatus(item.syncStatus))
       .toArray()
 
     if (retryable.length === 0) return
@@ -207,7 +246,7 @@ class SyncEngine {
   }
 
   private async syncDebtors() {
-    const retryable = await db.debtors.filter((debtor) => debtor.syncStatus === 'PENDING' || debtor.syncStatus === 'FAILED').toArray()
+    const retryable = await db.debtors.filter((debtor) => isRetryableSyncStatus(debtor.syncStatus)).toArray()
     if (retryable.length === 0) return
 
     for (const debtor of retryable.slice(0, MAX_SINGLE_RECORDS_PER_ENTITY_PER_CYCLE)) {
@@ -228,7 +267,7 @@ class SyncEngine {
   }
 
   private async syncDebtorPayments() {
-    const retryable = await db.debtorPayments.filter((payment) => payment.syncStatus === 'PENDING' || payment.syncStatus === 'FAILED').sortBy('createdAt')
+    const retryable = await db.debtorPayments.filter((payment) => isRetryableSyncStatus(payment.syncStatus)).sortBy('createdAt')
     if (retryable.length === 0) return
 
     for (const payment of retryable.slice(0, MAX_SINGLE_RECORDS_PER_ENTITY_PER_CYCLE)) {
@@ -250,12 +289,18 @@ class SyncEngine {
   }
 
   private async syncStockAdjustments() {
-    const pending = await db.stockAdjustments.where('syncStatus').equals('PENDING').sortBy('createdAt')
+    const pending = await db.stockAdjustments.filter((adjustment) => isRetryableSyncStatus(adjustment.syncStatus)).sortBy('createdAt')
     if (pending.length === 0) return
 
     for (const adjustment of pending.slice(0, MAX_SINGLE_RECORDS_PER_ENTITY_PER_CYCLE)) {
       try {
-        const updated = await stockApi.adjust(adjustment.stockItemId, adjustment.delta, adjustment.reason)
+        const updated = await stockApi.adjust(adjustment.stockItemId, {
+          delta: adjustment.delta,
+          reason: adjustment.reason,
+          unitPrice: adjustment.unitPrice,
+          costPrice: adjustment.costPrice,
+          lowStockThreshold: adjustment.lowStockThreshold,
+        })
         await db.transaction('rw', db.stockItems, db.stockAdjustments, async () => {
           await db.stockItems.put({ ...updated, syncStatus: 'SYNCED' })
           await db.stockAdjustments.update(adjustment.id, { syncStatus: 'SYNCED' })
@@ -267,7 +312,7 @@ class SyncEngine {
   }
 
   private async syncSavings() {
-    const retryable = await db.savings.filter((entry) => entry.syncStatus === 'PENDING' || entry.syncStatus === 'FAILED').toArray()
+    const retryable = await db.savings.filter((entry) => isRetryableSyncStatus(entry.syncStatus)).toArray()
     if (retryable.length === 0) return
 
     for (const entry of retryable.slice(0, MAX_SINGLE_RECORDS_PER_ENTITY_PER_CYCLE)) {
@@ -290,7 +335,7 @@ class SyncEngine {
   }
 
   private async syncSuppliers() {
-    const retryable = await db.suppliers.filter((supplier) => supplier.syncStatus === 'PENDING' || supplier.syncStatus === 'FAILED').toArray()
+    const retryable = await db.suppliers.filter((supplier) => isRetryableSyncStatus(supplier.syncStatus)).toArray()
     if (retryable.length === 0) return
 
     for (const supplier of retryable.slice(0, MAX_SINGLE_RECORDS_PER_ENTITY_PER_CYCLE)) {
@@ -330,11 +375,11 @@ export const syncEngine = new SyncEngine()
 
 export const initSyncEngine = () => {
   window.addEventListener('online', () => {
-    console.log('Back online - checking queue threshold...')
-    void syncEngine.syncIfQueueThresholdReached()
+    console.log('Back online - promoting offline records to queue...')
+    void syncEngine.handleReconnect()
   })
 
   if (isNetworkReachable()) {
-    void syncEngine.syncIfQueueThresholdReached()
+    void syncEngine.handleReconnect()
   }
 }

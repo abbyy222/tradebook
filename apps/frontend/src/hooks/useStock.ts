@@ -4,6 +4,7 @@ import { db, type LocalStockItem } from '@/db'
 import { stockApi } from '@/api/stock.api'
 import { dashboardKeys } from '@/hooks/useDashboard'
 import { isNetworkReachable } from '@/services/networkHealth'
+import { getInitialSyncStatus } from '@/services/syncStatus'
 import { syncEngine } from '@/services/syncEngine'
 import type {
   CreateStockItemDTO,
@@ -131,11 +132,35 @@ const listStockFromDexie = async (
 const storeServerStockItems = async (items: StockItemDTO[]) => {
   if (items.length === 0) return
 
-  const rows: LocalStockItem[] = items.map((item) => ({
-    ...normalizeStockItem(item),
-    syncStatus: 'SYNCED',
-  }))
+  const [locallyUnsyncedStockIds, locallyAdjustedStockIds] = await Promise.all([
+    db.stockItems
+      .filter((item) => item.syncStatus !== 'SYNCED')
+      .primaryKeys(),
+    db.stockAdjustments
+      .filter((adjustment) => adjustment.syncStatus !== 'SYNCED')
+      .toArray(),
+  ])
+  const existingItems = await db.stockItems.toArray()
+  const existingById = new Map(existingItems.map((item) => [item.id, item]))
 
+  const protectedIds = new Set<string>([
+    ...(locallyUnsyncedStockIds as string[]),
+    ...locallyAdjustedStockIds.map((adjustment) => adjustment.stockItemId),
+  ])
+
+  const rows: LocalStockItem[] = items
+    .filter((serverItem) => {
+      if (protectedIds.has(serverItem.id)) return false
+      const local = existingById.get(serverItem.id)
+      if (!local) return true
+      return new Date(local.updatedAt).getTime() <= new Date(serverItem.updatedAt).getTime()
+    })
+    .map((item) => ({
+      ...normalizeStockItem(item),
+      syncStatus: 'SYNCED',
+    }))
+
+  if (rows.length === 0) return
   await db.stockItems.bulkPut(rows)
 }
 
@@ -184,7 +209,7 @@ const syncPendingStockItems = async () => {
   isSyncingStockItems = true
 
   const retryable = await db.stockItems
-    .filter((item) => item.syncStatus === 'PENDING' || item.syncStatus === 'FAILED')
+    .filter((item) => item.syncStatus !== 'SYNCED')
     .toArray()
 
   if (retryable.length === 0) {
@@ -222,7 +247,7 @@ const syncPendingStockAdjustments = async () => {
   isSyncingStockAdjustments = true
 
   const retryable = await db.stockAdjustments
-    .filter((adjustment) => adjustment.syncStatus === 'PENDING' || adjustment.syncStatus === 'FAILED')
+    .filter((adjustment) => adjustment.syncStatus !== 'SYNCED')
     .sortBy('createdAt')
 
   if (retryable.length === 0) {
@@ -233,7 +258,13 @@ const syncPendingStockAdjustments = async () => {
   try {
     for (const adjustment of retryable) {
       try {
-        const synced = await stockApi.adjust(adjustment.stockItemId, adjustment.delta, adjustment.reason)
+        const synced = await stockApi.adjust(adjustment.stockItemId, {
+          delta: adjustment.delta,
+          reason: adjustment.reason,
+          unitPrice: adjustment.unitPrice,
+          costPrice: adjustment.costPrice,
+          lowStockThreshold: adjustment.lowStockThreshold,
+        })
 
         await db.transaction('rw', db.stockItems, db.stockAdjustments, async () => {
           await db.stockItems.put({
@@ -251,23 +282,36 @@ const syncPendingStockAdjustments = async () => {
   }
 }
 
-const applyLocalStockDelta = async (stockItemId: string, delta: number) => {
+const applyLocalStockDelta = async (
+  stockItemId: string,
+  input: { delta: number; unitPrice?: number; costPrice?: number; lowStockThreshold?: number },
+) => {
   const item = await db.stockItems.get(stockItemId)
 
   if (!item) {
     throw new Error('Stock item not found')
   }
 
-  const nextQuantity = item.quantity + delta
+  const nextQuantity = item.quantity + input.delta
   if (nextQuantity < 0) {
     throw new Error('Insufficient stock for this adjustment')
   }
 
   const updatedAt = new Date().toISOString()
-  const metrics = computeStockMetrics({ ...item, quantity: nextQuantity })
+  const nextUnitPrice = input.unitPrice ?? item.unitPrice
+  const nextCostPrice = input.costPrice ?? item.costPrice
+  const metrics = computeStockMetrics({
+    ...item,
+    quantity: nextQuantity,
+    unitPrice: nextUnitPrice,
+    costPrice: nextCostPrice,
+  })
 
   await db.stockItems.update(stockItemId, {
     quantity: nextQuantity,
+    unitPrice: nextUnitPrice,
+    costPrice: nextCostPrice,
+    ...(input.lowStockThreshold != null ? { lowStockThreshold: input.lowStockThreshold } : {}),
     updatedAt,
     ...metrics,
   })
@@ -319,7 +363,7 @@ export const useCreateStockItem = () => {
       await db.stockItems.add({
         ...item,
         ...metrics,
-        syncStatus: 'PENDING',
+        syncStatus: getInitialSyncStatus(),
         updatedAt: timestamp,
       })
 
@@ -331,7 +375,7 @@ export const useCreateStockItem = () => {
         ...item,
         ...metrics,
         updatedAt: timestamp,
-        syncStatus: 'PENDING',
+        syncStatus: getInitialSyncStatus(),
       })
     },
     onSuccess: (createdItem) => {
@@ -350,19 +394,25 @@ export const useAdjustStock = () => {
       stockItemId: string
       delta: number
       reason: StockAdjustmentReason
+      unitPrice?: number
+      costPrice?: number
+      lowStockThreshold?: number
     }) => {
       const adjustmentId = uuidv4()
       const createdAt = new Date().toISOString()
 
       await db.transaction('rw', db.stockItems, db.stockAdjustments, async () => {
-        await applyLocalStockDelta(input.stockItemId, input.delta)
+        await applyLocalStockDelta(input.stockItemId, input)
         await db.stockAdjustments.add({
           id: adjustmentId,
           stockItemId: input.stockItemId,
           delta: input.delta,
           reason: input.reason,
+          unitPrice: input.unitPrice,
+          costPrice: input.costPrice,
+          lowStockThreshold: input.lowStockThreshold,
           createdAt,
-          syncStatus: 'PENDING',
+          syncStatus: getInitialSyncStatus(),
         })
       })
 

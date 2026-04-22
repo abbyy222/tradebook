@@ -4,6 +4,7 @@ import type {
   PlatformBusinessAccountStatus,
   PlatformBusinessActionLogsDTO,
   PlatformBusinessesDirectoryDTO,
+  PlatformForceResyncResultDTO,
   PlatformBusinessActivityStatus,
 } from '@tradebook/shared-types'
 
@@ -35,6 +36,18 @@ export const platformAdminApi = {
   },
   businessActions: async (params: { page?: number; pageSize?: number; traderId?: string }) => {
     const res = await internalApiClient.get<{ data: PlatformBusinessActionLogsDTO }>('/platform-admin/business-actions', { params })
+    return res.data.data
+  },
+  repairBusinessSync: async (traderId: string, input: { reason: string }) => {
+    const res = await internalApiClient.post<{
+      data: {
+        traderId: string
+        reason: string
+        actorInternalUserId: string
+        repairedAt: string
+        requeue: PlatformForceResyncResultDTO
+      }
+    }>(`/platform-admin/businesses/${traderId}/repair`, input)
     return res.data.data
   },
 }

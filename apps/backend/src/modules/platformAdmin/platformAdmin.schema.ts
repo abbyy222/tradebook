@@ -25,6 +25,10 @@ export const platformBusinessStatusUpdateSchema = z.object({
   reason: z.string().trim().min(3).max(240),
 })
 
+export const platformBusinessRepairSchema = z.object({
+  reason: z.string().trim().min(3).max(240).default('Support-triggered sync repair'),
+})
+
 export const platformAdminBusinessActionLogQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(5).max(50).default(10),
@@ -33,4 +37,5 @@ export const platformAdminBusinessActionLogQuerySchema = z.object({
 
 export type BusinessAccountStatus = z.infer<typeof businessAccountStatusSchema>
 export type PlatformBusinessStatusUpdateInput = z.infer<typeof platformBusinessStatusUpdateSchema>
+export type PlatformBusinessRepairInput = z.infer<typeof platformBusinessRepairSchema>
 export type PlatformAdminBusinessActionLogQuery = z.infer<typeof platformAdminBusinessActionLogQuerySchema>

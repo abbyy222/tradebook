@@ -73,13 +73,33 @@ const reasonLabels: Record<Exclude<StockAdjustmentReason, 'sale_adjustment'>, st
 const AdjustStockSheet = ({ item, onClose }: { item: StockItemDTO; onClose: () => void }) => {
   const [quantity, setQuantity] = useState('')
   const [reason, setReason] = useState<Exclude<StockAdjustmentReason, 'sale_adjustment'>>('restock')
+  const [unitPrice, setUnitPrice] = useState(String(item.unitPrice))
+  const [costPrice, setCostPrice] = useState(String(item.costPrice))
+  const [lowStockThreshold, setLowStockThreshold] = useState(String(item.lowStockThreshold))
   const adjustStock = useAdjustStock()
   const isReduction = reason === 'damage'
+  const parsedUnitPrice = Number.parseFloat(unitPrice)
+  const parsedCostPrice = Number.parseFloat(costPrice)
+  const parsedThreshold = Number.parseInt(lowStockThreshold, 10)
 
   const submit = () => {
     const amount = parseInt(quantity, 10)
     if (!amount || amount <= 0) return
-    adjustStock.mutate({ stockItemId: item.id, delta: isReduction ? -amount : amount, reason }, { onSuccess: onClose })
+    if (!Number.isFinite(parsedUnitPrice) || parsedUnitPrice <= 0) return
+    if (!Number.isFinite(parsedCostPrice) || parsedCostPrice < 0) return
+    if (!Number.isFinite(parsedThreshold) || parsedThreshold < 0) return
+
+    adjustStock.mutate(
+      {
+        stockItemId: item.id,
+        delta: isReduction ? -amount : amount,
+        reason,
+        unitPrice: parsedUnitPrice,
+        costPrice: parsedCostPrice,
+        lowStockThreshold: parsedThreshold,
+      },
+      { onSuccess: onClose },
+    )
   }
 
   return (
@@ -89,7 +109,12 @@ const AdjustStockSheet = ({ item, onClose }: { item: StockItemDTO; onClose: () =
         <div><h2 className="font-display font-bold" style={{ fontSize: '1.5rem', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>Adjust stock</h2><p className="font-body text-sm mt-1" style={{ color: 'rgba(245,237,224,0.4)' }}>{item.itemName} currently has <span style={{ color: '#e8a838' }}>{item.quantity}</span> units.</p></div>
         <div className="flex flex-col gap-2"><label className="label-base">Reason</label><div className="grid grid-cols-3 gap-2">{(Object.entries(reasonLabels) as Array<[Exclude<StockAdjustmentReason, 'sale_adjustment'>, string]>).map(([value, label]) => <button key={value} onClick={() => setReason(value)} className="rounded-xl px-3 py-3 font-ui font-bold text-xs" style={{ background: reason === value ? 'rgba(232,168,56,0.12)' : '#231510', color: reason === value ? '#f0bc5a' : 'rgba(245,237,224,0.5)', border: `1px solid ${reason === value ? 'rgba(232,168,56,0.28)' : 'rgba(255,255,255,0.06)'}` }}>{label}</button>)}</div><p className="font-body text-xs" style={{ color: 'rgba(245,237,224,0.3)' }}>Sales should reduce stock automatically. Use this for restocking, damage, or manual correction.</p></div>
         <div className="flex flex-col gap-2"><label className="label-base">{isReduction ? 'Quantity to remove' : 'Quantity to add'}</label><input type="number" inputMode="numeric" placeholder="0" value={quantity} onChange={e => setQuantity(e.target.value)} className="input-base" /></div>
-        <button onClick={submit} disabled={!quantity || parseInt(quantity, 10) <= 0 || adjustStock.isPending} className="btn-primary">{adjustStock.isPending ? <span className="rounded-full border-2 border-white/30 border-t-white" style={{ width: 20, height: 20, animation: 'spin 0.7s linear infinite' }} /> : 'Save adjustment'}</button>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-2"><label className="label-base">Selling price (N)</label><input type="number" inputMode="decimal" placeholder="0" value={unitPrice} onChange={e => setUnitPrice(e.target.value)} className="input-base" /></div>
+          <div className="flex flex-col gap-2"><label className="label-base">Cost price (N)</label><input type="number" inputMode="decimal" placeholder="0" value={costPrice} onChange={e => setCostPrice(e.target.value)} className="input-base" /></div>
+        </div>
+        <div className="flex flex-col gap-2"><label className="label-base">Low stock alert at</label><input type="number" inputMode="numeric" placeholder="5" value={lowStockThreshold} onChange={e => setLowStockThreshold(e.target.value)} className="input-base" /></div>
+        <button onClick={submit} disabled={!quantity || parseInt(quantity, 10) <= 0 || !Number.isFinite(parsedUnitPrice) || parsedUnitPrice <= 0 || !Number.isFinite(parsedCostPrice) || parsedCostPrice < 0 || !Number.isFinite(parsedThreshold) || parsedThreshold < 0 || adjustStock.isPending} className="btn-primary">{adjustStock.isPending ? <span className="rounded-full border-2 border-white/30 border-t-white" style={{ width: 20, height: 20, animation: 'spin 0.7s linear infinite' }} /> : 'Save adjustment'}</button>
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { savingsApi } from '@/api/savings.api'
 import { db, type LocalSavingsEntry } from '@/db'
 import { isNetworkReachable } from '@/services/networkHealth'
+import { getInitialSyncStatus } from '@/services/syncStatus'
 import { syncEngine } from '@/services/syncEngine'
 import type { CursorPaginatedResponse, SavingsEntryDTO } from '@tradebook/shared-types'
 
@@ -44,11 +45,19 @@ const listSavingsFromDexie = async (filters: { from?: string; to?: string }, cur
 const storeServerSavings = async (entries: SavingsEntryDTO[]) => {
   if (entries.length === 0) return
 
-  const rows: LocalSavingsEntry[] = entries.map((entry) => ({
-    ...entry,
-    syncStatus: 'SYNCED',
-  }))
+  const localProtected = await db.savings
+    .filter((entry) => entry.syncStatus !== 'SYNCED')
+    .primaryKeys()
+  const protectedIds = new Set(localProtected as string[])
 
+  const rows: LocalSavingsEntry[] = entries
+    .filter((entry) => !protectedIds.has(entry.id))
+    .map((entry) => ({
+      ...entry,
+      syncStatus: 'SYNCED',
+    }))
+
+  if (rows.length === 0) return
   await db.savings.bulkPut(rows)
 }
 
@@ -59,6 +68,19 @@ const getTodayBounds = () => {
   to.setDate(to.getDate() + 1)
   to.setMilliseconds(to.getMilliseconds() - 1)
   return { from, to }
+}
+
+const getUnsyncedTodayTotal = async (from: Date, to: Date) => {
+  const unsyncedToday = await db.savings
+    .filter((entry) => {
+      if (entry.syncStatus === 'SYNCED') return false
+      const at = new Date(entry.savedAt).getTime()
+      if (Number.isNaN(at)) return false
+      return at >= from.getTime() && at <= to.getTime()
+    })
+    .toArray()
+
+  return unsyncedToday.reduce((sum, entry) => sum + entry.amount, 0)
 }
 
 export const useSavingsEntries = (filters: { from?: string; to?: string } = {}) => {
@@ -89,16 +111,23 @@ export const useSavingsTodaySummary = () => {
   return useQuery({
     queryKey: savingsKeys.todaySummary(),
     queryFn: async () => {
+      const { from, to } = getTodayBounds()
+
       if (isNetworkReachable()) {
         try {
           const summary = await savingsApi.getTodaySummary()
+          const unsyncedLocalTotal = await getUnsyncedTodayTotal(from, to)
           return summary
+            ? {
+                ...summary,
+                total: summary.total + unsyncedLocalTotal,
+              }
+            : summary
         } catch {
           // fallback to local summary
         }
       }
 
-      const { from, to } = getTodayBounds()
       const entries = await db.savings.toArray()
       const total = entries.reduce((sum, entry) => {
         const at = new Date(entry.savedAt).getTime()
@@ -132,7 +161,7 @@ export const useCreateSavingsEntry = () => {
         savedAt: input.savedAt,
         note: input.note,
         createdAt: new Date().toISOString(),
-        syncStatus: 'PENDING',
+        syncStatus: getInitialSyncStatus(),
       }
 
       await db.savings.put(localEntry)

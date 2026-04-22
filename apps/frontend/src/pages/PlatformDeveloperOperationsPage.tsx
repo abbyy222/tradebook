@@ -10,6 +10,7 @@ import { useInternalAuthStore } from '@/stores/internalAuthStore'
 import type { PlatformModuleKey } from '@tradebook/shared-types'
 
 const MODULES: PlatformModuleKey[] = ['SALES', 'EXPENSES', 'STOCK', 'DEBTORS', 'SAVINGS', 'SUPPLIERS', 'CUSTOMERS']
+const QUICK_REPAIR_MODULES: PlatformModuleKey[] = ['SALES', 'EXPENSES', 'STOCK', 'DEBTORS', 'SAVINGS', 'SUPPLIERS']
 
 const labelForModule = (module: PlatformModuleKey) => {
   switch (module) {
@@ -168,6 +169,21 @@ export const PlatformDeveloperOperationsPage = () => {
                   </div>
                   <p className="mt-1 text-xs text-secondary">failed {row.failedRecords} | pending {row.pendingRecords} | overdue {row.overdueDebtors}</p>
                   <p className="mt-1 break-all text-[11px] text-secondary">traderId: {row.traderId}</p>
+                  <div className="mt-2">
+                    <button
+                      onClick={async () => {
+                        const result = await forceResync.mutateAsync({
+                          traderId: row.traderId,
+                          modules: QUICK_REPAIR_MODULES,
+                        })
+                        window.alert(`Developer repair queued ${result.totalRequeued} failed records for ${row.businessLabel}.`)
+                      }}
+                      disabled={forceResync.isPending}
+                      className="rounded-full border border-[rgba(117,133,200,0.35)] bg-[rgba(117,133,200,0.1)] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#9fb0ff] disabled:opacity-60"
+                    >
+                      {forceResync.isPending ? 'Repairing...' : 'Repair Tenant'}
+                    </button>
+                  </div>
                 </div>
               ))
             )}
