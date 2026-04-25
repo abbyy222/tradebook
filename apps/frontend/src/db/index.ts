@@ -96,3 +96,9 @@ class TradeBookDB extends Dexie {
 }
 
 export const db = new TradeBookDB()
+
+export const clearLocalAppData = async () => {
+  for (const table of db.tables) {
+    await table.clear()
+  }
+}

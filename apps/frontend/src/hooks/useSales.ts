@@ -138,9 +138,15 @@ const syncPendingSales = async () => {
   const retryable = await db.sales.filter((sale) => sale.syncStatus !== 'SYNCED').toArray()
   if (retryable.length === 0) return
 
-  const payload: CreateSaleDTO[] = retryable.map((sale) => {
+  await db.transaction('rw', db.sales, async () => {
+    for (const sale of retryable) {
+      await db.sales.update(sale.id, { syncStatus: 'QUEUED' })
+    }
+  })
+
+  for (const sale of retryable) {
     const normalized = normalizeSale(sale as any)
-    return {
+    const payload: CreateSaleDTO = {
       id: normalized.id,
       itemName: normalized.itemName,
       stockItemId: normalized.stockItemId,
@@ -151,15 +157,14 @@ const syncPendingSales = async () => {
       debtorId: normalized.debtorId,
       soldAt: normalized.soldAt,
     }
-  })
 
-  await salesApi.syncBatch(payload)
-
-  await db.transaction('rw', db.sales, async () => {
-    for (const sale of retryable) {
+    try {
+      await salesApi.sync(payload)
       await db.sales.update(sale.id, { syncStatus: 'SYNCED' })
+    } catch {
+      await db.sales.update(sale.id, { syncStatus: 'FAILED' })
     }
-  })
+  }
 }
 
 const storeServerSales = async (sales: SaleDTO[]) => {

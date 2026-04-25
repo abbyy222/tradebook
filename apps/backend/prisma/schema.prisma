@@ -72,6 +72,12 @@ enum ExpenseFrequency {
   YEARLY
 }
 
+enum SavingsTargetPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
 model Trader {
   id             String      @id @default(uuid())
   phoneNumber    String      @unique @map("phone_number")
@@ -79,6 +85,14 @@ model Trader {
   pinHash        String      @map("pin_hash")
   language       Language    @default(EN)
   businessName   String?     @map("business_name")
+  savingsTargetAmount Decimal? @db.Decimal(12, 2) @map("savings_target_amount")
+  savingsTargetPeriod SavingsTargetPeriod? @map("savings_target_period")
+  savingsTargetUpdatedAt DateTime? @map("savings_target_updated_at")
+  savingsBankName String? @map("savings_bank_name")
+  savingsBankCode String? @map("savings_bank_code")
+  savingsAccountNumber String? @map("savings_account_number")
+  savingsAccountName String? @map("savings_account_name")
+  savingsAccountSetupAt DateTime? @map("savings_account_setup_at")
   role           TraderRole  @default(OWNER)
   ownerTraderId  String?     @map("owner_trader_id")
   createdAt      DateTime    @default(now()) @map("created_at")
@@ -152,6 +166,12 @@ model SavingsEntry {
   createdByTraderId String   @map("created_by_trader_id")
   amount            Decimal  @db.Decimal(12, 2)
   note              String?
+  status            String   @default("DECLARED")
+  reconciledAt      DateTime? @map("reconciled_at")
+  verifiedAt        DateTime? @map("verified_at")
+  verificationReference String? @map("verification_reference")
+  verificationTransferId String? @map("verification_transfer_id")
+  verificationLastStatus String? @map("verification_last_status")
   savedAt           DateTime @map("saved_at")
   createdAt         DateTime @default(now()) @map("created_at")
 

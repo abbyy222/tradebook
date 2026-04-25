@@ -14,6 +14,9 @@ exports.createStockItemSchema = zod_1.z.object({
 exports.adjustStockSchema = zod_1.z.object({
     delta: zod_1.z.number().int().refine(val => val !== 0, 'Delta cannot be zero'),
     reason: zod_1.z.enum(['restock', 'sale_adjustment', 'damage', 'correction']),
+    unitPrice: zod_1.z.number().positive().multipleOf(0.01).optional(),
+    costPrice: zod_1.z.number().nonnegative().multipleOf(0.01).optional(),
+    lowStockThreshold: zod_1.z.number().int().min(0).optional(),
 });
 exports.updateStockItemSchema = zod_1.z.object({
     itemName: zod_1.z.string().min(1).max(200).trim().optional(),

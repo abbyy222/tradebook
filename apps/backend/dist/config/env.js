@@ -20,6 +20,19 @@ const envSchema = zod_1.z.object({
     PLATFORM_SEED_DEV_NAME: zod_1.z.string().min(2, 'PLATFORM_SEED_DEV_NAME is required').optional(),
     FRONTEND_URL: zod_1.z.string().default('http://localhost:5173'),
     FRONTEND_URLS: zod_1.z.string().optional(),
+    BACKEND_PUBLIC_URL: zod_1.z.string().optional(),
+    BREVO_API_KEY: zod_1.z.string().min(1, 'BREVO_API_KEY is required'),
+    BREVO_SENDER_EMAIL: zod_1.z.email('BREVO_SENDER_EMAIL must be a valid email address'),
+    BREVO_SENDER_NAME: zod_1.z.string().min(2, 'BREVO_SENDER_NAME is required'),
+    FEEDBACK_ADMIN_EMAIL: zod_1.z.email('FEEDBACK_ADMIN_EMAIL must be a valid email address'),
+    FEEDBACK_DEV_EMAIL: zod_1.z.email('FEEDBACK_DEV_EMAIL must be a valid email address'),
+    SAVINGS_PAYOUT_PROVIDER: zod_1.z.enum(['DIRECT', 'PROXY']).default('DIRECT'),
+    SAVINGS_PAYOUT_SERVICE_URL: zod_1.z.string().optional(),
+    SAVINGS_PAYOUT_SERVICE_TOKEN: zod_1.z.string().optional(),
+    SAVINGS_PAYOUT_CALLBACK_SECRET: zod_1.z.string().optional(),
+    FLW_SECRET_KEY: zod_1.z.string().min(1, 'FLW_SECRET_KEY is required').optional(),
+    FLW_WEBHOOK_SECRET: zod_1.z.string().min(8, 'FLW_WEBHOOK_SECRET must be at least 8 characters').optional(),
+    FLW_BASE_URL: zod_1.z.string().default('https://api.flutterwave.com'),
 });
 const parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {

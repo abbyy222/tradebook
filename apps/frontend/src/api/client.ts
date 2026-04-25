@@ -5,6 +5,7 @@ import axios from 'axios'
 import env from '@/config/env'
 import { useAuthStore } from '@/stores/authStore'
 import { isNetworkReachable, markNetworkFailure, markNetworkSuccess } from '@/services/networkHealth'
+import { resetTraderSession } from '@/utils/resetTraderSession'
 
 let hasAuthRedirected = false
 
@@ -52,10 +53,11 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       if (!hasAuthRedirected) {
         hasAuthRedirected = true
-        useAuthStore.getState().logout()
-        if (window.location.pathname !== '/login') {
-          window.location.replace('/login')
-        }
+        void resetTraderSession().finally(() => {
+          if (window.location.pathname !== '/login') {
+            window.location.replace('/login')
+          }
+        })
       }
     }
     return Promise.reject(error)

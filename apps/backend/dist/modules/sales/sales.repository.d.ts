@@ -1,6 +1,19 @@
 import { CreateSaleInput, ListSalesQuery } from './sales.schema';
 import { Prisma } from '@prisma/client';
 export declare const salesRepository: {
+    createWithInventoryEffects(traderId: string, data: CreateSaleInput): Promise<{
+        id: string;
+        createdAt: Date;
+        debtorId: string | null;
+        stockItemId: string | null;
+        itemName: string;
+        quantity: number;
+        unitPrice: Prisma.Decimal;
+        amount: Prisma.Decimal;
+        paymentType: import(".prisma/client").$Enums.PaymentType;
+        syncStatus: import(".prisma/client").$Enums.SyncStatus;
+        soldAt: Date;
+    }>;
     create(traderId: string, data: CreateSaleInput): Promise<{
         id: string;
         createdAt: Date;

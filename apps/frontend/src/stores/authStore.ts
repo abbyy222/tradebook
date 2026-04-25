@@ -29,11 +29,7 @@ export const useAuthStore = create<AuthState>()(
       login: (token, trader) =>
         set({ token, trader, isAuthenticated: true }),
 
-      logout: () => {
-        // Clear local DB on logout so a different trader
-        // can't see the previous trader's data on shared phones
-        set({ token: null, trader: null, isAuthenticated: false })
-      },
+      logout: () => set({ token: null, trader: null, isAuthenticated: false }),
     }),
     {
       name: 'tradebook-auth', // localStorage key

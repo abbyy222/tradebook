@@ -6,13 +6,23 @@ const savingsSelect = {
   id: true,
   amount: true,
   note: true,
+  status: true,
+  reconciledAt: true,
+  verifiedAt: true,
   savedAt: true,
   createdByTraderId: true,
   createdAt: true,
 } satisfies Prisma.SavingsEntrySelect
 
 export const savingsRepository = {
-  async upsert(traderId: string, actorId: string, input: CreateSavingsEntryInput) {
+  async upsert(
+    traderId: string,
+    actorId: string,
+    input: CreateSavingsEntryInput,
+    status: 'DECLARED' | 'RECONCILED',
+  ) {
+    const reconciledAt = status === 'RECONCILED' ? new Date() : null
+
     return prisma.savingsEntry.upsert({
       where: { id: input.id },
       create: {
@@ -21,11 +31,17 @@ export const savingsRepository = {
         createdByTraderId: actorId,
         amount: new Prisma.Decimal(input.amount),
         note: input.note?.trim() || null,
+        status,
+        reconciledAt,
+        verifiedAt: null,
         savedAt: new Date(input.savedAt),
       },
       update: {
         amount: new Prisma.Decimal(input.amount),
         note: input.note?.trim() || null,
+        status,
+        reconciledAt,
+        verifiedAt: null,
         savedAt: new Date(input.savedAt),
       },
       select: savingsSelect,
@@ -64,12 +80,27 @@ export const savingsRepository = {
     return { entries, nextCursor, hasNextPage }
   },
 
-  async update(id: string, traderId: string, input: UpdateSavingsEntryInput) {
+  async findById(id: string, traderId: string) {
+    return prisma.savingsEntry.findFirst({
+      where: { id, traderId },
+      select: savingsSelect,
+    })
+  },
+
+  async update(
+    id: string,
+    traderId: string,
+    input: UpdateSavingsEntryInput,
+    status: 'DECLARED' | 'RECONCILED',
+  ) {
     return prisma.savingsEntry.updateMany({
       where: { id, traderId },
       data: {
         amount: new Prisma.Decimal(input.amount),
         note: input.note?.trim() || null,
+        status,
+        reconciledAt: status === 'RECONCILED' ? new Date() : null,
+        verifiedAt: null,
         savedAt: new Date(input.savedAt),
       },
     })
@@ -89,5 +120,183 @@ export const savingsRepository = {
     })
 
     return Number(result._sum.amount ?? 0)
+  },
+
+  async getTotalForPeriod(traderId: string, from: Date, to: Date) {
+    const result = await prisma.savingsEntry.aggregate({
+      where: {
+        traderId,
+        savedAt: { gte: from, lte: to },
+      },
+      _sum: { amount: true },
+    })
+
+    return Number(result._sum.amount ?? 0)
+  },
+
+  async getSavingsTarget(traderId: string) {
+    const rows = await prisma.$queryRaw<
+      Array<{
+        amount: Prisma.Decimal | null
+        period: string | null
+        updatedAt: Date | null
+      }>
+    >`
+      SELECT
+        savings_target_amount as "amount",
+        savings_target_period as "period",
+        savings_target_updated_at as "updatedAt"
+      FROM traders
+      WHERE id = ${traderId}
+      LIMIT 1
+    `
+
+    const row = rows[0]
+    if (!row?.amount || !row.period || !row.updatedAt) return null
+
+    return {
+      amount: Number(row.amount),
+      period: row.period as 'DAILY' | 'WEEKLY' | 'MONTHLY',
+      updatedAt: row.updatedAt,
+    }
+  },
+
+  async updateSavingsTarget(
+    traderId: string,
+    input: { amount: number; period: 'DAILY' | 'WEEKLY' | 'MONTHLY' }
+  ) {
+    await prisma.$executeRaw`
+      UPDATE traders
+      SET
+        savings_target_amount = ${new Prisma.Decimal(input.amount)},
+        savings_target_period = ${input.period},
+        savings_target_updated_at = NOW()
+      WHERE id = ${traderId}
+    `
+
+    return this.getSavingsTarget(traderId)
+  },
+
+  async getSavingsAccount(traderId: string) {
+    const rows = await prisma.$queryRaw<
+      Array<{
+        bankName: string | null
+        bankCode: string | null
+        accountNumber: string | null
+        accountName: string | null
+        setupAt: Date | null
+      }>
+    >`
+      SELECT
+        savings_bank_name as "bankName",
+        savings_bank_code as "bankCode",
+        savings_account_number as "accountNumber",
+        savings_account_name as "accountName",
+        savings_account_setup_at as "setupAt"
+      FROM traders
+      WHERE id = ${traderId}
+      LIMIT 1
+    `
+
+    const row = rows[0]
+    if (!row?.bankName || !row.accountNumber || !row.accountName || !row.setupAt) return null
+
+    return row
+  },
+
+  async upsertSavingsAccount(
+    traderId: string,
+    input: { bankName: string; bankCode: string; accountNumber: string; accountName: string },
+  ) {
+    await prisma.$executeRaw`
+      UPDATE traders
+      SET
+        savings_bank_name = ${input.bankName.trim()},
+        savings_bank_code = ${input.bankCode.trim()},
+        savings_account_number = ${input.accountNumber.trim()},
+        savings_account_name = ${input.accountName.trim()},
+        savings_account_setup_at = COALESCE(savings_account_setup_at, NOW())
+      WHERE id = ${traderId}
+    `
+
+    return this.getSavingsAccount(traderId)
+  },
+
+  async getReconciliationInputs(traderId: string, upTo: Date, excludeSavingsEntryId?: string) {
+    const [sales, debtorPayments, expenses, savedAlready] = await Promise.all([
+      prisma.sale.aggregate({
+        where: {
+          traderId,
+          soldAt: { lte: upTo },
+          paymentType: { in: ['CASH', 'TRANSFER'] },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.payment.aggregate({
+        where: {
+          debtor: { traderId },
+          paidAt: { lte: upTo },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.expense.aggregate({
+        where: {
+          traderId,
+          spentAt: { lte: upTo },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.savingsEntry.aggregate({
+        where: {
+          traderId,
+          savedAt: { lte: upTo },
+          ...(excludeSavingsEntryId ? { NOT: { id: excludeSavingsEntryId } } : {}),
+        },
+        _sum: { amount: true },
+      }),
+    ])
+
+    return {
+      inflowTotal: Number(sales._sum.amount ?? 0) + Number(debtorPayments._sum.amount ?? 0),
+      expenseTotal: Number(expenses._sum.amount ?? 0),
+      savingsAlreadyRecorded: Number(savedAlready._sum.amount ?? 0),
+    }
+  },
+
+  async markVerificationInitiated(
+    id: string,
+    traderId: string,
+    input: { reference: string; transferId: string | null; status: string },
+  ) {
+    return prisma.savingsEntry.updateMany({
+      where: { id, traderId },
+      data: {
+        verificationReference: input.reference,
+        verificationTransferId: input.transferId,
+        verificationLastStatus: input.status,
+      },
+    })
+  },
+
+  async markVerifiedByReference(reference: string, transferId: string | null, status: string) {
+    return prisma.savingsEntry.updateMany({
+      where: { verificationReference: reference },
+      data: {
+        status: 'VERIFIED',
+        verifiedAt: new Date(),
+        verificationTransferId: transferId,
+        verificationLastStatus: status,
+      },
+    })
+  },
+
+  async markVerificationStatusByReference(reference: string, transferId: string | null, status: string) {
+    return prisma.savingsEntry.updateMany({
+      where: { verificationReference: reference },
+      data: {
+        verificationTransferId: transferId,
+        verificationLastStatus: status,
+      },
+    })
   },
 }

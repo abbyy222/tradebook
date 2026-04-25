@@ -5,13 +5,23 @@ import { db, type LocalSavingsEntry } from '@/db'
 import { isNetworkReachable } from '@/services/networkHealth'
 import { getInitialSyncStatus } from '@/services/syncStatus'
 import { syncEngine } from '@/services/syncEngine'
-import type { CursorPaginatedResponse, SavingsEntryDTO } from '@tradebook/shared-types'
+import type {
+  CreateSavingsEntryDTO,
+  CursorPaginatedResponse,
+  SavingsEntryDTO,
+  UpdateSavingsAccountDestinationDTO,
+  UpdateSavingsTargetDTO,
+} from '@tradebook/shared-types'
 
 export const savingsKeys = {
   all: ['savings'] as const,
   lists: () => [...savingsKeys.all, 'list'] as const,
   list: (filters: object) => [...savingsKeys.lists(), filters] as const,
   todaySummary: () => [...savingsKeys.all, 'today-summary'] as const,
+  target: () => [...savingsKeys.all, 'target'] as const,
+  account: () => [...savingsKeys.all, 'account'] as const,
+  banks: () => [...savingsKeys.all, 'banks'] as const,
+  verificationPreview: (id: string) => [...savingsKeys.all, 'verification-preview', id] as const,
 }
 
 const SAVINGS_PAGE_SIZE = 20
@@ -149,17 +159,98 @@ export const useSavingsTodaySummary = () => {
   })
 }
 
+export const useSavingsTargetProgress = () => {
+  return useQuery({
+    queryKey: savingsKeys.target(),
+    queryFn: () => savingsApi.getTargetProgress(),
+    staleTime: 120_000,
+  })
+}
+
+export const useSavingsAccount = () => {
+  return useQuery({
+    queryKey: savingsKeys.account(),
+    queryFn: () => savingsApi.getAccount(),
+    staleTime: 120_000,
+  })
+}
+
+export const useSavingsBanks = () => {
+  return useQuery({
+    queryKey: savingsKeys.banks(),
+    queryFn: () => savingsApi.listBanks(),
+    staleTime: 1000 * 60 * 60 * 24,
+  })
+}
+
+export const useUpdateSavingsTarget = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: UpdateSavingsTargetDTO) => savingsApi.updateTarget(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: savingsKeys.target() })
+    },
+  })
+}
+
+export const useUpdateSavingsAccount = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: UpdateSavingsAccountDestinationDTO) => savingsApi.updateAccount(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: savingsKeys.account() })
+    },
+  })
+}
+
+export const useResolveSavingsAccount = () => {
+  return useMutation({
+    mutationFn: savingsApi.resolveAccount,
+  })
+}
+
+export const useSavingsVerificationPreview = () => {
+  return useMutation({
+    mutationFn: (id: string) => savingsApi.getVerificationPreview(id),
+  })
+}
+
+export const useInitiateSavingsVerification = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => savingsApi.initiateVerification(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: savingsKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: savingsKeys.todaySummary() })
+      queryClient.invalidateQueries({ queryKey: savingsKeys.target() })
+    },
+  })
+}
+
 export const useCreateSavingsEntry = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: Omit<SavingsEntryDTO, 'id' | 'createdAt' | 'createdByTraderId'>) => {
+    mutationFn: async (input: Omit<CreateSavingsEntryDTO, 'id'>) => {
       const id = uuidv4()
+      const payload: CreateSavingsEntryDTO = {
+        id,
+        amount: input.amount,
+        savedAt: input.savedAt,
+        note: input.note,
+      }
+
       const localEntry: LocalSavingsEntry = {
         id,
         amount: input.amount,
         savedAt: input.savedAt,
         note: input.note,
+        status: 'DECLARED',
+        reconciledAt: null,
+        verifiedAt: null,
         createdAt: new Date().toISOString(),
         syncStatus: getInitialSyncStatus(),
       }
@@ -167,7 +258,18 @@ export const useCreateSavingsEntry = () => {
       await db.savings.put(localEntry)
 
       if (isNetworkReachable()) {
-        void syncEngine.syncIfQueueThresholdReached()
+        try {
+          const synced = await savingsApi.sync(payload)
+          const syncedEntry: LocalSavingsEntry = {
+            ...synced,
+            syncStatus: 'SYNCED',
+          }
+
+          await db.savings.put(syncedEntry)
+          return syncedEntry
+        } catch {
+          void syncEngine.syncIfQueueThresholdReached()
+        }
       }
 
       return localEntry
@@ -175,6 +277,7 @@ export const useCreateSavingsEntry = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: savingsKeys.lists() })
       queryClient.invalidateQueries({ queryKey: savingsKeys.todaySummary() })
+      queryClient.invalidateQueries({ queryKey: savingsKeys.target() })
     },
   })
 }

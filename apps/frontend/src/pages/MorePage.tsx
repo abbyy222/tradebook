@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ONBOARDING_STORAGE_KEY } from '@/components/OnboardingQuest'
 import { authApi } from '@/api/auth.api'
 import { useAuthStore } from '@/stores/authStore'
+import { resetTraderSession } from '@/utils/resetTraderSession'
 
 const tools = [
   { title: 'Savings', desc: 'Track daily savings and totals', to: '/savings' },
@@ -11,7 +12,6 @@ const tools = [
 
 export const MorePage = () => {
   const trader = useAuthStore((state) => state.trader)
-  const logout = useAuthStore((state) => state.logout)
   const navigate = useNavigate()
   const isOwner = trader?.role !== 'SALESPERSON'
 
@@ -26,7 +26,7 @@ export const MorePage = () => {
     } catch {
       // keep logout resilient
     } finally {
-      logout()
+      await resetTraderSession()
       navigate('/login', { replace: true })
     }
   }

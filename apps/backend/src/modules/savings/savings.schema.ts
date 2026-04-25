@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+const SAVINGS_TARGET_PERIODS = ['DAILY', 'WEEKLY', 'MONTHLY'] as const
+
 export const createSavingsEntrySchema = z.object({
   id: z.string().uuid(),
   amount: z.number().positive().multipleOf(0.01),
@@ -20,6 +22,25 @@ export const updateSavingsEntrySchema = z.object({
   note: z.string().max(300).optional(),
 })
 
+export const updateSavingsTargetSchema = z.object({
+  amount: z.number().positive().multipleOf(0.01),
+  period: z.enum(SAVINGS_TARGET_PERIODS),
+})
+
+export const updateSavingsAccountSchema = z.object({
+  bankName: z.string().trim().min(2).max(80),
+  bankCode: z.string().trim().min(2).max(20),
+  accountNumber: z.string().trim().regex(/^\d{10,20}$/, 'Account number must be 10 to 20 digits'),
+  accountName: z.string().trim().min(2).max(120),
+})
+
+export const resolveSavingsAccountSchema = z.object({
+  bankCode: z.string().trim().min(2).max(20),
+  accountNumber: z.string().trim().regex(/^\d{10,20}$/, 'Account number must be 10 to 20 digits'),
+})
+
 export type CreateSavingsEntryInput = z.infer<typeof createSavingsEntrySchema>
 export type ListSavingsEntriesQuery = z.infer<typeof listSavingsEntriesQuerySchema>
 export type UpdateSavingsEntryInput = z.infer<typeof updateSavingsEntrySchema>
+export type UpdateSavingsTargetInput = z.infer<typeof updateSavingsTargetSchema>
+export type UpdateSavingsAccountInput = z.infer<typeof updateSavingsAccountSchema>

@@ -7,6 +7,7 @@ import { APP_NAV_ITEMS } from '@/components/AppNavigation'
 import { OnboardingQuest, ONBOARDING_STORAGE_KEY } from '@/components/OnboardingQuest'
 import { FeedbackWidget } from '@/components/FeedbackWidget'
 import { authApi } from '@/api/auth.api'
+import { resetTraderSession } from '@/utils/resetTraderSession'
 
 const TeamIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -26,7 +27,6 @@ const LogoutIcon = () => (
 export const AppLayout = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const trader = useAuthStore((state) => state.trader)
-  const logout = useAuthStore((state) => state.logout)
   const navigate = useNavigate()
   const [questOpen, setQuestOpen] = useState(false)
 
@@ -59,7 +59,7 @@ export const AppLayout = () => {
     } catch {
       // keep logout resilient even if network fails
     } finally {
-      logout()
+      await resetTraderSession()
       navigate('/login', { replace: true })
     }
   }

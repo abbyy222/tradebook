@@ -34,6 +34,66 @@ const saleSelect = {
 } satisfies Prisma.SaleSelect
 
 export const salesRepository = {
+  async createWithInventoryEffects(traderId: string, data: CreateSaleInput) {
+    return prisma.$transaction(async (tx) => {
+      if (data.stockItemId) {
+        const stockUpdate = await tx.stockItem.updateMany({
+          where: {
+            id: data.stockItemId,
+            traderId,
+            quantity: { gte: data.quantity },
+          },
+          data: {
+            quantity: { decrement: data.quantity },
+            syncStatus: 'SYNCED',
+          },
+        })
+
+        if (stockUpdate.count === 0) {
+          const currentStock = await tx.stockItem.findFirst({
+            where: { id: data.stockItemId, traderId },
+            select: { quantity: true },
+          })
+
+          throw new Error(`INSUFFICIENT_STOCK:${currentStock?.quantity ?? 0}:${data.quantity}`)
+        }
+      }
+
+      const sale = await tx.sale.create({
+        data: {
+          id: data.id,
+          traderId,
+          stockItemId: data.stockItemId ?? null,
+          itemName: data.itemName,
+          quantity: data.quantity,
+          unitPrice: new Prisma.Decimal(data.unitPrice),
+          amount: new Prisma.Decimal(data.amount),
+          paymentType: data.paymentType,
+          debtorId: data.debtorId ?? null,
+          syncStatus: 'SYNCED',
+          soldAt: new Date(data.soldAt),
+        },
+        select: saleSelect,
+      })
+
+      if (data.paymentType === 'DEBT' && data.debtorId) {
+        const debtorUpdate = await tx.debtor.updateMany({
+          where: { id: data.debtorId, traderId },
+          data: {
+            totalOwed: { increment: new Prisma.Decimal(data.amount) },
+            status: 'ACTIVE',
+          },
+        })
+
+        if (debtorUpdate.count === 0) {
+          throw new Error('DEBTOR_NOT_FOUND')
+        }
+      }
+
+      return sale
+    })
+  },
+
   async create(traderId: string, data: CreateSaleInput) {
     return prisma.sale.create({
       data: {

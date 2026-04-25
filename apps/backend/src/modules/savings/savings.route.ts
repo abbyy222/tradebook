@@ -3,12 +3,44 @@ import { authenticate } from '../../middleware/authenticate'
 import {
   createSavingsEntrySchema,
   listSavingsEntriesQuerySchema,
+  resolveSavingsAccountSchema,
+  updateSavingsAccountSchema,
+  updateSavingsTargetSchema,
   updateSavingsEntrySchema,
 } from './savings.schema'
 import { savingsService } from './savings.service'
 import { enforceModuleWritable } from '../../middleware/enforceModuleWritable'
 
 export const savingsRouter = Router()
+
+savingsRouter.post('/provider/callback', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const providedSecret =
+      (req.headers['x-tradebook-payout-secret'] as string | undefined) ??
+      (req.headers['x-provider-callback-secret'] as string | undefined) ??
+      null
+
+    const result = await savingsService.handleGatewayCallback(req.body, providedSecret)
+    res.status(200).json({ data: result, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+savingsRouter.post('/flutterwave/webhook', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const providedSecret =
+      (req.headers['verif-hash'] as string | undefined) ??
+      (req.headers['flutterwave-signature'] as string | undefined) ??
+      null
+
+    const result = await savingsService.handleFlutterwaveWebhook(req.body, providedSecret)
+    res.status(200).json({ data: result, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
 savingsRouter.use(authenticate)
 
 savingsRouter.post('/sync', enforceModuleWritable('SAVINGS'), async (req: Request, res: Response, next: NextFunction) => {
@@ -40,6 +72,83 @@ savingsRouter.get('/summary/today', async (req: Request, res: Response, next: Ne
   try {
     const summary = await savingsService.summaryToday(req.trader!.traderId)
     res.status(200).json({ data: summary, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+savingsRouter.get('/target', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const target = await savingsService.getTargetProgress(req.trader!.traderId)
+    res.status(200).json({ data: target, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+savingsRouter.get('/account', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const account = await savingsService.getSavingsAccount(req.trader!.traderId)
+    res.status(200).json({ data: account, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+savingsRouter.get('/banks', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const banks = await savingsService.listBanks()
+    res.status(200).json({ data: banks, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+savingsRouter.post('/account/resolve', enforceModuleWritable('SAVINGS'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = resolveSavingsAccountSchema.parse(req.body)
+    const result = await savingsService.resolveSavingsAccount(input)
+    res.status(200).json({ data: result, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+savingsRouter.patch('/account', enforceModuleWritable('SAVINGS'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = updateSavingsAccountSchema.parse(req.body)
+    const account = await savingsService.updateSavingsAccount(req.trader!.traderId, req.trader!.role, input)
+    res.status(200).json({ data: account, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+savingsRouter.post('/:id/verify', enforceModuleWritable('SAVINGS'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    const preview = await savingsService.getVerificationPreview(id, req.trader!.traderId, req.trader!.role)
+    res.status(200).json({ data: preview, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+savingsRouter.post('/:id/verify/initiate', enforceModuleWritable('SAVINGS'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    const result = await savingsService.initiateVerification(id, req.trader!.traderId, req.trader!.role)
+    res.status(200).json({ data: result, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+savingsRouter.patch('/target', enforceModuleWritable('SAVINGS'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = updateSavingsTargetSchema.parse(req.body)
+    const target = await savingsService.updateTarget(req.trader!.traderId, req.trader!.role, input)
+    res.status(200).json({ data: target, error: null })
   } catch (err) {
     next(err)
   }

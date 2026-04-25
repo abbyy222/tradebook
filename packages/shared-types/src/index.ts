@@ -241,13 +241,90 @@ export interface CreateSavingsEntryDTO {
   note?: string
 }
 
+export type SavingsVerificationStatus = 'DECLARED' | 'RECONCILED' | 'VERIFIED'
+
 export interface SavingsEntryDTO {
   id: string
   amount: number
   savedAt: string
   note?: string
+  status: SavingsVerificationStatus
+  reconciledAt?: string | null
+  verifiedAt?: string | null
   createdByTraderId: string
   createdAt: string
+}
+
+export interface SavingsAccountDestinationDTO {
+  bankName: string
+  bankCode: string
+  accountNumber: string
+  accountName: string
+  setupAt: string
+}
+
+export interface UpdateSavingsAccountDestinationDTO {
+  bankName: string
+  bankCode: string
+  accountNumber: string
+  accountName: string
+}
+
+export interface SavingsVerificationPreviewDTO {
+  entry: SavingsEntryDTO
+  destination: SavingsAccountDestinationDTO
+  canProceed: boolean
+  mode: 'PREVIEW'
+  message: string
+}
+
+export interface SavingsBankDTO {
+  id: number | string
+  code: string
+  name: string
+}
+
+export interface ResolveSavingsAccountDTO {
+  bankCode: string
+  accountNumber: string
+}
+
+export interface ResolvedSavingsAccountDTO {
+  accountName: string
+}
+
+export interface SavingsTransferInitiationDTO {
+  entry: SavingsEntryDTO
+  reference: string
+  transferId: string | null
+  status: 'PENDING'
+  message: string
+}
+
+export type SavingsTargetPeriod = 'DAILY' | 'WEEKLY' | 'MONTHLY'
+
+export interface SavingsTargetDTO {
+  amount: number
+  period: SavingsTargetPeriod
+  updatedAt: string
+}
+
+export interface UpdateSavingsTargetDTO {
+  amount: number
+  period: SavingsTargetPeriod
+}
+
+export interface SavingsTargetProgressDTO {
+  target: SavingsTargetDTO | null
+  currentSaved: number
+  remaining: number
+  progressPercent: number
+  isCompleted: boolean
+  period: {
+    label: 'Today' | 'This week' | 'This month'
+    from: string
+    to: string
+  } | null
 }
 
 export interface CreateCustomerDTO {

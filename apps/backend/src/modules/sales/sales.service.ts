@@ -115,27 +115,33 @@ export const salesService = {
 
     let sale
     try {
-      sale = await salesRepository.create(traderId, normalizedInput)
+      sale = await salesRepository.createWithInventoryEffects(traderId, normalizedInput)
     } catch (error) {
       const isDuplicateSale = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
-      if (!isDuplicateSale) throw error
+      if (!isDuplicateSale) {
+        const message = error instanceof Error ? error.message : ''
+
+        if (message.startsWith('INSUFFICIENT_STOCK:')) {
+          const [, available = '0', requested = String(normalizedInput.quantity)] = message.split(':')
+          throw new AppError(
+            'Stock conflict. Available on server: ' + available + ', requested offline sale: ' + requested,
+            409,
+            'STOCK_CONFLICT'
+          )
+        }
+
+        if (message === 'DEBTOR_NOT_FOUND') {
+          throw new AppError('Debtor not found', 404, 'NOT_FOUND')
+        }
+
+        throw error
+      }
 
       const alreadySynced = await salesRepository.findById(normalizedInput.id, traderId)
       if (!alreadySynced) {
         throw new AppError('Sale already exists but could not be loaded', 409, 'SALE_DUPLICATE')
       }
       return toSaleDTO(alreadySynced)
-    }
-
-    if (normalizedInput.stockItemId) {
-      await stockRepository.adjustQuantity(normalizedInput.stockItemId, traderId, {
-        delta: -normalizedInput.quantity,
-        reason: 'sale_adjustment',
-      })
-    }
-
-    if (normalizedInput.paymentType === 'DEBT' && normalizedInput.debtorId) {
-      await debtorsRepository.incrementOwed(normalizedInput.debtorId, normalizedInput.amount)
     }
 
     return toSaleDTO(sale)

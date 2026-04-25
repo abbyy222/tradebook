@@ -11,7 +11,7 @@ import { env } from '../config/env'
 export const logger = winston.createLogger({
   level: env.NODE_ENV === 'production' ? 'info' : 'debug',
   format: env.NODE_ENV === 'production'
-    ? winston.format.json()                        // machines read this
+    ? winston.format.json()// machines read this
     : winston.format.combine(
         winston.format.colorize(),
         winston.format.printf(({ level, message, ...meta }) => {

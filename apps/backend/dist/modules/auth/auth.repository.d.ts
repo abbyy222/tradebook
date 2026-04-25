@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { CreateSalespersonInput, RegisterInput } from './auth.schema';
 export declare const authRepository: {
     findByPhone(phoneNumber: string): Promise<{
@@ -7,6 +8,14 @@ export declare const authRepository: {
         businessName: string | null;
         id: string;
         pinHash: string;
+        savingsTargetAmount: Prisma.Decimal | null;
+        savingsTargetPeriod: import(".prisma/client").$Enums.SavingsTargetPeriod | null;
+        savingsTargetUpdatedAt: Date | null;
+        savingsBankName: string | null;
+        savingsBankCode: string | null;
+        savingsAccountNumber: string | null;
+        savingsAccountName: string | null;
+        savingsAccountSetupAt: Date | null;
         role: import(".prisma/client").$Enums.TraderRole;
         ownerTraderId: string | null;
         createdAt: Date;
@@ -21,6 +30,14 @@ export declare const authRepository: {
         businessName: string | null;
         id: string;
         pinHash: string;
+        savingsTargetAmount: Prisma.Decimal | null;
+        savingsTargetPeriod: import(".prisma/client").$Enums.SavingsTargetPeriod | null;
+        savingsTargetUpdatedAt: Date | null;
+        savingsBankName: string | null;
+        savingsBankCode: string | null;
+        savingsAccountNumber: string | null;
+        savingsAccountName: string | null;
+        savingsAccountSetupAt: Date | null;
         role: import(".prisma/client").$Enums.TraderRole;
         ownerTraderId: string | null;
         createdAt: Date;
@@ -33,6 +50,14 @@ export declare const authRepository: {
         businessName: string | null;
         id: string;
         pinHash: string;
+        savingsTargetAmount: Prisma.Decimal | null;
+        savingsTargetPeriod: import(".prisma/client").$Enums.SavingsTargetPeriod | null;
+        savingsTargetUpdatedAt: Date | null;
+        savingsBankName: string | null;
+        savingsBankCode: string | null;
+        savingsAccountNumber: string | null;
+        savingsAccountName: string | null;
+        savingsAccountSetupAt: Date | null;
         role: import(".prisma/client").$Enums.TraderRole;
         ownerTraderId: string | null;
         createdAt: Date;
@@ -47,6 +72,14 @@ export declare const authRepository: {
         businessName: string | null;
         id: string;
         pinHash: string;
+        savingsTargetAmount: Prisma.Decimal | null;
+        savingsTargetPeriod: import(".prisma/client").$Enums.SavingsTargetPeriod | null;
+        savingsTargetUpdatedAt: Date | null;
+        savingsBankName: string | null;
+        savingsBankCode: string | null;
+        savingsAccountNumber: string | null;
+        savingsAccountName: string | null;
+        savingsAccountSetupAt: Date | null;
         role: import(".prisma/client").$Enums.TraderRole;
         ownerTraderId: string | null;
         createdAt: Date;
@@ -59,6 +92,14 @@ export declare const authRepository: {
         businessName: string | null;
         id: string;
         pinHash: string;
+        savingsTargetAmount: Prisma.Decimal | null;
+        savingsTargetPeriod: import(".prisma/client").$Enums.SavingsTargetPeriod | null;
+        savingsTargetUpdatedAt: Date | null;
+        savingsBankName: string | null;
+        savingsBankCode: string | null;
+        savingsAccountNumber: string | null;
+        savingsAccountName: string | null;
+        savingsAccountSetupAt: Date | null;
         role: import(".prisma/client").$Enums.TraderRole;
         ownerTraderId: string | null;
         createdAt: Date;

@@ -29,6 +29,7 @@ const suppliers_route_1 = require("./modules/suppliers/suppliers.route");
 const internalAuth_route_1 = require("./modules/internalAuth/internalAuth.route");
 const platformAdmin_route_1 = require("./modules/platformAdmin/platformAdmin.route");
 const platformDev_route_1 = require("./modules/platformDev/platformDev.route");
+const feedback_route_1 = require("./modules/feedback/feedback.route");
 const app = (0, express_1.default)();
 exports.app = app;
 // Render/Netlify sit behind a reverse proxy. Trusting the first proxy
@@ -116,6 +117,7 @@ app.use('/api/v1/suppliers', suppliers_route_1.suppliersRouter);
 app.use('/api/v1/internal-auth', internalAuth_route_1.internalAuthRouter);
 app.use('/api/v1/platform-admin', platformAdmin_route_1.platformAdminRouter);
 app.use('/api/v1/platform-dev', platformDev_route_1.platformDevRouter);
+app.use('/api/v1/feedback', feedback_route_1.feedbackRouter);
 // --- 404 handler ---
 // Express 5's path matcher no longer accepts bare "*".
 // A final middleware with no path still catches every unmatched request.

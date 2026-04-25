@@ -134,11 +134,10 @@ class SyncEngine {
     const retryable = await db.sales.filter((sale) => isRetryableSyncStatus(sale.syncStatus)).toArray()
     if (retryable.length === 0) return
 
-    const capped = retryable.slice(0, BATCH_SIZE * MAX_BATCHES_PER_ENTITY_PER_CYCLE)
-    const batches = this.chunk(capped, BATCH_SIZE)
-    for (const batch of batches) {
+    const capped = retryable.slice(0, MAX_SINGLE_RECORDS_PER_ENTITY_PER_CYCLE)
+    for (const sale of capped) {
       try {
-        await salesApi.syncBatch(batch.map((sale) => ({
+        await salesApi.sync({
           id: sale.id,
           itemName: sale.itemName,
           stockItemId: (sale as any).stockItemId,
@@ -148,20 +147,11 @@ class SyncEngine {
           paymentType: sale.paymentType,
           debtorId: sale.debtorId,
           soldAt: sale.soldAt,
-        })))
-
-        await db.transaction('rw', db.sales, async () => {
-          for (const sale of batch) {
-            await db.sales.update(sale.id, { syncStatus: 'SYNCED' })
-          }
         })
+        await db.sales.update(sale.id, { syncStatus: 'SYNCED' })
       } catch (error) {
-        await db.transaction('rw', db.sales, async () => {
-          for (const sale of batch) {
-            await db.sales.update(sale.id, { syncStatus: 'FAILED' })
-          }
-        })
-        console.error('Sales batch sync failed:', error)
+        await db.sales.update(sale.id, { syncStatus: 'FAILED' })
+        console.error('Sales sync failed:', error)
       }
     }
   }

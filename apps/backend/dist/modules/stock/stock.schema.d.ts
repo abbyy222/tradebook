@@ -15,6 +15,9 @@ export declare const adjustStockSchema: z.ZodObject<{
         damage: "damage";
         correction: "correction";
     }>;
+    unitPrice: z.ZodOptional<z.ZodNumber>;
+    costPrice: z.ZodOptional<z.ZodNumber>;
+    lowStockThreshold: z.ZodOptional<z.ZodNumber>;
 }, z.core.$strip>;
 export declare const updateStockItemSchema: z.ZodObject<{
     itemName: z.ZodOptional<z.ZodString>;

@@ -96,23 +96,26 @@ exports.salesService = {
         }
         let sale;
         try {
-            sale = await sales_repository_1.salesRepository.create(traderId, normalizedInput);
+            sale = await sales_repository_1.salesRepository.createWithInventoryEffects(traderId, normalizedInput);
         }
         catch (error) {
             const isDuplicateSale = error instanceof client_1.Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
-            if (!isDuplicateSale)
+            if (!isDuplicateSale) {
+                const message = error instanceof Error ? error.message : '';
+                if (message.startsWith('INSUFFICIENT_STOCK:')) {
+                    const [, available = '0', requested = String(normalizedInput.quantity)] = message.split(':');
+                    throw new errorHandler_1.AppError('Stock conflict. Available on server: ' + available + ', requested offline sale: ' + requested, 409, 'STOCK_CONFLICT');
+                }
+                if (message === 'DEBTOR_NOT_FOUND') {
+                    throw new errorHandler_1.AppError('Debtor not found', 404, 'NOT_FOUND');
+                }
                 throw error;
+            }
             const alreadySynced = await sales_repository_1.salesRepository.findById(normalizedInput.id, traderId);
             if (!alreadySynced) {
                 throw new errorHandler_1.AppError('Sale already exists but could not be loaded', 409, 'SALE_DUPLICATE');
             }
             return toSaleDTO(alreadySynced);
-        }
-        if (normalizedInput.stockItemId) {
-            await stock_repository_1.stockRepository.adjustQuantity(normalizedInput.stockItemId, traderId, -normalizedInput.quantity);
-        }
-        if (normalizedInput.paymentType === 'DEBT' && normalizedInput.debtorId) {
-            await debtors_repository_1.debtorsRepository.incrementOwed(normalizedInput.debtorId, normalizedInput.amount);
         }
         return toSaleDTO(sale);
     },

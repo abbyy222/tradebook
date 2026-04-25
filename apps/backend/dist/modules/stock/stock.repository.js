@@ -65,20 +65,23 @@ exports.stockRepository = {
             select: stockSelect,
         })));
     },
-    async adjustQuantity(id, traderId, delta) {
+    async adjustQuantity(id, traderId, input) {
         const item = await client_2.prisma.stockItem.findFirst({
             where: { id, traderId },
             select: { id: true, quantity: true, lowStockThreshold: true },
         });
         if (!item)
             return null;
-        if (delta < 0 && item.quantity + delta < 0) {
-            throw new Error(`Insufficient stock. Current: ${item.quantity}, Requested: ${Math.abs(delta)}`);
+        if (input.delta < 0 && item.quantity + input.delta < 0) {
+            throw new Error(`Insufficient stock. Current: ${item.quantity}, Requested: ${Math.abs(input.delta)}`);
         }
         return client_2.prisma.stockItem.update({
             where: { id },
             data: {
-                quantity: { increment: delta },
+                quantity: { increment: input.delta },
+                ...(input.unitPrice != null ? { unitPrice: new client_1.Prisma.Decimal(input.unitPrice) } : {}),
+                ...(input.costPrice != null ? { costPrice: new client_1.Prisma.Decimal(input.costPrice) } : {}),
+                ...(input.lowStockThreshold != null ? { lowStockThreshold: input.lowStockThreshold } : {}),
                 syncStatus: 'SYNCED',
             },
             select: stockSelect,

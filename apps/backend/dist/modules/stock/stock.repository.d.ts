@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { CreateStockItemInput, ListStockQuery } from './stock.schema';
+import { CreateStockItemInput, ListStockQuery, AdjustStockInput } from './stock.schema';
 export declare const stockRepository: {
     upsert(traderId: string, data: CreateStockItemInput): Promise<{
         id: string;
@@ -23,7 +23,7 @@ export declare const stockRepository: {
         costPrice: Prisma.Decimal;
         lowStockThreshold: number;
     }[]>;
-    adjustQuantity(id: string, traderId: string, delta: number): Promise<{
+    adjustQuantity(id: string, traderId: string, input: AdjustStockInput): Promise<{
         id: string;
         createdAt: Date;
         updatedAt: Date;
