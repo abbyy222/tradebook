@@ -60,6 +60,8 @@ export const insightsService = {
 
     const metrics = await insightsRepository.getBusinessMetrics(traderId, from)
     const operatingProfit = metrics.salesTotal - metrics.expensesTotal
+    const grossProfitEstimate = metrics.topProducts.reduce((sum, product) => sum + product.estimatedProfit, 0)
+    const averageSaleValue = metrics.salesCount > 0 ? Number((metrics.salesTotal / metrics.salesCount).toFixed(2)) : 0
 
     return {
       data: {
@@ -89,6 +91,11 @@ export const insightsService = {
         syncHealth: {
           pending: metrics.sync.pending,
           failed: metrics.sync.failed,
+        },
+        profitability: {
+          grossMarginEstimate: grossProfitEstimate,
+          averageSaleValue,
+          topProducts: metrics.topProducts,
         },
         activityTrend: buildTrend(from, query.days, metrics.trendRows),
       },
@@ -132,4 +139,3 @@ export const insightsService = {
     }
   },
 }
-

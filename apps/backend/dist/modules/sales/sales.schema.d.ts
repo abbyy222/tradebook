@@ -6,6 +6,10 @@ export declare const createSaleSchema: z.ZodObject<{
     quantity: z.ZodNumber;
     unitPrice: z.ZodNumber;
     amount: z.ZodNumber;
+    pricingMode: z.ZodOptional<z.ZodEnum<{
+        RETAIL: "RETAIL";
+        WHOLESALE: "WHOLESALE";
+    }>>;
     paymentType: z.ZodEnum<{
         CASH: "CASH";
         TRANSFER: "TRANSFER";
@@ -22,6 +26,10 @@ export declare const syncSalesSchema: z.ZodObject<{
         quantity: z.ZodNumber;
         unitPrice: z.ZodNumber;
         amount: z.ZodNumber;
+        pricingMode: z.ZodOptional<z.ZodEnum<{
+            RETAIL: "RETAIL";
+            WHOLESALE: "WHOLESALE";
+        }>>;
         paymentType: z.ZodEnum<{
             CASH: "CASH";
             TRANSFER: "TRANSFER";

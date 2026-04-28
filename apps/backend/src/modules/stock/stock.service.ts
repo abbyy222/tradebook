@@ -11,6 +11,7 @@ import { logger } from '../../utils/logger'
 const toStockDTO = (item: any) => {
   const unitPrice = Number(item.unitPrice)
   const costPrice = Number(item.costPrice)
+  const wholesalePrice = item.wholesalePrice == null ? null : Number(item.wholesalePrice)
   const stockValue = item.quantity * costPrice
   const retailValue = item.quantity * unitPrice
 
@@ -18,6 +19,7 @@ const toStockDTO = (item: any) => {
     ...item,
     unitPrice,
     costPrice,
+    wholesalePrice,
     stockValue,
     retailValue,
     expectedGrossProfit: retailValue - stockValue,
@@ -55,6 +57,8 @@ export const stockService = {
         newQuantity: updated.quantity,
         unitPrice: input.unitPrice,
         costPrice: input.costPrice,
+        wholesalePrice: input.wholesalePrice,
+        wholesaleMinQty: input.wholesaleMinQty,
         lowStockThreshold: input.lowStockThreshold,
       })
 
@@ -86,6 +90,7 @@ export const stockService = {
       ...item,
       unitPrice: Number(item.unitPrice),
       costPrice: Number(item.costPrice),
+      wholesalePrice: item.wholesalePrice == null ? null : Number(item.wholesalePrice),
       stockValue: item.quantity * Number(item.costPrice),
       retailValue: item.quantity * Number(item.unitPrice),
       expectedGrossProfit: item.quantity * (Number(item.unitPrice) - Number(item.costPrice)),
@@ -97,6 +102,29 @@ export const stockService = {
     const item = await stockRepository.findById(id, traderId)
     if (!item) throw new AppError('Stock item not found', 404, 'NOT_FOUND')
     return toStockDTO(item)
+  },
+
+  async getStockMovements(id: string, traderId: string) {
+    const item = await stockRepository.findById(id, traderId)
+    if (!item) throw new AppError('Stock item not found', 404, 'NOT_FOUND')
+
+    const movements = await stockRepository.findMovements(id, traderId)
+    return movements.map((movement: any) => ({
+      id: movement.id,
+      stockItemId: movement.stockItemId,
+      itemName: movement.stockItem.itemName,
+      type: movement.type,
+      quantityDelta: movement.quantityDelta,
+      quantityAfter: movement.quantityAfter,
+      unitPrice: movement.unitPrice == null ? null : Number(movement.unitPrice),
+      costPrice: movement.costPrice == null ? null : Number(movement.costPrice),
+      wholesalePrice: movement.wholesalePrice == null ? null : Number(movement.wholesalePrice),
+      wholesaleMinQty: movement.wholesaleMinQty,
+      note: movement.note,
+      referenceId: movement.referenceId,
+      happenedAt: movement.happenedAt.toISOString(),
+      createdAt: movement.createdAt.toISOString(),
+    }))
   },
 
   async deleteStockItem(id: string, traderId: string) {

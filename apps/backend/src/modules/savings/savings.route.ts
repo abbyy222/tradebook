@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { authenticate } from '../../middleware/authenticate'
 import {
+  confirmSavingsVerificationSchema,
   createSavingsEntrySchema,
   listSavingsEntriesQuerySchema,
   resolveSavingsAccountSchema,
@@ -138,6 +139,17 @@ savingsRouter.post('/:id/verify/initiate', enforceModuleWritable('SAVINGS'), asy
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
     const result = await savingsService.initiateVerification(id, req.trader!.traderId, req.trader!.role)
+    res.status(200).json({ data: result, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+savingsRouter.post('/:id/verify/confirm', enforceModuleWritable('SAVINGS'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    const input = confirmSavingsVerificationSchema.parse(req.body)
+    const result = await savingsService.confirmCheckoutVerification(id, req.trader!.traderId, req.trader!.role, input)
     res.status(200).json({ data: result, error: null })
   } catch (err) {
     next(err)

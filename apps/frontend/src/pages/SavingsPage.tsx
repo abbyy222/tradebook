@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import env from '@/config/env'
 import { useAuthStore } from '@/stores/authStore'
 import {
+  useConfirmSavingsVerification,
   useCreateSavingsEntry,
   useSavingsAccount,
   useSavingsBanks,
@@ -9,13 +11,12 @@ import {
   useSavingsTodaySummary,
   useResolveSavingsAccount,
   useSavingsVerificationPreview,
-  useInitiateSavingsVerification,
   useUpdateSavingsAccount,
   useUpdateSavingsTarget,
 } from '@/hooks/useSavings'
 import type {
+  SavingsVerificationConfirmationDTO,
   SavingsTargetPeriod,
-  SavingsTransferInitiationDTO,
   SavingsVerificationPreviewDTO,
   SavingsVerificationStatus,
 } from '@tradebook/shared-types'
@@ -60,14 +61,15 @@ export const SavingsPage = () => {
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
   const [verifyError, setVerifyError] = useState('')
   const [verifyPreview, setVerifyPreview] = useState<SavingsVerificationPreviewDTO | null>(null)
-  const [verificationResult, setVerificationResult] = useState<SavingsTransferInitiationDTO | null>(null)
+  const [verificationResult, setVerificationResult] = useState<SavingsVerificationConfirmationDTO | null>(null)
+  const [flutterwaveReady, setFlutterwaveReady] = useState(Boolean(window.FlutterwaveCheckout))
 
   const createSavings = useCreateSavingsEntry()
   const updateTarget = useUpdateSavingsTarget()
   const updateAccount = useUpdateSavingsAccount()
   const resolveAccount = useResolveSavingsAccount()
   const verificationPreview = useSavingsVerificationPreview()
-  const initiateVerification = useInitiateSavingsVerification()
+  const confirmVerification = useConfirmSavingsVerification()
   const { data: listData, isLoading } = useSavingsEntries()
   const { data: todaySummary } = useSavingsTodaySummary()
   const { data: targetProgress } = useSavingsTargetProgress()
@@ -88,6 +90,24 @@ export const SavingsPage = () => {
     setAccountNumber(savingsAccount.accountNumber)
     setAccountName(savingsAccount.accountName)
   }, [savingsAccount])
+
+  useEffect(() => {
+    if (window.FlutterwaveCheckout) {
+      setFlutterwaveReady(true)
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://checkout.flutterwave.com/v3.js'
+    script.async = true
+    script.onload = () => setFlutterwaveReady(true)
+    script.onerror = () => setFlutterwaveReady(false)
+    document.body.appendChild(script)
+
+    return () => {
+      script.remove()
+    }
+  }, [])
 
   const thisWeekTotal = useMemo(() => {
     const now = new Date()
@@ -169,21 +189,71 @@ export const SavingsPage = () => {
     setAccountName(resolved.accountName)
   }
 
-  const handleInitiateVerification = async () => {
-    if (!selectedEntryId) return
-
-    try {
-      const result = await initiateVerification.mutateAsync(selectedEntryId)
-      setVerificationResult(result)
-      setVerifyError('')
-    } catch (error: any) {
-      const message = error?.response?.data?.error?.message ?? 'Could not start the savings transfer right now.'
-      setVerifyError(message)
+  const handleCheckoutVerification = () => {
+    if (!selectedEntryId || !verifyPreview) return
+    if (!env.FLUTTERWAVE_PUBLIC_KEY) {
+      setVerifyError('Flutterwave public key is missing. Add VITE_FLUTTERWAVE_PUBLIC_KEY to the frontend environment.')
+      return
     }
+    if (!window.FlutterwaveCheckout || !flutterwaveReady) {
+      setVerifyError('Flutterwave checkout is still loading. Please wait a moment and try again.')
+      return
+    }
+
+    const txRef = `savings-${selectedEntryId}-${Date.now()}`
+    const customerName = trader?.businessName ?? trader?.name ?? 'TradeBook User'
+    const customerEmail = `${(trader?.phoneNumber ?? 'user').replace(/\D/g, '') || 'user'}@tradebook.local`
+
+    window.FlutterwaveCheckout({
+      public_key: env.FLUTTERWAVE_PUBLIC_KEY,
+      tx_ref: txRef,
+      amount: verifyPreview.entry.amount,
+      currency: 'NGN',
+      payment_options: 'card,banktransfer,ussd',
+      customer: {
+        email: customerEmail,
+        phone_number: trader?.phoneNumber,
+        name: customerName,
+      },
+      meta: {
+        savingsEntryId: selectedEntryId,
+        traderId: trader?.id,
+        verificationType: 'savings',
+      },
+      customizations: {
+        title: 'TradeBook Savings Verification',
+        description: `Verify savings entry of ${fmt(verifyPreview.entry.amount)}`,
+      },
+      callback: async (response) => {
+        const normalizedStatus = String(response.status ?? '').toLowerCase()
+        if (!['successful', 'completed'].includes(normalizedStatus) || !response.tx_ref) {
+          setVerifyError('Payment was not successful. Please try again.')
+          return
+        }
+
+        try {
+          const result = await confirmVerification.mutateAsync({
+            id: selectedEntryId,
+            input: {
+              txRef: response.tx_ref,
+              transactionId: response.transaction_id ? String(response.transaction_id) : null,
+            },
+          })
+          setVerificationResult(result)
+          setVerifyError('')
+        } catch (error: any) {
+          const message = error?.response?.data?.error?.message ?? 'We could not confirm the payment yet. Please contact support if you were charged.'
+          setVerifyError(message)
+        }
+      },
+      onclose: () => {
+        // Keep modal open so the owner can retry or review the result.
+      },
+    })
   }
 
   return (
-    <div className="min-h-screen px-5 pb-8 pt-12 md:px-6 xl:px-8">
+    <div className="min-h-screen px-4 pb-8 pt-10 sm:px-5 sm:pt-12 md:px-6 xl:px-8">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
         <div>
           <p className="label-base mb-1">Daily saving</p>
@@ -266,7 +336,7 @@ export const SavingsPage = () => {
 
           {targetProgress?.target ? (
             <div className="mt-4 rounded-2xl border border-white/10 bg-[#1f130e] p-4">
-              <div className="flex items-end justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="label-base mb-1">{targetProgress.period?.label ?? 'Target period'}</p>
                   <p className="font-display text-2xl font-bold text-[#f0bc5a] wonky">
@@ -288,7 +358,7 @@ export const SavingsPage = () => {
                     style={{ width: `${Math.max(targetProgress.progressPercent, 4)}%` }}
                   />
                 </div>
-                <div className="mt-2 flex items-center justify-between gap-3 text-xs">
+                <div className="mt-2 flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
                   <span className="text-secondary">
                     {targetProgress.progressPercent}% complete
                     {targetProgress.period ? ` • ${new Date(targetProgress.period.from).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })} - ${new Date(targetProgress.period.to).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })}` : ''}
@@ -364,7 +434,7 @@ export const SavingsPage = () => {
             />
           </div>
 
-          <div className="mt-3 flex items-center gap-3">
+          <div className="mt-3 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
             <button
               className="btn-primary"
               disabled={!amount || parseFloat(amount) <= 0 || createSavings.isPending}
@@ -394,8 +464,8 @@ export const SavingsPage = () => {
           ) : (
             <div className="divide-y divide-white/5">
               {entries.slice(0, 20).map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between gap-3 px-4 py-3.5">
-                  <div className="min-w-0">
+                <div key={entry.id} className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-ui text-sm font-semibold text-primary">
                         {new Date(entry.savedAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -404,9 +474,9 @@ export const SavingsPage = () => {
                         {statusLabel[entry.status]}
                       </span>
                     </div>
-                    <p className="truncate text-xs text-secondary">{entry.note || 'No note'}</p>
+                    <p className="text-xs text-secondary sm:truncate">{entry.note || 'No note'}</p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-end">
                     <p className="font-display text-lg font-bold text-[#4ecca3] wonky">{fmt(entry.amount)}</p>
                     {isOwner && entry.status !== 'VERIFIED' ? (
                       <button
@@ -427,8 +497,8 @@ export const SavingsPage = () => {
 
       {accountModalOpen && isOwner ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 md:items-center">
-          <div className="w-full max-w-lg rounded-[28px] border border-white/10 bg-[#20130e] p-5 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
+          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-[28px] border border-white/10 bg-[#20130e] p-4 shadow-2xl sm:p-5">
+            <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="label-base mb-1">Savings setup</p>
                 <h2 className="font-display text-2xl font-bold text-primary wonky">Set your savings account</h2>
@@ -525,8 +595,8 @@ export const SavingsPage = () => {
 
       {verifyModalOpen && isOwner ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 md:items-center">
-          <div className="w-full max-w-xl rounded-[28px] border border-white/10 bg-[#20130e] p-5 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
+          <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-[28px] border border-white/10 bg-[#20130e] p-4 shadow-2xl sm:p-5">
+            <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="label-base mb-1">Verification review</p>
                 <h2 className="font-display text-2xl font-bold text-primary wonky">Prepare savings verification</h2>
@@ -552,7 +622,7 @@ export const SavingsPage = () => {
             ) : verifyPreview ? (
               <div className="mt-5 space-y-4">
                 <div className="rounded-2xl border border-white/10 bg-[#1f130e] p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                     <div>
                       <p className="label-base mb-1">Savings entry</p>
                       <p className="font-display text-2xl font-bold text-[#4ecca3] wonky">{fmt(verifyPreview.entry.amount)}</p>
@@ -591,20 +661,20 @@ export const SavingsPage = () => {
 
                 {verificationResult ? (
                   <div className="rounded-2xl border border-[#4ecca3]/25 bg-[rgba(78,204,163,0.12)] p-4 text-sm text-[#b8f0dd]">
-                    <p className="font-ui text-sm font-bold text-[#4ecca3]">Transfer started</p>
+                    <p className="font-ui text-sm font-bold text-[#4ecca3]">Verification completed</p>
                     <p className="mt-2 leading-6">{verificationResult.message}</p>
                     <p className="mt-2 text-xs text-[#d9f8ee]">Reference: {verificationResult.reference}</p>
                   </div>
                 ) : null}
 
-                <div className="flex justify-end">
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
                   <button
                     type="button"
-                    className="btn-primary"
-                    disabled={!verifyPreview.canProceed || initiateVerification.isPending}
-                    onClick={() => void handleInitiateVerification()}
+                    className="btn-primary w-full sm:w-auto"
+                    disabled={!verifyPreview.canProceed || confirmVerification.isPending || !flutterwaveReady}
+                    onClick={() => handleCheckoutVerification()}
                   >
-                    {initiateVerification.isPending ? 'Starting transfer...' : 'Start transfer'}
+                    {confirmVerification.isPending ? 'Confirming payment...' : flutterwaveReady ? 'Start verification' : 'Loading checkout...'}
                   </button>
                 </div>
               </div>

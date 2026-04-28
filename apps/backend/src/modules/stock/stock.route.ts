@@ -69,6 +69,14 @@ stockRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) 
   } catch (err) { next(err) }
 })
 
+stockRouter.get('/:id/movements', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const stockId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    const movements = await stockService.getStockMovements(stockId, req.trader!.traderId)
+    res.status(200).json({ data: movements, error: null })
+  } catch (err) { next(err) }
+})
+
 stockRouter.delete('/:id', authorizeRole('OWNER'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const stockId =Array.isArray(req.params.id)?req.params.id[0]:req.params.id

@@ -13,12 +13,13 @@ interface Props {
 type Step = 'item' | 'quantity' | 'payment' | 'confirm'
 type PaymentType = 'CASH' | 'TRANSFER' | 'DEBT'
 type CreditSource = 'DEBTORS' | 'CUSTOMERS'
+type PricingMode = 'RETAIL' | 'WHOLESALE'
 
 const STEPS: Step[] = ['item', 'quantity', 'payment', 'confirm']
 const STEP_LABELS = ['Item', 'Quantity', 'Payment', 'Confirm']
 const QUICK_QUANTITIES = [1, 2, 3, 5, 10]
 
-const fmt = (n: number) => '?' + n.toLocaleString('en-NG')
+const fmt = (n: number) => 'NGN ' + n.toLocaleString('en-NG')
 
 const CashIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -86,6 +87,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
   const [selectedStockItemId, setSelectedStockItemId] = useState('')
   const [search, setSearch] = useState('')
   const [quantity, setQuantity] = useState('1')
+  const [pricingMode, setPricingMode] = useState<PricingMode>('RETAIL')
   const [paymentType, setPaymentType] = useState<PaymentType>('CASH')
   const [selectedDebtorId, setSelectedDebtorId] = useState('')
   const [creditSource, setCreditSource] = useState<CreditSource>('DEBTORS')
@@ -136,7 +138,19 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
   const selectedDebtor = selectableDebtors.find((debtor) => debtor.id === selectedDebtorId)
 
   const qty = Number.parseInt(quantity, 10) || 0
-  const amount = selectedStockItem ? Number((selectedStockItem.unitPrice * qty).toFixed(2)) : 0
+  const qualifiesForWholesale = Boolean(
+    selectedStockItem &&
+    selectedStockItem.wholesalePrice != null &&
+    selectedStockItem.wholesaleMinQty != null &&
+    qty >= selectedStockItem.wholesaleMinQty,
+  )
+  const effectivePricingMode: PricingMode = pricingMode === 'WHOLESALE' && qualifiesForWholesale ? 'WHOLESALE' : 'RETAIL'
+  const activeUnitPrice = selectedStockItem
+    ? effectivePricingMode === 'WHOLESALE' && selectedStockItem.wholesalePrice != null
+      ? selectedStockItem.wholesalePrice
+      : selectedStockItem.unitPrice
+    : 0
+  const amount = selectedStockItem ? Number((activeUnitPrice * qty).toFixed(2)) : 0
   const receiptPayload = success && selectedStockItem
     ? {
         receiptNumber: completedSaleId ? completedSaleId.slice(0, 8).toUpperCase() : 'SALE',
@@ -146,8 +160,9 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
         soldAt: completedSaleTime || new Date().toISOString(),
         itemName: selectedStockItem.itemName,
         quantity: qty,
-        unitPrice: selectedStockItem.unitPrice,
+        unitPrice: activeUnitPrice,
         amount,
+        pricingMode: effectivePricingMode,
         paymentType,
         debtorName: paymentType === 'DEBT' ? selectedDebtor?.customerName : undefined,
       }
@@ -160,8 +175,11 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
     if (!selectedStockItem) return 'Select an inventory item first.'
     if (!qty || qty <= 0) return 'Quantity sold must be at least 1.'
     if (qty > selectedStockItem.quantity) return 'Not enough stock. Available: ' + selectedStockItem.quantity
+    if (pricingMode === 'WHOLESALE' && !qualifiesForWholesale) {
+      return 'Wholesale price starts from quantity ' + (selectedStockItem.wholesaleMinQty ?? 0)
+    }
     return ''
-  }, [qty, selectedStockItem])
+  }, [pricingMode, qty, qualifiesForWholesale, selectedStockItem])
 
   const handleQuickCreateDebtor = async () => {
     const name = newDebtorName.trim()
@@ -235,8 +253,9 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
         stockItemId: selectedStockItem.id,
         itemName: selectedStockItem.itemName,
         quantity: qty,
-        unitPrice: selectedStockItem.unitPrice,
+        unitPrice: activeUnitPrice,
         amount,
+        pricingMode: effectivePricingMode,
         paymentType,
         debtorId: paymentType === 'DEBT' ? selectedDebtorId : undefined,
         soldAt: new Date().toISOString(),
@@ -253,7 +272,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
   if (success && selectedStockItem) {
     return (
       <div className="fixed inset-0 z-50 flex items-end" style={{ background: 'rgba(10,5,2,0.8)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
-        <div className="w-full max-w-lg mx-auto rounded-t-3xl px-8 py-12 flex flex-col items-center gap-5 animate-slide-up" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.07)', borderBottom: 'none', paddingBottom: 'calc(3rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg mx-auto rounded-t-3xl px-5 py-10 sm:px-8 sm:py-12 flex flex-col items-center gap-5 animate-slide-up max-h-[92vh] overflow-y-auto" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.07)', borderBottom: 'none', paddingBottom: 'calc(3rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
           <div className="rounded-full flex items-center justify-center" style={{ width: 80, height: 80, background: 'linear-gradient(135deg, #c04818, #e8a838)', boxShadow: '0 0 0 12px rgba(196,98,45,0.12), 0 0 0 24px rgba(196,98,45,0.06)' }}>
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </div>
@@ -366,9 +385,53 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
             <h2 className="font-display font-bold" style={{ fontSize: '1.6rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>How many did you sell?</h2>
             <div className="rounded-2xl px-5 py-4" style={{ background: '#2e1c14', border: '1.5px solid rgba(255,255,255,0.08)' }}>
               <p className="label-base mb-2">{selectedStockItem.itemName}</p>
-              <p className="font-body text-sm mb-4" style={{ color: 'rgba(245,237,224,0.45)' }}>Selling price is fixed at {fmt(selectedStockItem.unitPrice)}. Available stock: {selectedStockItem.quantity}</p>
+              <p className="font-body text-sm mb-4" style={{ color: 'rgba(245,237,224,0.45)' }}>
+                Retail price is {fmt(selectedStockItem.unitPrice)}.
+                {selectedStockItem.wholesalePrice != null && selectedStockItem.wholesaleMinQty != null ? ` Wholesale is ${fmt(selectedStockItem.wholesalePrice)} from ${selectedStockItem.wholesaleMinQty} units.` : ''}
+                {' '}Available stock: {selectedStockItem.quantity}
+              </p>
               <input type="number" inputMode="numeric" autoFocus min="1" max={selectedStockItem.quantity} placeholder="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="input-base" style={{ fontSize: '1.6rem', padding: '1rem 1.25rem' }} />
             </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setPricingMode('RETAIL')}
+                className="rounded-xl px-4 py-3 text-left"
+                style={{
+                  background: pricingMode === 'RETAIL' ? 'rgba(232,168,56,0.12)' : 'rgba(255,255,255,0.03)',
+                  border: pricingMode === 'RETAIL' ? '1px solid rgba(232,168,56,0.35)' : '1px solid rgba(255,255,255,0.07)',
+                }}
+              >
+                <p className="font-ui font-bold text-sm" style={{ color: pricingMode === 'RETAIL' ? '#f0bc5a' : '#f5ede0' }}>Retail price</p>
+                <p className="font-body text-xs mt-1" style={{ color: 'rgba(245,237,224,0.4)' }}>{fmt(selectedStockItem.unitPrice)} per unit</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPricingMode('WHOLESALE')}
+                disabled={selectedStockItem.wholesalePrice == null || selectedStockItem.wholesaleMinQty == null}
+                className="rounded-xl px-4 py-3 text-left"
+                style={{
+                  background: pricingMode === 'WHOLESALE' ? 'rgba(78,204,163,0.12)' : 'rgba(255,255,255,0.03)',
+                  border: pricingMode === 'WHOLESALE' ? '1px solid rgba(78,204,163,0.3)' : '1px solid rgba(255,255,255,0.07)',
+                  opacity: selectedStockItem.wholesalePrice == null || selectedStockItem.wholesaleMinQty == null ? 0.45 : 1,
+                }}
+              >
+                <p className="font-ui font-bold text-sm" style={{ color: pricingMode === 'WHOLESALE' ? '#4ecca3' : '#f5ede0' }}>Wholesale price</p>
+                <p className="font-body text-xs mt-1" style={{ color: 'rgba(245,237,224,0.4)' }}>
+                  {selectedStockItem.wholesalePrice != null && selectedStockItem.wholesaleMinQty != null
+                    ? `${fmt(selectedStockItem.wholesalePrice)} from ${selectedStockItem.wholesaleMinQty} units`
+                    : 'Not set on this item'}
+                </p>
+              </button>
+            </div>
+            {qualifiesForWholesale && selectedStockItem.wholesalePrice != null ? (
+              <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(78,204,163,0.08)', border: '1px solid rgba(78,204,163,0.18)' }}>
+                <p className="font-ui font-bold text-xs uppercase tracking-wider" style={{ color: '#4ecca3' }}>Wholesale available</p>
+                <p className="font-body text-sm mt-1" style={{ color: 'rgba(245,237,224,0.5)' }}>
+                  This quantity qualifies for the wholesale price of {fmt(selectedStockItem.wholesalePrice)} per unit.
+                </p>
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               {QUICK_QUANTITIES.map((quickQty) => (
                 <button key={quickQty} onClick={() => setQuantity(String(quickQty))} disabled={quickQty > selectedStockItem.quantity} className="rounded-full px-4 py-2 font-ui font-semibold text-xs transition-all duration-150 active:scale-95" style={{ background: quantity === String(quickQty) ? 'rgba(232,168,56,0.18)' : 'rgba(255,255,255,0.05)', border: quantity === String(quickQty) ? '1px solid rgba(232,168,56,0.4)' : '1px solid rgba(255,255,255,0.08)', color: quantity === String(quickQty) ? '#f0bc5a' : 'rgba(245,237,224,0.5)', opacity: quickQty > selectedStockItem.quantity ? 0.35 : 1 }}>
@@ -379,9 +442,12 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
             <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
               <p className="label-base mb-1">Total sale</p>
               <p className="font-display font-bold" style={{ color: '#e8a838', fontSize: '1.4rem', fontVariationSettings: "'WONK' 1" }}>{fmt(amount)}</p>
+              <p className="font-body text-xs mt-1" style={{ color: 'rgba(245,237,224,0.4)' }}>
+                {effectivePricingMode === 'WHOLESALE' ? 'Wholesale' : 'Retail'} price applied at {fmt(activeUnitPrice)} per unit.
+              </p>
               {quantityError && <p className="font-body text-xs mt-2" style={{ color: '#f87171' }}>{quantityError}</p>}
             </div>
-            <div className="flex gap-3"><button className="btn-ghost flex-shrink-0 inline-flex items-center gap-2" onClick={goBack}><ArrowLeftIcon /> Back</button><button className="btn-primary flex-1 inline-flex items-center justify-center gap-2" disabled={Boolean(quantityError)} onClick={goNext}>Next <ArrowRightIcon /></button></div>
+            <div className="flex flex-col-reverse gap-3 sm:flex-row"><button className="btn-ghost inline-flex items-center justify-center gap-2 sm:flex-shrink-0" onClick={goBack}><ArrowLeftIcon /> Back</button><button className="btn-primary inline-flex flex-1 items-center justify-center gap-2" disabled={Boolean(quantityError)} onClick={goNext}>Next <ArrowRightIcon /></button></div>
           </div>
         )}
 
@@ -413,7 +479,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {(['DEBTORS', 'CUSTOMERS'] as const).map((source) => (
                     <button
                       key={source}
@@ -503,7 +569,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
                 )}
               </div>
             )}
-            <div className="flex gap-3"><button className="btn-ghost flex-shrink-0 inline-flex items-center gap-2" onClick={goBack}><ArrowLeftIcon /> Back</button><button className="btn-primary flex-1 inline-flex items-center justify-center gap-2" onClick={goNext} disabled={paymentType === 'DEBT' && !selectedDebtorId}>Review <ArrowRightIcon /></button></div>
+            <div className="flex flex-col-reverse gap-3 sm:flex-row"><button className="btn-ghost inline-flex items-center justify-center gap-2 sm:flex-shrink-0" onClick={goBack}><ArrowLeftIcon /> Back</button><button className="btn-primary inline-flex flex-1 items-center justify-center gap-2" onClick={goNext} disabled={paymentType === 'DEBT' && !selectedDebtorId}>Review <ArrowRightIcon /></button></div>
           </div>
         )}
 
@@ -514,19 +580,20 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
               {[
                 { label: 'Item', value: selectedStockItem.itemName },
                 { label: 'Qty', value: String(qty) },
-                { label: 'Unit price', value: fmt(selectedStockItem.unitPrice) },
+                { label: 'Price mode', value: effectivePricingMode === 'WHOLESALE' ? 'Wholesale' : 'Retail' },
+                { label: 'Unit price', value: fmt(activeUnitPrice) },
                 { label: 'Amount', value: fmt(amount), isAmount: true },
                 { label: 'Payment', value: PAYMENT_OPTIONS.find((option) => option.type === paymentType)?.label ?? paymentType, color: PAYMENT_OPTIONS.find((option) => option.type === paymentType)?.color },
                 ...(paymentType === 'DEBT' && selectedDebtor ? [{ label: 'Debtor', value: selectedDebtor.customerName }] : []),
               ].map((row, index, rows) => (
-                <div key={row.label} className="flex items-center justify-between px-5 py-4" style={{ borderBottom: index < rows.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                <div key={row.label} className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderBottom: index < rows.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
                   <p className="font-ui font-semibold uppercase text-xs tracking-wider" style={{ color: 'rgba(245,237,224,0.35)' }}>{row.label}</p>
-                  <p className={row.isAmount ? 'font-display font-bold' : 'font-ui font-semibold text-sm'} style={{ color: row.color ?? (row.isAmount ? '#e8a838' : '#f5ede0'), fontSize: row.isAmount ? '1.25rem' : undefined, fontVariationSettings: row.isAmount ? "'WONK' 1" : undefined }}>{row.value}</p>
+                  <p className={row.isAmount ? 'font-display font-bold text-left sm:text-right' : 'font-ui font-semibold text-sm text-left sm:text-right'} style={{ color: row.color ?? (row.isAmount ? '#e8a838' : '#f5ede0'), fontSize: row.isAmount ? '1.25rem' : undefined, fontVariationSettings: row.isAmount ? "'WONK' 1" : undefined }}>{row.value}</p>
                 </div>
               ))}
             </div>
             {error && <p className="font-body text-sm" style={{ color: '#f87171' }}>{error}</p>}
-            <div className="flex gap-3"><button className="btn-ghost flex-shrink-0 inline-flex items-center gap-2" onClick={goBack}><ArrowLeftIcon /> Back</button><button className="btn-primary flex-1 inline-flex items-center justify-center gap-2" disabled={createSale.isPending || Boolean(quantityError) || (paymentType === 'DEBT' && !selectedDebtorId)} onClick={handleConfirm}>{createSale.isPending ? <span className="rounded-full border-2 border-white/30 border-t-white" style={{ width: 20, height: 20, animation: 'spin 0.7s linear infinite' }} /> : <>Record sale <ArrowRightIcon /></>}</button></div>
+            <div className="flex flex-col-reverse gap-3 sm:flex-row"><button className="btn-ghost inline-flex items-center justify-center gap-2 sm:flex-shrink-0" onClick={goBack}><ArrowLeftIcon /> Back</button><button className="btn-primary inline-flex flex-1 items-center justify-center gap-2" disabled={createSale.isPending || Boolean(quantityError) || (paymentType === 'DEBT' && !selectedDebtorId)} onClick={handleConfirm}>{createSale.isPending ? <span className="rounded-full border-2 border-white/30 border-t-white" style={{ width: 20, height: 20, animation: 'spin 0.7s linear infinite' }} /> : <>Record sale <ArrowRightIcon /></>}</button></div>
             <p className="text-center font-body text-xs" style={{ color: 'rgba(245,237,224,0.25)' }}>{navigator.onLine ? 'Will save and sync immediately' : 'Will save offline and sync when you are online'}</p>
           </div>
         )}

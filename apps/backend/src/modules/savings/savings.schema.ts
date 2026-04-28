@@ -39,8 +39,14 @@ export const resolveSavingsAccountSchema = z.object({
   accountNumber: z.string().trim().regex(/^\d{10,20}$/, 'Account number must be 10 to 20 digits'),
 })
 
+export const confirmSavingsVerificationSchema = z.object({
+  txRef: z.string().trim().min(6).max(120),
+  transactionId: z.string().trim().optional().nullable(),
+})
+
 export type CreateSavingsEntryInput = z.infer<typeof createSavingsEntrySchema>
 export type ListSavingsEntriesQuery = z.infer<typeof listSavingsEntriesQuerySchema>
 export type UpdateSavingsEntryInput = z.infer<typeof updateSavingsEntrySchema>
 export type UpdateSavingsTargetInput = z.infer<typeof updateSavingsTargetSchema>
 export type UpdateSavingsAccountInput = z.infer<typeof updateSavingsAccountSchema>
+export type ConfirmSavingsVerificationInput = z.infer<typeof confirmSavingsVerificationSchema>

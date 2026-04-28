@@ -28,6 +28,8 @@ export interface LocalStockAdjustment {
   reason: 'restock' | 'sale_adjustment' | 'damage' | 'correction'
   unitPrice?: number
   costPrice?: number
+  wholesalePrice?: number | null
+  wholesaleMinQty?: number | null
   lowStockThreshold?: number
   createdAt: string
   syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
@@ -82,6 +84,18 @@ class TradeBookDB extends Dexie {
     })
 
     this.version(8).stores({
+      sales: '&id, syncStatus, soldAt, paymentType, stockItemId',
+      expenses: '&id, syncStatus, spentAt, category, expenseType, frequency, nextDueDate',
+      stockItems: '&id, syncStatus, itemName, updatedAt',
+      stockAdjustments: '&id, stockItemId, syncStatus, createdAt, reason',
+      debtors: '&id, syncStatus, status, customerName, createdAt',
+      debtorPayments: '&id, debtorId, syncStatus, createdAt, paidAt',
+      savings: '&id, syncStatus, savedAt, createdAt',
+      suppliers: '&id, syncStatus, name, createdAt',
+      trader: '&id',
+    })
+
+    this.version(9).stores({
       sales: '&id, syncStatus, soldAt, paymentType, stockItemId',
       expenses: '&id, syncStatus, spentAt, category, expenseType, frequency, nextDueDate',
       stockItems: '&id, syncStatus, itemName, updatedAt',

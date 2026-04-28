@@ -14,6 +14,7 @@ import { SavingsPage } from './pages/SavingsPage'
 import { MorePage } from './pages/MorePage'
 import { CustomersPage } from './pages/CustomersPage'
 import { SuppliersPage } from './pages/SuppliersPage'
+import { InsightsPage } from './pages/InsightsPage'
 import { InternalAuthLayout } from './layouts/InternalAuthLayout'
 import { InternalLoginPage } from './pages/InternalLoginPage'
 import { InternalPortalLayout } from './layouts/InternalPortalLayout'
@@ -45,6 +46,7 @@ function App() {
         <Route path="/more" element={<MorePage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/suppliers" element={<SuppliersPage />} />
+        <Route path="/insights" element={<InsightsPage />} />
       </Route>
 
       <Route element={<InternalAuthLayout />}>

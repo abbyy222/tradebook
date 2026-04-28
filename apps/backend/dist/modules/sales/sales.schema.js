@@ -15,6 +15,7 @@ exports.createSaleSchema = zod_1.z.object({
         .number()
         .positive('Amount must be greater than zero')
         .multipleOf(0.01, 'Amount cannot have more than 2 decimal places'),
+    pricingMode: zod_1.z.enum(['RETAIL', 'WHOLESALE']).optional(),
     paymentType: zod_1.z.enum(['CASH', 'TRANSFER', 'DEBT']),
     debtorId: zod_1.z.string().uuid().optional(),
     soldAt: zod_1.z.string().datetime('soldAt must be a valid ISO datetime'),

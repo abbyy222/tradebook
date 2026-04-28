@@ -18,6 +18,7 @@ export declare const stockService: {
     getLowStockAlerts(traderId: string): Promise<{
         unitPrice: number;
         costPrice: number;
+        wholesalePrice: number | null;
         stockValue: number;
         retailValue: number;
         expectedGrossProfit: number;
@@ -26,8 +27,10 @@ export declare const stockService: {
         itemName: string;
         quantity: number;
         lowStockThreshold: number;
+        wholesaleMinQty: number | null;
     }[]>;
     getStockItem(id: string, traderId: string): Promise<any>;
+    getStockMovements(id: string, traderId: string): Promise<any>;
     deleteStockItem(id: string, traderId: string): Promise<{
         deleted: boolean;
     }>;

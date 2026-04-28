@@ -22,6 +22,7 @@ const env = {
   APP_ENV: import.meta.env.MODE,
   SUPPORT_EMAIL: import.meta.env.VITE_SUPPORT_EMAIL ?? 'support@tradebook.app',
   DEV_SUPPORT_EMAIL: import.meta.env.VITE_DEV_SUPPORT_EMAIL ?? 'dev@tradebook.app',
+  FLUTTERWAVE_PUBLIC_KEY: import.meta.env.VITE_FLUTTERWAVE_PUBLIC_KEY ?? '',
 } as const
 
 export default env

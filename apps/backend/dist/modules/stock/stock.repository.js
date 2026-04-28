@@ -9,35 +9,87 @@ const stockSelect = {
     quantity: true,
     unitPrice: true,
     costPrice: true,
+    wholesalePrice: true,
+    wholesaleMinQty: true,
     lowStockThreshold: true,
     syncStatus: true,
     updatedAt: true,
     createdAt: true,
 };
+const movementSelect = {
+    id: true,
+    stockItemId: true,
+    type: true,
+    quantityDelta: true,
+    quantityAfter: true,
+    unitPrice: true,
+    costPrice: true,
+    wholesalePrice: true,
+    wholesaleMinQty: true,
+    note: true,
+    referenceId: true,
+    happenedAt: true,
+    createdAt: true,
+    stockItem: {
+        select: {
+            itemName: true,
+        },
+    },
+};
 exports.stockRepository = {
     async upsert(traderId, data) {
-        return client_2.prisma.stockItem.upsert({
-            where: {
-                traderId_itemName: { traderId, itemName: data.itemName },
-            },
-            create: {
-                id: data.id,
-                traderId,
-                itemName: data.itemName,
-                quantity: data.quantity,
-                unitPrice: new client_1.Prisma.Decimal(data.unitPrice),
-                costPrice: new client_1.Prisma.Decimal(data.costPrice),
-                lowStockThreshold: data.lowStockThreshold,
-                syncStatus: 'SYNCED',
-            },
-            update: {
-                quantity: data.quantity,
-                unitPrice: new client_1.Prisma.Decimal(data.unitPrice),
-                costPrice: new client_1.Prisma.Decimal(data.costPrice),
-                lowStockThreshold: data.lowStockThreshold,
-                syncStatus: 'SYNCED',
-            },
-            select: stockSelect,
+        return client_2.prisma.$transaction(async (tx) => {
+            const existing = await tx.stockItem.findUnique({
+                where: {
+                    traderId_itemName: { traderId, itemName: data.itemName },
+                },
+                select: { id: true },
+            });
+            const item = await tx.stockItem.upsert({
+                where: {
+                    traderId_itemName: { traderId, itemName: data.itemName },
+                },
+                create: {
+                    id: data.id,
+                    traderId,
+                    itemName: data.itemName,
+                    quantity: data.quantity,
+                    unitPrice: new client_1.Prisma.Decimal(data.unitPrice),
+                    costPrice: new client_1.Prisma.Decimal(data.costPrice),
+                    wholesalePrice: data.wholesalePrice != null ? new client_1.Prisma.Decimal(data.wholesalePrice) : null,
+                    wholesaleMinQty: data.wholesaleMinQty ?? null,
+                    lowStockThreshold: data.lowStockThreshold,
+                    syncStatus: 'SYNCED',
+                },
+                update: {
+                    quantity: data.quantity,
+                    unitPrice: new client_1.Prisma.Decimal(data.unitPrice),
+                    costPrice: new client_1.Prisma.Decimal(data.costPrice),
+                    wholesalePrice: data.wholesalePrice != null ? new client_1.Prisma.Decimal(data.wholesalePrice) : null,
+                    wholesaleMinQty: data.wholesaleMinQty ?? null,
+                    lowStockThreshold: data.lowStockThreshold,
+                    syncStatus: 'SYNCED',
+                },
+                select: stockSelect,
+            });
+            if (!existing) {
+                await tx.stockMovement.create({
+                    data: {
+                        traderId,
+                        stockItemId: item.id,
+                        type: 'INITIAL',
+                        quantityDelta: data.quantity,
+                        quantityAfter: data.quantity,
+                        unitPrice: new client_1.Prisma.Decimal(data.unitPrice),
+                        costPrice: new client_1.Prisma.Decimal(data.costPrice),
+                        wholesalePrice: data.wholesalePrice != null ? new client_1.Prisma.Decimal(data.wholesalePrice) : null,
+                        wholesaleMinQty: data.wholesaleMinQty ?? null,
+                        note: 'Initial stock item created',
+                        happenedAt: item.createdAt,
+                    },
+                });
+            }
+            return item;
         });
     },
     async bulkUpsert(traderId, items) {
@@ -52,6 +104,8 @@ exports.stockRepository = {
                 quantity: item.quantity,
                 unitPrice: new client_1.Prisma.Decimal(item.unitPrice),
                 costPrice: new client_1.Prisma.Decimal(item.costPrice),
+                wholesalePrice: item.wholesalePrice != null ? new client_1.Prisma.Decimal(item.wholesalePrice) : null,
+                wholesaleMinQty: item.wholesaleMinQty ?? null,
                 lowStockThreshold: item.lowStockThreshold,
                 syncStatus: 'SYNCED',
             },
@@ -59,6 +113,8 @@ exports.stockRepository = {
                 quantity: item.quantity,
                 unitPrice: new client_1.Prisma.Decimal(item.unitPrice),
                 costPrice: new client_1.Prisma.Decimal(item.costPrice),
+                wholesalePrice: item.wholesalePrice != null ? new client_1.Prisma.Decimal(item.wholesalePrice) : null,
+                wholesaleMinQty: item.wholesaleMinQty ?? null,
                 lowStockThreshold: item.lowStockThreshold,
                 syncStatus: 'SYNCED',
             },
@@ -75,16 +131,45 @@ exports.stockRepository = {
         if (input.delta < 0 && item.quantity + input.delta < 0) {
             throw new Error(`Insufficient stock. Current: ${item.quantity}, Requested: ${Math.abs(input.delta)}`);
         }
-        return client_2.prisma.stockItem.update({
-            where: { id },
-            data: {
-                quantity: { increment: input.delta },
-                ...(input.unitPrice != null ? { unitPrice: new client_1.Prisma.Decimal(input.unitPrice) } : {}),
-                ...(input.costPrice != null ? { costPrice: new client_1.Prisma.Decimal(input.costPrice) } : {}),
-                ...(input.lowStockThreshold != null ? { lowStockThreshold: input.lowStockThreshold } : {}),
-                syncStatus: 'SYNCED',
-            },
-            select: stockSelect,
+        return client_2.prisma.$transaction(async (tx) => {
+            const updated = await tx.stockItem.update({
+                where: { id },
+                data: {
+                    quantity: { increment: input.delta },
+                    ...(input.unitPrice != null ? { unitPrice: new client_1.Prisma.Decimal(input.unitPrice) } : {}),
+                    ...(input.costPrice != null ? { costPrice: new client_1.Prisma.Decimal(input.costPrice) } : {}),
+                    ...(input.wholesalePrice !== undefined ? { wholesalePrice: input.wholesalePrice != null ? new client_1.Prisma.Decimal(input.wholesalePrice) : null } : {}),
+                    ...(input.wholesaleMinQty !== undefined ? { wholesaleMinQty: input.wholesaleMinQty } : {}),
+                    ...(input.lowStockThreshold != null ? { lowStockThreshold: input.lowStockThreshold } : {}),
+                    syncStatus: 'SYNCED',
+                },
+                select: stockSelect,
+            });
+            const movementType = input.reason === 'restock'
+                ? 'RESTOCK'
+                : input.reason === 'damage'
+                    ? 'DAMAGE'
+                    : 'CORRECTION';
+            await tx.stockMovement.create({
+                data: {
+                    traderId,
+                    stockItemId: updated.id,
+                    type: movementType,
+                    quantityDelta: input.delta,
+                    quantityAfter: updated.quantity,
+                    unitPrice: input.unitPrice != null ? new client_1.Prisma.Decimal(input.unitPrice) : updated.unitPrice,
+                    costPrice: input.costPrice != null ? new client_1.Prisma.Decimal(input.costPrice) : updated.costPrice,
+                    wholesalePrice: input.wholesalePrice !== undefined
+                        ? input.wholesalePrice != null
+                            ? new client_1.Prisma.Decimal(input.wholesalePrice)
+                            : null
+                        : updated.wholesalePrice,
+                    wholesaleMinQty: input.wholesaleMinQty !== undefined ? input.wholesaleMinQty : updated.wholesaleMinQty,
+                    note: input.delta === 0 ? 'Stock details updated' : input.reason.replace('_', ' '),
+                    happenedAt: updated.updatedAt,
+                },
+            });
+            return updated;
         });
     },
     async findMany(traderId, query) {
@@ -116,7 +201,7 @@ exports.stockRepository = {
     },
     async getLowStockItems(traderId) {
         return client_2.prisma.$queryRaw `
-      SELECT id, item_name as "itemName", quantity, low_stock_threshold as "lowStockThreshold", unit_price as "unitPrice", cost_price as "costPrice"
+      SELECT id, item_name as "itemName", quantity, low_stock_threshold as "lowStockThreshold", unit_price as "unitPrice", cost_price as "costPrice", wholesale_price as "wholesalePrice", wholesale_min_qty as "wholesaleMinQty"
       FROM stock_items
       WHERE trader_id = ${traderId}
         AND quantity <= low_stock_threshold
@@ -149,5 +234,13 @@ exports.stockRepository = {
     },
     async delete(id, traderId) {
         return client_2.prisma.stockItem.deleteMany({ where: { id, traderId } });
+    },
+    async findMovements(stockItemId, traderId, limit = 40) {
+        return client_2.prisma.stockMovement.findMany({
+            where: { stockItemId, traderId },
+            select: movementSelect,
+            orderBy: { happenedAt: 'desc' },
+            take: limit,
+        });
     },
 };

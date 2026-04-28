@@ -10,6 +10,8 @@ export declare const stockRepository: {
         unitPrice: Prisma.Decimal;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         costPrice: Prisma.Decimal;
+        wholesalePrice: Prisma.Decimal | null;
+        wholesaleMinQty: number | null;
         lowStockThreshold: number;
     }>;
     bulkUpsert(traderId: string, items: CreateStockItemInput[]): Promise<{
@@ -21,6 +23,8 @@ export declare const stockRepository: {
         unitPrice: Prisma.Decimal;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         costPrice: Prisma.Decimal;
+        wholesalePrice: Prisma.Decimal | null;
+        wholesaleMinQty: number | null;
         lowStockThreshold: number;
     }[]>;
     adjustQuantity(id: string, traderId: string, input: AdjustStockInput): Promise<{
@@ -32,6 +36,8 @@ export declare const stockRepository: {
         unitPrice: Prisma.Decimal;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         costPrice: Prisma.Decimal;
+        wholesalePrice: Prisma.Decimal | null;
+        wholesaleMinQty: number | null;
         lowStockThreshold: number;
     } | null>;
     findMany(traderId: string, query: ListStockQuery): Promise<{
@@ -44,6 +50,8 @@ export declare const stockRepository: {
             unitPrice: Prisma.Decimal;
             syncStatus: import(".prisma/client").$Enums.SyncStatus;
             costPrice: Prisma.Decimal;
+            wholesalePrice: Prisma.Decimal | null;
+            wholesaleMinQty: number | null;
             lowStockThreshold: number;
         }[];
         nextCursor: string | null;
@@ -56,6 +64,8 @@ export declare const stockRepository: {
         lowStockThreshold: number;
         unitPrice: Prisma.Decimal;
         costPrice: Prisma.Decimal;
+        wholesalePrice: Prisma.Decimal | null;
+        wholesaleMinQty: number | null;
     }[]>;
     getInventorySummary(traderId: string): Promise<{
         inventoryValue: number;
@@ -72,7 +82,10 @@ export declare const stockRepository: {
         unitPrice: Prisma.Decimal;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         costPrice: Prisma.Decimal;
+        wholesalePrice: Prisma.Decimal | null;
+        wholesaleMinQty: number | null;
         lowStockThreshold: number;
     } | null>;
     delete(id: string, traderId: string): Promise<Prisma.BatchPayload>;
+    findMovements(stockItemId: string, traderId: string, limit?: number): Promise<any>;
 };

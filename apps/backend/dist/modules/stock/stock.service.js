@@ -7,12 +7,14 @@ const logger_1 = require("../../utils/logger");
 const toStockDTO = (item) => {
     const unitPrice = Number(item.unitPrice);
     const costPrice = Number(item.costPrice);
+    const wholesalePrice = item.wholesalePrice == null ? null : Number(item.wholesalePrice);
     const stockValue = item.quantity * costPrice;
     const retailValue = item.quantity * unitPrice;
     return {
         ...item,
         unitPrice,
         costPrice,
+        wholesalePrice,
         stockValue,
         retailValue,
         expectedGrossProfit: retailValue - stockValue,
@@ -46,6 +48,8 @@ exports.stockService = {
                 newQuantity: updated.quantity,
                 unitPrice: input.unitPrice,
                 costPrice: input.costPrice,
+                wholesalePrice: input.wholesalePrice,
+                wholesaleMinQty: input.wholesaleMinQty,
                 lowStockThreshold: input.lowStockThreshold,
             });
             return toStockDTO(updated);
@@ -75,6 +79,7 @@ exports.stockService = {
             ...item,
             unitPrice: Number(item.unitPrice),
             costPrice: Number(item.costPrice),
+            wholesalePrice: item.wholesalePrice == null ? null : Number(item.wholesalePrice),
             stockValue: item.quantity * Number(item.costPrice),
             retailValue: item.quantity * Number(item.unitPrice),
             expectedGrossProfit: item.quantity * (Number(item.unitPrice) - Number(item.costPrice)),
@@ -86,6 +91,28 @@ exports.stockService = {
         if (!item)
             throw new errorHandler_1.AppError('Stock item not found', 404, 'NOT_FOUND');
         return toStockDTO(item);
+    },
+    async getStockMovements(id, traderId) {
+        const item = await stock_repository_1.stockRepository.findById(id, traderId);
+        if (!item)
+            throw new errorHandler_1.AppError('Stock item not found', 404, 'NOT_FOUND');
+        const movements = await stock_repository_1.stockRepository.findMovements(id, traderId);
+        return movements.map((movement) => ({
+            id: movement.id,
+            stockItemId: movement.stockItemId,
+            itemName: movement.stockItem.itemName,
+            type: movement.type,
+            quantityDelta: movement.quantityDelta,
+            quantityAfter: movement.quantityAfter,
+            unitPrice: movement.unitPrice == null ? null : Number(movement.unitPrice),
+            costPrice: movement.costPrice == null ? null : Number(movement.costPrice),
+            wholesalePrice: movement.wholesalePrice == null ? null : Number(movement.wholesalePrice),
+            wholesaleMinQty: movement.wholesaleMinQty,
+            note: movement.note,
+            referenceId: movement.referenceId,
+            happenedAt: movement.happenedAt.toISOString(),
+            createdAt: movement.createdAt.toISOString(),
+        }));
     },
     async deleteStockItem(id, traderId) {
         const result = await stock_repository_1.stockRepository.delete(id, traderId);

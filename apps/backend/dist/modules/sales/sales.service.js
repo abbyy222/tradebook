@@ -13,6 +13,7 @@ const toSaleDTO = (sale) => ({
     ...sale,
     unitPrice: Number(sale.unitPrice),
     amount: Number(sale.amount),
+    pricingMode: sale.pricingMode ?? undefined,
     soldAt: sale.soldAt.toISOString(),
     createdAt: sale.createdAt.toISOString(),
 });
@@ -64,9 +65,21 @@ const normalizeSaleAgainstStock = async (traderId, input, existingSale) => {
     if (!stockItem) {
         throw new errorHandler_1.AppError('Selected stock item was not found', 400, 'STOCK_ITEM_NOT_FOUND');
     }
-    const canonicalUnitPrice = Number(stockItem.unitPrice);
-    if (Math.abs(canonicalUnitPrice - input.unitPrice) > 0.009) {
-        throw new errorHandler_1.AppError('Use the current selling price saved on the stock item', 400, 'INVALID_SELLING_PRICE');
+    const canonicalRetailPrice = Number(stockItem.unitPrice);
+    const canonicalWholesalePrice = stockItem.wholesalePrice == null ? null : Number(stockItem.wholesalePrice);
+    if (input.pricingMode === 'WHOLESALE' && canonicalWholesalePrice == null) {
+        throw new errorHandler_1.AppError('This stock item does not have a wholesale price yet', 400, 'WHOLESALE_PRICE_NOT_SET');
+    }
+    if (input.pricingMode === 'WHOLESALE' &&
+        stockItem.wholesaleMinQty != null &&
+        input.quantity < stockItem.wholesaleMinQty) {
+        throw new errorHandler_1.AppError('Wholesale price starts from quantity ' + stockItem.wholesaleMinQty, 400, 'WHOLESALE_MIN_QTY_NOT_MET');
+    }
+    const canonicalUnitPrice = input.pricingMode === 'WHOLESALE'
+        ? canonicalWholesalePrice
+        : canonicalRetailPrice;
+    if (canonicalUnitPrice == null || Math.abs(canonicalUnitPrice - input.unitPrice) > 0.009) {
+        throw new errorHandler_1.AppError('Use the current retail or wholesale price saved on the stock item', 400, 'INVALID_SELLING_PRICE');
     }
     if (!existingSale && stockItem.quantity < input.quantity) {
         throw new errorHandler_1.AppError('Not enough stock. Available: ' + stockItem.quantity + ', requested: ' + input.quantity, 400, 'INSUFFICIENT_STOCK');

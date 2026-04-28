@@ -26,6 +26,18 @@ type FlutterwaveTransferResponse = {
   message?: string
 }
 
+type FlutterwaveVerifyTransactionResponse = {
+  status: string
+  data?: {
+    id?: number | string
+    tx_ref?: string
+    status?: string
+    amount?: number | string
+    currency?: string
+  }
+  message?: string
+}
+
 const ensureFlutterwaveConfigured = () => {
   if (!env.FLW_SECRET_KEY) {
     throw new AppError('Flutterwave secret key is missing in backend environment', 500, 'FLW_NOT_CONFIGURED')
@@ -131,5 +143,24 @@ export const initiateFlutterwaveTransfer = async (input: {
     transferId: response.data?.id ? String(response.data.id) : null,
     reference: response.data?.reference ?? input.reference,
     status: response.data?.status ?? 'PENDING',
+  }
+}
+
+export const verifyFlutterwaveTransactionByReference = async (txRef: string) => {
+  const response = await makeFlutterwaveRequest<FlutterwaveVerifyTransactionResponse>(
+    'GET',
+    `/v3/transactions/verify_by_reference?tx_ref=${encodeURIComponent(txRef)}`,
+  )
+
+  if (!response.data?.tx_ref) {
+    throw new AppError(response.message || 'Could not verify Flutterwave transaction', 400, 'TRANSACTION_VERIFY_FAILED')
+  }
+
+  return {
+    transactionId: response.data.id ? String(response.data.id) : null,
+    txRef: response.data.tx_ref,
+    status: String(response.data.status ?? 'UNKNOWN').toLowerCase(),
+    amount: Number(response.data.amount ?? 0),
+    currency: String(response.data.currency ?? ''),
   }
 }

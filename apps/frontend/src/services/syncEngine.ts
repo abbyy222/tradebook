@@ -144,6 +144,7 @@ class SyncEngine {
           quantity: (sale as any).quantity ?? 1,
           unitPrice: (sale as any).unitPrice ?? sale.amount,
           amount: sale.amount,
+          pricingMode: (sale as any).pricingMode,
           paymentType: sale.paymentType,
           debtorId: sale.debtorId,
           soldAt: sale.soldAt,
@@ -217,6 +218,8 @@ class SyncEngine {
           itemName: item.itemName,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
+          wholesalePrice: item.wholesalePrice ?? null,
+          wholesaleMinQty: item.wholesaleMinQty ?? null,
           // Legacy rows created before Phase 2 may not have costPrice yet.
           // We fall back to unitPrice so the row can still sync instead of getting stranded forever.
           costPrice: item.costPrice ?? item.unitPrice,
@@ -289,6 +292,8 @@ class SyncEngine {
           reason: adjustment.reason,
           unitPrice: adjustment.unitPrice,
           costPrice: adjustment.costPrice,
+          wholesalePrice: adjustment.wholesalePrice,
+          wholesaleMinQty: adjustment.wholesaleMinQty,
           lowStockThreshold: adjustment.lowStockThreshold,
         })
         await db.transaction('rw', db.stockItems, db.stockAdjustments, async () => {

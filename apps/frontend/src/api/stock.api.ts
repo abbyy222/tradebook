@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { CreateStockItemDTO, StockItemDTO, CursorPaginatedResponse } from '@tradebook/shared-types'
+import type { CreateStockItemDTO, StockItemDTO, StockMovementDTO, CursorPaginatedResponse } from '@tradebook/shared-types'
 
 export const stockApi = {
   sync: async (data: CreateStockItemDTO) => {
@@ -23,9 +23,22 @@ export const stockApi = {
     return res.data.data
   },
 
+  getMovements: async (id: string) => {
+    const res = await apiClient.get<{ data: StockMovementDTO[] }>(`/stock/${id}/movements`)
+    return res.data.data
+  },
+
   adjust: async (
     id: string,
-    input: { delta: number; reason: string; unitPrice?: number; costPrice?: number; lowStockThreshold?: number },
+    input: {
+      delta: number
+      reason: string
+      unitPrice?: number
+      costPrice?: number
+      wholesalePrice?: number | null
+      wholesaleMinQty?: number | null
+      lowStockThreshold?: number
+    },
   ) => {
     const res = await apiClient.patch<{ data: StockItemDTO }>(`/stock/${id}/adjust`, input)
     return res.data.data

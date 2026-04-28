@@ -110,6 +110,7 @@ export interface CreateSaleDTO {
   quantity: number
   unitPrice: number
   amount: number
+  pricingMode?: 'RETAIL' | 'WHOLESALE'
   paymentType: 'CASH' | 'TRANSFER' | 'DEBT'
   debtorId?: string
   soldAt: string
@@ -122,6 +123,7 @@ export interface SaleDTO {
   quantity: number
   unitPrice: number
   amount: number
+  pricingMode?: 'RETAIL' | 'WHOLESALE'
   paymentType: 'CASH' | 'TRANSFER' | 'DEBT'
   debtorId?: string
   syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
@@ -165,6 +167,8 @@ export interface CreateStockItemDTO {
   quantity: number
   unitPrice: number
   costPrice: number
+  wholesalePrice?: number | null
+  wholesaleMinQty?: number | null
   lowStockThreshold?: number
 }
 
@@ -174,12 +178,33 @@ export interface StockItemDTO {
   quantity: number
   unitPrice: number
   costPrice: number
+  wholesalePrice?: number | null
+  wholesaleMinQty?: number | null
   stockValue: number
   retailValue: number
   expectedGrossProfit: number
   lowStockThreshold: number
   syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
   updatedAt: string
+}
+
+export type StockMovementType = 'INITIAL' | 'RESTOCK' | 'SALE' | 'DAMAGE' | 'CORRECTION'
+
+export interface StockMovementDTO {
+  id: string
+  stockItemId: string
+  itemName: string
+  type: StockMovementType
+  quantityDelta: number
+  quantityAfter: number | null
+  unitPrice?: number | null
+  costPrice?: number | null
+  wholesalePrice?: number | null
+  wholesaleMinQty?: number | null
+  note?: string | null
+  referenceId?: string | null
+  happenedAt: string
+  createdAt: string
 }
 
 export interface CreateDebtorDTO {
@@ -298,6 +323,18 @@ export interface SavingsTransferInitiationDTO {
   reference: string
   transferId: string | null
   status: 'PENDING'
+  message: string
+}
+
+export interface ConfirmSavingsVerificationDTO {
+  txRef: string
+  transactionId?: string | null
+}
+
+export interface SavingsVerificationConfirmationDTO {
+  verified: true
+  reference: string
+  entry: SavingsEntryDTO
   message: string
 }
 
@@ -442,6 +479,16 @@ export interface BusinessInsightsDTO {
   syncHealth: {
     pending: number
     failed: number
+  }
+  profitability: {
+    grossMarginEstimate: number
+    averageSaleValue: number
+    topProducts: Array<{
+      itemName: string
+      unitsSold: number
+      revenue: number
+      estimatedProfit: number
+    }>
   }
   activityTrend: ActivityTrendPointDTO[]
 }

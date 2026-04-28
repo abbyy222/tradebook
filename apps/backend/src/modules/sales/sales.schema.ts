@@ -13,6 +13,7 @@ export const createSaleSchema = z.object({
     .number()
     .positive('Amount must be greater than zero')
     .multipleOf(0.01, 'Amount cannot have more than 2 decimal places'),
+  pricingMode: z.enum(['RETAIL', 'WHOLESALE']).optional(),
   paymentType: z.enum(['CASH', 'TRANSFER', 'DEBT']),
   debtorId: z.string().uuid().optional(),
   soldAt: z.string().datetime('soldAt must be a valid ISO datetime'),

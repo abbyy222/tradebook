@@ -1,14 +1,24 @@
 import { AppError } from '../../middleware/errorHandler'
 import { env } from '../../config/env'
 import { savingsRepository } from './savings.repository'
-import { CreateSavingsEntryInput, ListSavingsEntriesQuery, UpdateSavingsAccountInput, UpdateSavingsEntryInput, UpdateSavingsTargetInput } from './savings.schema'
+import {
+  ConfirmSavingsVerificationInput,
+  CreateSavingsEntryInput,
+  ListSavingsEntriesQuery,
+  UpdateSavingsAccountInput,
+  UpdateSavingsEntryInput,
+  UpdateSavingsTargetInput,
+} from './savings.schema'
 import {
   initiateSavingsPayoutTransfer,
   listSavingsPayoutBanks,
   resolveSavingsPayoutAccount,
 } from '../../utils/savingsPayoutGateway'
+import { verifyFlutterwaveTransactionByReference } from '../../utils/flutterwave'
 
 const LAGOS_OFFSET_MS = 60 * 60 * 1000
+const FLUTTERWAVE_VERIFY_ATTEMPTS = 6
+const FLUTTERWAVE_VERIFY_DELAY_MS = 2000
 
 const toSavingsEntryDTO = (entry: any) => ({
   ...entry,
@@ -120,6 +130,27 @@ const getSavingsStatusForAmount = async (
   )
 
   return amount <= availableToSave ? 'RECONCILED' as const : 'DECLARED' as const
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const verifyCheckoutPaymentWithRetry = async (txRef: string) => {
+  let lastVerifiedPayment: Awaited<ReturnType<typeof verifyFlutterwaveTransactionByReference>> | null = null
+
+  for (let attempt = 0; attempt < FLUTTERWAVE_VERIFY_ATTEMPTS; attempt += 1) {
+    lastVerifiedPayment = await verifyFlutterwaveTransactionByReference(txRef)
+    const normalizedStatus = lastVerifiedPayment.status.toLowerCase()
+
+    if (normalizedStatus === 'successful' || normalizedStatus === 'completed') {
+      return lastVerifiedPayment
+    }
+
+    if (attempt < FLUTTERWAVE_VERIFY_ATTEMPTS - 1) {
+      await sleep(FLUTTERWAVE_VERIFY_DELAY_MS)
+    }
+  }
+
+  return lastVerifiedPayment
 }
 
 export const savingsService = {
@@ -370,6 +401,73 @@ export const savingsService = {
       transferId: transfer.transferId,
       status: 'PENDING' as const,
       message: 'Transfer initiated. TradeBook will mark this entry verified when Flutterwave confirms the payout.',
+    }
+  },
+
+  async confirmCheckoutVerification(
+    id: string,
+    traderId: string,
+    role: 'OWNER' | 'SALESPERSON',
+    input: ConfirmSavingsVerificationInput,
+  ) {
+    if (role !== 'OWNER') {
+      throw new AppError('Only business owner can verify savings entries', 403, 'FORBIDDEN')
+    }
+
+    const entry = await savingsRepository.findById(id, traderId)
+    if (!entry) {
+      throw new AppError('Savings entry not found', 404, 'NOT_FOUND')
+    }
+
+    if (entry.status === 'VERIFIED') {
+      return {
+        verified: true as const,
+        reference: input.txRef,
+        entry: toSavingsEntryDTO(entry),
+        message: 'This savings entry is already verified.',
+      }
+    }
+
+    const verifiedPayment = await verifyCheckoutPaymentWithRetry(input.txRef)
+    if (!verifiedPayment) {
+      throw new AppError('Could not verify Flutterwave payment right now', 500, 'PAYMENT_VERIFY_RETRY_FAILED')
+    }
+
+    const normalizedStatus = verifiedPayment?.status?.toLowerCase() ?? 'unknown'
+    if (normalizedStatus !== 'successful' && normalizedStatus !== 'completed') {
+      throw new AppError('Flutterwave payment is not successful yet', 400, 'PAYMENT_NOT_SUCCESSFUL')
+    }
+
+    if (verifiedPayment.currency.toUpperCase() !== 'NGN') {
+      throw new AppError('Flutterwave payment currency did not match NGN', 400, 'PAYMENT_CURRENCY_MISMATCH')
+    }
+
+    const expectedAmount = Number(entry.amount)
+    if (Math.abs(verifiedPayment.amount - expectedAmount) > 0.009) {
+      throw new AppError('Flutterwave payment amount did not match the savings entry', 400, 'PAYMENT_AMOUNT_MISMATCH')
+    }
+
+    await savingsRepository.markVerificationInitiated(id, traderId, {
+      reference: input.txRef,
+      transferId: input.transactionId ?? verifiedPayment.transactionId,
+      status: 'SUCCESSFUL',
+    })
+    await savingsRepository.markVerifiedByReference(
+      input.txRef,
+      input.transactionId ?? verifiedPayment.transactionId,
+      'SUCCESSFUL',
+    )
+
+    const updated = await savingsRepository.findById(id, traderId)
+    if (!updated) {
+      throw new AppError('Savings entry not found after payment verification', 404, 'NOT_FOUND')
+    }
+
+    return {
+      verified: true as const,
+      reference: input.txRef,
+      entry: toSavingsEntryDTO(updated),
+      message: 'Savings payment verified successfully.',
     }
   },
 

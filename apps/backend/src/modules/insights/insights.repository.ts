@@ -5,6 +5,13 @@ type CountByDayRow = {
   count: number
 }
 
+type ProductProfitRow = {
+  itemName: string
+  unitsSold: bigint | number
+  revenue: number
+  estimatedProfit: number
+}
+
 const getSalesCountByDay = (traderId: string, from: Date) =>
   prisma.$queryRaw<CountByDayRow[]>`
     SELECT date_trunc('day', sold_at) AS day, count(*)::int AS count
@@ -41,6 +48,22 @@ const getSavingsCountByDay = (traderId: string, from: Date) =>
     ORDER BY 1 ASC
   `
 
+const getTopProductsByProfit = (traderId: string, from: Date) =>
+  prisma.$queryRaw<ProductProfitRow[]>`
+    SELECT
+      s.item_name AS "itemName",
+      COALESCE(SUM(s.quantity), 0) AS "unitsSold",
+      COALESCE(SUM(s.amount), 0)::float AS revenue,
+      COALESCE(SUM((s.unit_price - COALESCE(si.cost_price, 0)) * s.quantity), 0)::float AS "estimatedProfit"
+    FROM sales s
+    LEFT JOIN stock_items si ON si.id = s.stock_item_id
+    WHERE s.trader_id = ${traderId}
+      AND s.sold_at >= ${from}
+    GROUP BY s.item_name
+    ORDER BY "estimatedProfit" DESC, revenue DESC
+    LIMIT 5
+  `
+
 export const insightsRepository = {
   async getBusinessMetrics(traderId: string, from: Date) {
     const [
@@ -65,6 +88,7 @@ export const insightsRepository = {
       expensesByDay,
       debtorsByDay,
       savingsByDay,
+      topProducts,
     ] = await Promise.all([
       prisma.trader.count({ where: { OR: [{ id: traderId }, { ownerTraderId: traderId }] } }),
       prisma.sale.count({ where: { traderId, soldAt: { gte: from } } }),
@@ -87,6 +111,7 @@ export const insightsRepository = {
       getExpensesCountByDay(traderId, from),
       getDebtorsCountByDay(traderId, from),
       getSavingsCountByDay(traderId, from),
+      getTopProductsByProfit(traderId, from),
     ])
 
     return {
@@ -105,6 +130,12 @@ export const insightsRepository = {
         pending: salesPending + expensesPending + stockPending,
         failed: salesFailed + expensesFailed + stockFailed,
       },
+      topProducts: topProducts.map((row) => ({
+        itemName: row.itemName,
+        unitsSold: Number(row.unitsSold ?? 0),
+        revenue: Number(row.revenue ?? 0),
+        estimatedProfit: Number(row.estimatedProfit ?? 0),
+      })),
       trendRows: {
         sales: salesByDay,
         expenses: expensesByDay,
@@ -120,4 +151,3 @@ export const insightsRepository = {
     return Date.now() - started
   },
 }
-

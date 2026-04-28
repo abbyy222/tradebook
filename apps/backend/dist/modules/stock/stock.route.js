@@ -72,6 +72,16 @@ exports.stockRouter.get('/:id', async (req, res, next) => {
         next(err);
     }
 });
+exports.stockRouter.get('/:id/movements', async (req, res, next) => {
+    try {
+        const stockId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const movements = await stock_service_1.stockService.getStockMovements(stockId, req.trader.traderId);
+        res.status(200).json({ data: movements, error: null });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 exports.stockRouter.delete('/:id', (0, authorizeRole_1.authorizeRole)('OWNER'), async (req, res, next) => {
     try {
         const stockId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;

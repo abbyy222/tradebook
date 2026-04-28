@@ -37,6 +37,7 @@ const normalizeSale = (sale: Partial<SaleDTO> & Pick<SaleDTO, 'id' | 'itemName' 
     ...sale,
     quantity,
     unitPrice,
+    pricingMode: sale.pricingMode,
     stockItemId: sale.stockItemId,
     debtorId: sale.debtorId,
     syncStatus: sale.syncStatus ?? 'SYNCED',
@@ -155,6 +156,7 @@ const syncPendingSales = async () => {
       amount: normalized.amount,
       paymentType: normalized.paymentType,
       debtorId: normalized.debtorId,
+      pricingMode: normalized.pricingMode,
       soldAt: normalized.soldAt,
     }
 
@@ -188,6 +190,7 @@ type CreateSaleInput = {
   quantity: number
   unitPrice: number
   amount: number
+  pricingMode?: 'RETAIL' | 'WHOLESALE'
   paymentType: 'CASH' | 'TRANSFER' | 'DEBT'
   debtorId?: string
   soldAt: string
@@ -242,16 +245,31 @@ export const useCreateSale = () => {
         throw new Error('Not enough stock. Available: ' + stockItem.quantity)
       }
 
-      if (Math.abs(stockItem.unitPrice - input.unitPrice) > 0.009) {
-        throw new Error('Use the current selling price saved on this stock item')
+      const retailPrice = stockItem.unitPrice
+      const wholesalePrice = stockItem.wholesalePrice ?? null
+      const wholesaleMinQty = stockItem.wholesaleMinQty ?? null
+      const usingWholesale = input.pricingMode === 'WHOLESALE'
+
+      if (usingWholesale) {
+        if (wholesalePrice == null) {
+          throw new Error('This stock item does not have a wholesale price yet')
+        }
+        if (wholesaleMinQty != null && input.quantity < wholesaleMinQty) {
+          throw new Error('Wholesale price starts from quantity ' + wholesaleMinQty)
+        }
       }
 
-      const canonicalAmount = Number((input.quantity * stockItem.unitPrice).toFixed(2))
+      const activeUnitPrice = usingWholesale ? wholesalePrice : retailPrice
+      if (activeUnitPrice == null || Math.abs(activeUnitPrice - input.unitPrice) > 0.009) {
+        throw new Error('Use the current retail or wholesale price saved on this stock item')
+      }
+
+      const canonicalAmount = Number((input.quantity * activeUnitPrice).toFixed(2))
       const sale = normalizeSale({
         ...input,
         id,
         itemName: stockItem.itemName,
-        unitPrice: stockItem.unitPrice,
+        unitPrice: activeUnitPrice,
         amount: canonicalAmount,
         createdAt,
         syncStatus: getInitialSyncStatus(),

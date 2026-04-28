@@ -1,214 +1,374 @@
 import { useMemo, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
-import { useBusinessInsights, useDeveloperInsights } from '@/hooks/useInsights'
+import { useBusinessInsights } from '@/hooks/useInsights'
 
 const fmtMoney = (value: number) => `NGN ${value.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`
+const fmtPercent = (value: number) => `${value.toFixed(0)}%`
 
-const MetricCard = ({ label, value, hint }: { label: string; value: string; hint?: string }) => (
-  <div className="rounded-2xl border border-white/10 bg-[#231510] px-4 py-4">
-    <p className="label-base mb-1">{label}</p>
-    <p className="font-display text-2xl font-bold text-primary wonky">{value}</p>
-    {hint ? <p className="mt-1 text-xs text-secondary">{hint}</p> : null}
+const SectionTitle = ({ eyebrow, title, note }: { eyebrow: string; title: string; note: string }) => (
+  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p className="label-base mb-1">{eyebrow}</p>
+      <h2 className="font-ui text-lg font-bold text-primary">{title}</h2>
+    </div>
+    <p className="max-w-md text-left text-xs text-secondary sm:text-right">{note}</p>
   </div>
 )
+
+const SignalCard = ({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string
+  value: string
+  hint: string
+  tone: 'amber' | 'mint' | 'blue' | 'rose'
+}) => {
+  const toneStyles = {
+    amber: {
+      border: 'border-[#e8a838]/25',
+      glow: 'from-[#e8a838]/22 via-[#c4622d]/12 to-transparent',
+      value: 'text-[#f6d27d]',
+    },
+    mint: {
+      border: 'border-[#4ecca3]/25',
+      glow: 'from-[#4ecca3]/20 via-[#2f7c67]/10 to-transparent',
+      value: 'text-[#92f0cf]',
+    },
+    blue: {
+      border: 'border-[#7da2ff]/25',
+      glow: 'from-[#7da2ff]/20 via-[#435fb7]/10 to-transparent',
+      value: 'text-[#bdd0ff]',
+    },
+    rose: {
+      border: 'border-[#f87171]/25',
+      glow: 'from-[#f87171]/18 via-[#7f2a2a]/10 to-transparent',
+      value: 'text-[#ffb4b4]',
+    },
+  }[tone]
+
+  return (
+    <div className={`relative overflow-hidden rounded-3xl border bg-[#1f130f] px-4 py-4 ${toneStyles.border}`}>
+      <div className={`absolute inset-0 bg-gradient-to-br ${toneStyles.glow}`} />
+      <div className="relative">
+        <p className="label-base mb-2">{label}</p>
+        <p className={`font-display text-3xl font-bold wonky ${toneStyles.value}`}>{value}</p>
+        <p className="mt-2 text-xs leading-5 text-secondary">{hint}</p>
+      </div>
+    </div>
+  )
+}
 
 export const InsightsPage = () => {
   const trader = useAuthStore((state) => state.trader)
   const isOwner = trader?.role !== 'SALESPERSON'
   const [days, setDays] = useState(14)
-  const { data: business, isLoading: businessLoading } = useBusinessInsights(days, isOwner)
-  const { data: developer, isLoading: developerLoading } = useDeveloperInsights(isOwner)
+  const { data: business, isLoading } = useBusinessInsights(days, isOwner)
 
-  const trendPeak = useMemo(() => {
-    if (!business?.activityTrend?.length) return 1
-    return Math.max(
-      ...business.activityTrend.map(
-        (row) => row.salesCount + row.expensesCount + row.debtorsCount + row.savingsCount
-      ),
-      1
-    )
-  }, [business?.activityTrend])
+  const derived = useMemo(() => {
+    if (!business) {
+      return {
+        expenseLoad: 0,
+        profitRetention: 0,
+        averageTransactionsPerDay: 0,
+        topProductShare: 0,
+        trendPeak: 1,
+      }
+    }
+
+    const salesAmount = business.overview.salesAmount
+    const topProductRevenue = business.profitability.topProducts.reduce((sum, item) => sum + item.revenue, 0)
+
+    return {
+      expenseLoad: salesAmount > 0 ? (business.overview.expensesAmount / salesAmount) * 100 : 0,
+      profitRetention: salesAmount > 0 ? (business.overview.operatingProfit / salesAmount) * 100 : 0,
+      averageTransactionsPerDay: business.period.days > 0
+        ? business.overview.transactionsRecorded / business.period.days
+        : 0,
+      topProductShare: salesAmount > 0 ? (topProductRevenue / salesAmount) * 100 : 0,
+      trendPeak: Math.max(...business.activityTrend.map((row) => row.salesCount), 1),
+    }
+  }, [business])
 
   if (!isOwner) {
     return <Navigate to="/dashboard" replace />
   }
 
   return (
-    <div className="min-h-screen px-4 pb-24 pt-10 md:px-6 md:pb-10">
-      <div className="mx-auto max-w-6xl space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="label-base mb-1">Business Admin + Developer Monitor</p>
-            <h1 className="font-display text-3xl font-bold text-primary wonky">Insights Hub</h1>
-            <p className="mt-1 text-sm text-secondary">Usage, sync health, and API stability in one place.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {[7, 14, 30].map((option) => (
-              <button
-                key={option}
-                onClick={() => setDays(option)}
-                className="rounded-full px-3 py-1.5 font-ui text-xs font-bold uppercase tracking-[0.08em]"
-                style={{
-                  background: option === days ? 'linear-gradient(135deg, #c04818, #e8a838)' : 'rgba(255,255,255,0.04)',
-                  color: option === days ? '#fff' : 'rgba(245,237,224,0.68)',
-                  border: option === days ? '1px solid transparent' : '1px solid rgba(255,255,255,0.1)',
-                }}
-              >
-                {option}d
-              </button>
-            ))}
-          </div>
-        </div>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(232,168,56,0.08),_transparent_28%),linear-gradient(180deg,_#140d0a_0%,_#0f0907_100%)] px-4 pb-24 pt-8 md:px-6 md:pb-10">
+      <div className="mx-auto max-w-6xl space-y-5">
+        <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#1c120e] px-5 py-5 shadow-[0_30px_80px_rgba(0,0,0,0.25)] md:px-6">
+          <div className="absolute -right-12 top-0 h-32 w-32 rounded-full bg-[#e8a838]/10 blur-3xl" />
+          <div className="absolute bottom-0 left-0 h-24 w-40 bg-[linear-gradient(90deg,rgba(78,204,163,0.08),transparent)]" />
+          <div className="relative flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-2xl">
+              <p className="label-base mb-2">Business Analytics</p>
+              <h1 className="font-display text-3xl font-bold text-primary wonky md:text-4xl">Insights</h1>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-secondary">
+                A clearer reading of margin strength, sales rhythm, product winners, and the pressure points shaping cashflow.
+              </p>
+            </div>
 
-        <section className="space-y-3">
-          <h2 className="font-ui text-sm font-bold uppercase tracking-[0.08em] text-secondary">Business Overview</h2>
-          {businessLoading || !business ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {[1, 2, 3, 4].map((idx) => (
+            <div className="flex flex-wrap items-center gap-2">
+              {[7, 14, 30].map((option) => (
+                <button
+                  key={option}
+                  onClick={() => setDays(option)}
+                  className="rounded-full px-3 py-1.5 font-ui text-xs font-bold uppercase tracking-[0.08em]"
+                  style={{
+                    background: option === days ? 'linear-gradient(135deg, #c04818, #e8a838)' : 'rgba(255,255,255,0.04)',
+                    color: option === days ? '#fff' : 'rgba(245,237,224,0.68)',
+                    border: option === days ? '1px solid transparent' : '1px solid rgba(255,255,255,0.1)',
+                  }}
+                >
+                  {option}d
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {isLoading || !business ? (
+            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+              {[1, 2, 3].map((idx) => (
                 <div key={idx} className="h-24 rounded-2xl skeleton" />
               ))}
             </div>
           ) : (
-            <>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <MetricCard
-                  label="Transactions"
-                  value={business.overview.transactionsRecorded.toLocaleString('en-NG')}
-                  hint={`Last ${business.period.days} days`}
-                />
-                <MetricCard label="Money In" value={fmtMoney(business.overview.salesAmount)} />
-                <MetricCard label="Expenses" value={fmtMoney(business.overview.expensesAmount)} />
-                <MetricCard
-                  label="Profit After Expenses"
-                  value={fmtMoney(business.overview.operatingProfit)}
-                  hint={business.overview.operatingProfit >= 0 ? 'Positive margin' : 'Monitor spending trend'}
-                />
+            <div className="relative mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1.4fr_1fr]">
+              <div className="rounded-3xl border border-white/10 bg-[#251712] px-4 py-4">
+                <p className="label-base mb-2">Reading For This Period</p>
+                <p className="text-sm leading-6 text-primary">
+                  {business.syncHealth.failed > 0
+                    ? 'Some records are still unresolved, so use the figures with a bit of caution while you clear failed sync items.'
+                    : business.overview.activeDebtors > 0
+                      ? 'Sales are moving, but part of your cash is tied up in debtors. Collections will strongly affect the real picture.'
+                      : derived.profitRetention > 20
+                        ? 'The business is keeping a healthy share of revenue after expenses in this window.'
+                        : 'Sales are happening, but margins need attention so more revenue actually stays with the business.'}
+                </p>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div className="rounded-2xl border border-white/10 bg-[#231510] px-4 py-4">
-                  <p className="label-base mb-2">Feature Usage</p>
-                  <div className="space-y-2.5">
-                    {business.featureUsage.map((entry) => {
-                      const highest = Math.max(...business.featureUsage.map((item) => item.count), 1)
-                      const width = Math.max(8, Math.round((entry.count / highest) * 100))
-                      return (
-                        <div key={entry.feature} className="space-y-1">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-ui font-bold text-primary">{entry.feature}</span>
-                            <span className="text-secondary">{entry.count.toLocaleString('en-NG')}</span>
-                          </div>
-                          <div className="h-2 rounded-full bg-white/10">
-                            <div
-                              className="h-2 rounded-full"
-                              style={{ width: `${width}%`, background: 'linear-gradient(90deg, #c4622d, #e8a838)' }}
-                            />
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-3xl border border-white/10 bg-[#251712] px-4 py-4">
+                  <p className="text-xs text-secondary">Transactions/day</p>
+                  <p className="mt-2 font-display text-3xl font-bold text-primary wonky">
+                    {derived.averageTransactionsPerDay.toFixed(1)}
+                  </p>
                 </div>
-
-                <div className="rounded-2xl border border-white/10 bg-[#231510] px-4 py-4">
-                  <p className="label-base mb-2">Sync Health</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-white/10 bg-[#2b1912] px-3 py-3">
-                      <p className="text-xs text-secondary">Pending</p>
-                      <p className="mt-1 font-display text-2xl font-bold text-[#9fb0ff]">{business.syncHealth.pending}</p>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-[#2b1912] px-3 py-3">
-                      <p className="text-xs text-secondary">Failed</p>
-                      <p className="mt-1 font-display text-2xl font-bold text-[#f87171]">{business.syncHealth.failed}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-secondary">
-                    <p>Team members: <span className="text-primary">{business.overview.teamSize}</span></p>
-                    <p>Customers: <span className="text-primary">{business.overview.customers}</span></p>
-                    <p>Suppliers: <span className="text-primary">{business.overview.suppliers}</span></p>
-                    <p>Active debtors: <span className="text-primary">{business.overview.activeDebtors}</span></p>
-                  </div>
+                <div className="rounded-3xl border border-white/10 bg-[#251712] px-4 py-4">
+                  <p className="text-xs text-secondary">Top product share</p>
+                  <p className="mt-2 font-display text-3xl font-bold text-primary wonky">
+                    {fmtPercent(derived.topProductShare)}
+                  </p>
                 </div>
               </div>
+            </div>
+          )}
+        </section>
 
-              <div className="rounded-2xl border border-white/10 bg-[#231510] px-4 py-4">
-                <p className="label-base mb-3">Daily Activity Trend</p>
-                <div className="space-y-2">
+        {isLoading || !business ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((idx) => (
+              <div key={idx} className="h-32 rounded-3xl skeleton" />
+            ))}
+          </div>
+        ) : (
+          <>
+            <section className="space-y-3">
+              <SectionTitle
+                eyebrow="Margin View"
+                title="Profit Quality"
+                note="These are quality signals that show whether the business is simply busy or actually keeping value."
+              />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <SignalCard
+                  label="Gross Margin Estimate"
+                  value={fmtMoney(business.profitability.grossMarginEstimate)}
+                  hint="Estimated from current item costs against the selling prices already recorded."
+                  tone="amber"
+                />
+                <SignalCard
+                  label="Average Sale Value"
+                  value={fmtMoney(business.profitability.averageSaleValue)}
+                  hint="How much each sale contributes on average."
+                  tone="blue"
+                />
+                <SignalCard
+                  label="Expense Load"
+                  value={fmtPercent(derived.expenseLoad)}
+                  hint="How much of sales value is being consumed by recorded expenses."
+                  tone="rose"
+                />
+                <SignalCard
+                  label="Profit Retention"
+                  value={fmtPercent(derived.profitRetention)}
+                  hint="The share of revenue still left after expenses."
+                  tone="mint"
+                />
+              </div>
+            </section>
+
+            <section className="grid grid-cols-1 gap-3 xl:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-[28px] border border-white/10 bg-[#1c120e] px-5 py-5">
+                <SectionTitle
+                  eyebrow="Sales Flow"
+                  title="Sales Rhythm"
+                  note="The shape of daily transaction activity tells you whether momentum is building or flattening."
+                />
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-[#271915] px-4 py-4">
+                    <p className="text-xs text-secondary">Recorded transactions</p>
+                    <p className="mt-2 font-display text-3xl font-bold text-primary wonky">
+                      {business.overview.transactionsRecorded.toLocaleString('en-NG')}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-[#271915] px-4 py-4">
+                    <p className="text-xs text-secondary">Days reviewed</p>
+                    <p className="mt-2 font-display text-3xl font-bold text-primary wonky">
+                      {business.period.days}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-2 rounded-2xl border border-white/10 bg-[#140d0a] px-4 py-4">
                   {business.activityTrend.map((row) => {
-                    const total = row.salesCount + row.expensesCount + row.debtorsCount + row.savingsCount
-                    const width = Math.max(6, Math.round((total / trendPeak) * 100))
+                    const width = Math.max(8, Math.round((row.salesCount / derived.trendPeak) * 100))
                     return (
-                      <div key={row.date} className="grid grid-cols-[80px_1fr_auto] items-center gap-2">
+                      <div key={row.date} className="grid grid-cols-[72px_1fr_auto] items-center gap-3">
                         <p className="font-mono text-[11px] text-secondary">{row.date.slice(5)}</p>
-                        <div className="h-2 rounded-full bg-white/10">
+                        <div className="h-2.5 rounded-full bg-white/8">
                           <div
-                            className="h-2 rounded-full"
-                            style={{ width: `${width}%`, background: 'linear-gradient(90deg, #5f8cff, #4ecca3)' }}
+                            className="h-2.5 rounded-full"
+                            style={{ width: `${width}%`, background: 'linear-gradient(90deg, #70a3ff, #4ecca3)' }}
                           />
                         </div>
-                        <p className="text-xs text-primary">{total}</p>
+                        <p className="text-xs text-primary">{row.salesCount}</p>
                       </div>
                     )
                   })}
                 </div>
               </div>
-            </>
-          )}
-        </section>
 
-        <section className="space-y-3">
-          <h2 className="font-ui text-sm font-bold uppercase tracking-[0.08em] text-secondary">Developer Health</h2>
-          {developerLoading || !developer ? (
-            <div className="h-28 rounded-2xl skeleton" />
-          ) : (
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-[#231510] px-4 py-4">
-                <p className="label-base mb-2">Runtime</p>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <p className="text-secondary">Uptime</p>
-                  <p className="text-right text-primary">{Math.floor(developer.uptimeSeconds / 60)} min</p>
-                  <p className="text-secondary">Requests (1h)</p>
-                  <p className="text-right text-primary">{developer.requestsLastHour}</p>
-                  <p className="text-secondary">Server errors (1h)</p>
-                  <p className="text-right text-primary">{developer.serverErrorsLastHour}</p>
-                  <p className="text-secondary">Error rate</p>
-                  <p className="text-right text-primary">{developer.errorRatePercent}%</p>
-                  <p className="text-secondary">Avg response</p>
-                  <p className="text-right text-primary">{developer.avgResponseMs} ms</p>
-                  <p className="text-secondary">P95 response</p>
-                  <p className="text-right text-primary">{developer.p95ResponseMs} ms</p>
-                  <p className="text-secondary">DB status</p>
-                  <p className="text-right" style={{ color: developer.database.ok ? '#4ecca3' : '#f87171' }}>
-                    {developer.database.ok
-                      ? `Healthy (${developer.database.latencyMs ?? 0} ms)`
-                      : 'Unreachable'}
-                  </p>
+              <div className="rounded-[28px] border border-white/10 bg-[#1c120e] px-5 py-5">
+                <SectionTitle
+                  eyebrow="Pressure"
+                  title="Business Pressure Points"
+                  note="These are the areas most likely to distort cashflow or weaken confidence in the numbers."
+                />
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {[
+                    ['Active debtors', business.overview.activeDebtors],
+                    ['Pending sync', business.syncHealth.pending],
+                    ['Failed sync', business.syncHealth.failed],
+                    ['Customers', business.overview.customers],
+                    ['Suppliers', business.overview.suppliers],
+                    ['Team members', business.overview.teamSize],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-2xl border border-white/10 bg-[#271915] px-4 py-4">
+                      <p className="text-xs text-secondary">{label}</p>
+                      <p className="mt-2 font-display text-3xl font-bold text-primary wonky">{value}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
+            </section>
 
-              <div className="rounded-2xl border border-white/10 bg-[#231510] px-4 py-4">
-                <p className="label-base mb-2">Slow Endpoints</p>
-                <div className="space-y-2">
-                  {developer.topSlowEndpoints.length === 0 ? (
-                    <p className="text-sm text-secondary">No traffic yet in this runtime window.</p>
-                  ) : (
-                    developer.topSlowEndpoints.map((entry) => (
-                      <div key={entry.endpoint} className="rounded-xl border border-white/10 bg-[#2b1912] px-3 py-2">
-                        <p className="font-mono text-[11px] text-primary">{entry.endpoint}</p>
-                        <p className="mt-1 text-xs text-secondary">
-                          avg {entry.avgDurationMs}ms | max {entry.maxDurationMs}ms | {entry.requests} req
-                        </p>
+            <section className="space-y-3">
+              <SectionTitle
+                eyebrow="Top Performers"
+                title="Product Winners"
+                note="This section highlights the products that are not just selling, but carrying the strongest profit weight."
+              />
+              <div className="space-y-3">
+                {business.profitability.topProducts.length === 0 ? (
+                  <div className="rounded-[28px] border border-white/10 bg-[#1c120e] px-5 py-5">
+                    <p className="text-sm text-secondary">No product sales recorded in this period yet.</p>
+                  </div>
+                ) : (
+                  business.profitability.topProducts.map((product, index) => {
+                    const marginRate = product.revenue > 0 ? (product.estimatedProfit / product.revenue) * 100 : 0
+                    const profitPerUnit = product.unitsSold > 0 ? product.estimatedProfit / product.unitsSold : 0
+
+                    return (
+                      <div key={product.itemName} className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#1c120e] px-5 py-5">
+                        <div className="absolute right-0 top-0 h-full w-32 bg-[radial-gradient(circle_at_top_right,_rgba(232,168,56,0.12),_transparent_70%)]" />
+                        <div className="relative">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="mb-2 inline-flex items-center rounded-full border border-[#e8a838]/25 bg-[#e8a838]/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[#f6d27d]">
+                                #{index + 1} performer
+                              </div>
+                              <p className="font-ui text-lg font-bold text-primary">{product.itemName}</p>
+                              <p className="mt-1 text-sm text-secondary">
+                                {product.unitsSold.toLocaleString('en-NG')} units sold in the last {business.period.days} days
+                              </p>
+                            </div>
+                            <div className="rounded-2xl border border-[#4ecca3]/20 bg-[#4ecca3]/8 px-4 py-3 text-right">
+                              <p className="text-xs text-secondary">Estimated profit</p>
+                              <p
+                                className="mt-1 font-display text-2xl font-bold wonky"
+                                style={{ color: product.estimatedProfit >= 0 ? '#92f0cf' : '#ffb4b4' }}
+                              >
+                                {fmtMoney(product.estimatedProfit)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                            <div className="rounded-2xl border border-white/10 bg-[#271915] px-4 py-4">
+                              <p className="text-xs text-secondary">Revenue</p>
+                              <p className="mt-2 font-ui text-base font-bold text-primary">{fmtMoney(product.revenue)}</p>
+                            </div>
+                            <div className="rounded-2xl border border-white/10 bg-[#271915] px-4 py-4">
+                              <p className="text-xs text-secondary">Margin rate</p>
+                              <p className="mt-2 font-ui text-base font-bold text-primary">{fmtPercent(marginRate)}</p>
+                            </div>
+                            <div className="rounded-2xl border border-white/10 bg-[#271915] px-4 py-4">
+                              <p className="text-xs text-secondary">Profit per unit</p>
+                              <p className="mt-2 font-ui text-base font-bold text-primary">{fmtMoney(profitPerUnit)}</p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    ))
-                  )}
-                </div>
+                    )
+                  })
+                )}
               </div>
-            </div>
-          )}
-        </section>
+            </section>
+
+            <section className="rounded-[28px] border border-white/10 bg-[#1c120e] px-5 py-5">
+              <SectionTitle
+                eyebrow="Operational Pattern"
+                title="Feature Usage"
+                note="This shows where the team is spending the most effort inside the app across this period."
+              />
+              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {business.featureUsage.map((entry) => {
+                  const highest = Math.max(...business.featureUsage.map((item) => item.count), 1)
+                  const width = Math.max(10, Math.round((entry.count / highest) * 100))
+
+                  return (
+                    <div key={entry.feature} className="rounded-2xl border border-white/10 bg-[#271915] px-4 py-4">
+                      <div className="flex items-center justify-between">
+                        <p className="font-ui text-sm font-bold text-primary">{entry.feature}</p>
+                        <p className="text-sm text-secondary">{entry.count.toLocaleString('en-NG')}</p>
+                      </div>
+                      <div className="mt-3 h-2.5 rounded-full bg-white/8">
+                        <div
+                          className="h-2.5 rounded-full"
+                          style={{ width: `${width}%`, background: 'linear-gradient(90deg, #c4622d, #e8a838)' }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          </>
+        )}
       </div>
     </div>
   )
 }
-

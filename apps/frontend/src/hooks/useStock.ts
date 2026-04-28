@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { v4 as uuidv4 } from 'uuid'
 import { db, type LocalStockItem } from '@/db'
 import { stockApi } from '@/api/stock.api'
@@ -10,6 +10,7 @@ import type {
   CreateStockItemDTO,
   CursorPaginatedResponse,
   StockItemDTO,
+  StockMovementDTO,
 } from '@tradebook/shared-types'
 
 export const stockKeys = {
@@ -17,6 +18,7 @@ export const stockKeys = {
   lists: () => [...stockKeys.all, 'list'] as const,
   list: (filters: object) => [...stockKeys.lists(), filters] as const,
   alerts: () => [...stockKeys.all, 'alerts'] as const,
+  movements: (id: string) => [...stockKeys.all, 'movements', id] as const,
 }
 
 const STOCK_PAGE_SIZE = 20
@@ -226,6 +228,8 @@ const syncPendingStockItems = async () => {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           costPrice: item.costPrice,
+          wholesalePrice: item.wholesalePrice,
+          wholesaleMinQty: item.wholesaleMinQty,
           lowStockThreshold: item.lowStockThreshold,
         })
 
@@ -263,6 +267,8 @@ const syncPendingStockAdjustments = async () => {
           reason: adjustment.reason,
           unitPrice: adjustment.unitPrice,
           costPrice: adjustment.costPrice,
+          wholesalePrice: adjustment.wholesalePrice,
+          wholesaleMinQty: adjustment.wholesaleMinQty,
           lowStockThreshold: adjustment.lowStockThreshold,
         })
 
@@ -284,7 +290,14 @@ const syncPendingStockAdjustments = async () => {
 
 const applyLocalStockDelta = async (
   stockItemId: string,
-  input: { delta: number; unitPrice?: number; costPrice?: number; lowStockThreshold?: number },
+  input: {
+    delta: number
+    unitPrice?: number
+    costPrice?: number
+    wholesalePrice?: number | null
+    wholesaleMinQty?: number | null
+    lowStockThreshold?: number
+  },
 ) => {
   const item = await db.stockItems.get(stockItemId)
 
@@ -311,6 +324,8 @@ const applyLocalStockDelta = async (
     quantity: nextQuantity,
     unitPrice: nextUnitPrice,
     costPrice: nextCostPrice,
+    ...(input.wholesalePrice !== undefined ? { wholesalePrice: input.wholesalePrice } : {}),
+    ...(input.wholesaleMinQty !== undefined ? { wholesaleMinQty: input.wholesaleMinQty } : {}),
     ...(input.lowStockThreshold != null ? { lowStockThreshold: input.lowStockThreshold } : {}),
     updatedAt,
     ...metrics,
@@ -357,6 +372,8 @@ export const useCreateStockItem = () => {
         ...input,
         id,
         lowStockThreshold: input.lowStockThreshold ?? 5,
+        wholesalePrice: input.wholesalePrice ?? null,
+        wholesaleMinQty: input.wholesaleMinQty ?? null,
       }
       const metrics = computeStockMetrics(item)
 
@@ -396,6 +413,8 @@ export const useAdjustStock = () => {
       reason: StockAdjustmentReason
       unitPrice?: number
       costPrice?: number
+      wholesalePrice?: number | null
+      wholesaleMinQty?: number | null
       lowStockThreshold?: number
     }) => {
       const adjustmentId = uuidv4()
@@ -410,6 +429,8 @@ export const useAdjustStock = () => {
           reason: input.reason,
           unitPrice: input.unitPrice,
           costPrice: input.costPrice,
+          wholesalePrice: input.wholesalePrice,
+          wholesaleMinQty: input.wholesaleMinQty,
           lowStockThreshold: input.lowStockThreshold,
           createdAt,
           syncStatus: getInitialSyncStatus(),
@@ -441,5 +462,14 @@ export const useRetryStockSync = () => {
       queryClient.invalidateQueries({ queryKey: stockKeys.all })
       queryClient.invalidateQueries({ queryKey: dashboardKeys.overview() })
     },
+  })
+}
+
+export const useStockMovements = (stockItemId: string, enabled = true) => {
+  return useQuery<StockMovementDTO[]>({
+    queryKey: stockKeys.movements(stockItemId),
+    queryFn: () => stockApi.getMovements(stockItemId),
+    enabled: enabled && Boolean(stockItemId),
+    staleTime: 60_000,
   })
 }

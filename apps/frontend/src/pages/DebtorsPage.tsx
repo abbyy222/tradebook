@@ -78,6 +78,53 @@ const parseNairaInput = (value: string) => {
   return parsed * multiplier
 }
 
+const startOfToday = () => {
+  const date = new Date()
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+const isOverdueDebtor = (debtor: DebtorLike) => {
+  if (!debtor.dueDate || debtor.balance <= 0) return false
+  return new Date(debtor.dueDate).getTime() < startOfToday().getTime()
+}
+
+const isDueSoonDebtor = (debtor: DebtorLike) => {
+  if (!debtor.dueDate || debtor.balance <= 0) return false
+  const today = startOfToday().getTime()
+  const due = new Date(debtor.dueDate).getTime()
+  const diffDays = Math.ceil((due - today) / (24 * 60 * 60 * 1000))
+  return diffDays >= 0 && diffDays <= 3
+}
+
+const buildReminderText = (debtor: DebtorLike) => {
+  const dueText = debtor.dueDate
+    ? ` Your agreed payment date is ${new Date(debtor.dueDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}.`
+    : ''
+  return `Hello ${debtor.customerName}, this is a reminder that you still owe ${fmt(debtor.balance)}.${dueText} Please reach out once payment is ready. Thank you.`
+}
+
+const sendReminder = async (debtor: DebtorLike) => {
+  const text = buildReminderText(debtor)
+
+  if (navigator.share) {
+    await navigator.share({
+      title: `Payment reminder - ${debtor.customerName}`,
+      text,
+    })
+    return
+  }
+
+  if (debtor.phoneNumber) {
+    const cleaned = debtor.phoneNumber.replace(/[^\d+]/g, '')
+    window.open(`https://wa.me/${cleaned.replace(/^\+/, '')}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
+    return
+  }
+
+  await navigator.clipboard.writeText(text)
+  window.alert('Reminder copied. Paste it into SMS or WhatsApp.')
+}
+
 const DebtorSuccessSheet = ({
   successState,
   onClose,
@@ -87,7 +134,7 @@ const DebtorSuccessSheet = ({
 }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-end" style={{ background: 'rgba(10,5,2,0.8)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
-      <div className="w-full max-w-lg mx-auto rounded-t-3xl px-8 py-12 flex flex-col items-center gap-5 animate-slide-up" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.07)', borderBottom: 'none', paddingBottom: 'calc(3rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg mx-auto rounded-t-3xl px-5 py-10 sm:px-8 sm:py-12 flex flex-col items-center gap-5 animate-slide-up max-h-[92vh] overflow-y-auto" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.07)', borderBottom: 'none', paddingBottom: 'calc(3rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
         <div className="rounded-full flex items-center justify-center" style={{ width: 80, height: 80, background: 'linear-gradient(135deg, #c04818, #e8a838)', boxShadow: '0 0 0 12px rgba(196,98,45,0.12), 0 0 0 24px rgba(196,98,45,0.06)' }}>
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </div>
@@ -177,7 +224,7 @@ const AddDebtorSheet = ({ onClose, onSuccess }: { onClose: () => void; onSuccess
 
   return (
     <div className="fixed inset-0 z-50 flex items-end animate-fade-in" style={{ background: 'rgba(10,5,2,0.8)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
-      <div className="w-full max-w-lg mx-auto rounded-t-3xl px-6 pt-5 flex flex-col gap-5 animate-slide-up" style={{ background: '#1e1208', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none', paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg mx-auto rounded-t-3xl px-4 pt-4 sm:px-6 sm:pt-5 flex flex-col gap-5 animate-slide-up max-h-[92vh] overflow-y-auto" style={{ background: '#1e1208', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none', paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
         <div className="rounded-full mx-auto mb-1" style={{ width: 36, height: 4, background: 'rgba(255,255,255,0.15)' }} />
         <h2 className="font-display font-bold" style={{ fontSize: '1.5rem', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>Add debtor</h2>
 
@@ -277,7 +324,7 @@ const PaymentSheet = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end animate-fade-in" style={{ background: 'rgba(10,5,2,0.8)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
-      <div className="w-full max-w-lg mx-auto rounded-t-3xl px-6 pt-5 flex flex-col gap-5 animate-slide-up" style={{ background: '#1e1208', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none', paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg mx-auto rounded-t-3xl px-4 pt-4 sm:px-6 sm:pt-5 flex flex-col gap-5 animate-slide-up max-h-[92vh] overflow-y-auto" style={{ background: '#1e1208', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none', paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
         <div className="rounded-full mx-auto mb-1" style={{ width: 36, height: 4, background: 'rgba(255,255,255,0.15)' }} />
         <div>
           <h2 className="font-display font-bold" style={{ fontSize: '1.5rem', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>Record payment</h2>
@@ -341,14 +388,14 @@ const ScheduleSheet = ({ debtor, onClose }: { debtor: DebtorLike; onClose: () =>
 
   return (
     <div className="fixed inset-0 z-50 flex items-end animate-fade-in" style={{ background: 'rgba(10,5,2,0.8)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
-      <div className="w-full max-w-lg mx-auto rounded-t-3xl px-6 pt-5 flex flex-col gap-5 animate-slide-up" style={{ background: '#1e1208', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none', paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg mx-auto rounded-t-3xl px-4 pt-4 sm:px-6 sm:pt-5 flex flex-col gap-5 animate-slide-up max-h-[92vh] overflow-y-auto" style={{ background: '#1e1208', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none', paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
         <div className="rounded-full mx-auto mb-1" style={{ width: 36, height: 4, background: 'rgba(255,255,255,0.15)' }} />
         <div>
           <h2 className="font-display font-bold" style={{ fontSize: '1.5rem', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>Payment schedule</h2>
           <p className="font-body text-sm mt-1" style={{ color: 'rgba(245,237,224,0.4)' }}>{debtor.customerName}</p>
         </div>
 
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
             { label: 'Today', days: 0 },
             { label: '+3 days', days: 3 },
@@ -375,7 +422,7 @@ const ScheduleSheet = ({ debtor, onClose }: { debtor: DebtorLike; onClose: () =>
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <button className="btn-ghost" onClick={() => void updateSchedule.mutateAsync(null).then(onClose)} disabled={updateSchedule.isPending}>Clear date</button>
           <button className="btn-primary" onClick={() => void handleSave()} disabled={updateSchedule.isPending || !dueDate}>
             {updateSchedule.isPending ? 'Saving...' : 'Save schedule'}
@@ -487,10 +534,10 @@ const StatementSheet = ({ debtor, onClose }: { debtor: DebtorLike; onClose: () =
 
   return (
     <div className="fixed inset-0 z-50 flex items-end animate-fade-in" style={{ background: 'rgba(10,5,2,0.8)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
-      <div className="w-full max-w-2xl mx-auto rounded-t-3xl px-6 pt-5 flex flex-col gap-4 animate-slide-up max-h-[92vh] overflow-y-auto" style={{ background: '#1e1208', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none', paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-2xl mx-auto rounded-t-3xl px-4 pt-4 sm:px-6 sm:pt-5 flex flex-col gap-4 animate-slide-up max-h-[92vh] overflow-y-auto" style={{ background: '#1e1208', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none', paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
         <div className="rounded-full mx-auto mb-1" style={{ width: 36, height: 4, background: 'rgba(255,255,255,0.15)' }} />
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <h2 className="font-display font-bold" style={{ fontSize: '1.45rem', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>Debtor statement</h2>
             <p className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.45)' }}>{debtor.customerName}</p>
@@ -573,6 +620,8 @@ export const DebtorsPage = () => {
   const retryDebtorSync = useRetryDebtorSync()
   const { data, isLoading } = useDebtorsList()
   const debtors = data?.pages.flatMap((page) => page.data) ?? []
+  const overdueDebtors = debtors.filter((debtor: any) => isOverdueDebtor(debtor))
+  const dueSoonDebtors = debtors.filter((debtor: any) => isDueSoonDebtor(debtor))
 
   const filteredDebtors = debtors.filter((debtor: any) => {
     if (activeTab === 'ALL') return true
@@ -605,6 +654,24 @@ export const DebtorsPage = () => {
       </div>
 
       <div className="px-4 max-w-6xl mx-auto flex flex-col gap-3 max-[360px]:px-3.5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl px-4 py-4" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="label-base mb-1">Overdue debtors</p>
+            <p className="font-display font-bold text-2xl" style={{ color: '#f87171', fontVariationSettings: "'WONK' 1" }}>{overdueDebtors.length}</p>
+            <p className="mt-1 text-xs text-secondary">Need urgent follow-up.</p>
+          </div>
+          <div className="rounded-2xl px-4 py-4" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="label-base mb-1">Due in 3 days</p>
+            <p className="font-display font-bold text-2xl" style={{ color: '#f0bc5a', fontVariationSettings: "'WONK' 1" }}>{dueSoonDebtors.length}</p>
+            <p className="mt-1 text-xs text-secondary">Good time to remind them early.</p>
+          </div>
+          <div className="rounded-2xl px-4 py-4" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="label-base mb-1">Total receivables</p>
+            <p className="font-display font-bold text-2xl" style={{ color: '#f5ede0', fontVariationSettings: "'WONK' 1" }}>{fmt(debtors.reduce((sum: number, debtor: any) => sum + Math.max(debtor.balance, 0), 0))}</p>
+            <p className="mt-1 text-xs text-secondary">What customers still owe you.</p>
+          </div>
+        </div>
+
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 max-[360px]:gap-1.5" style={{ scrollbarWidth: 'none' }}>
           {([
             ['OWING', 'Owing'],
@@ -636,7 +703,7 @@ export const DebtorsPage = () => {
                     {debtor.balance === 0 && <span className="inline-flex rounded-full px-2.5 py-1 font-ui font-bold text-[10px] max-[360px]:px-2 max-[360px]:py-0.5 max-[360px]:text-[9px]" style={{ background: 'rgba(78,204,163,0.12)', color: '#4ecca3', border: '1px solid rgba(78,204,163,0.2)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Cleared</span>}
                   </div>
                   {debtor.phoneNumber && <p className="font-body text-xs mt-0.5 break-all max-[360px]:text-[11px]" style={{ color: 'rgba(245,237,224,0.3)' }}>{debtor.phoneNumber}</p>}
-                  {debtor.dueDate && <p className="font-body text-xs mt-1 max-[360px]:text-[11px]" style={{ color: '#f0bc5a' }}>Due {new Date(debtor.dueDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>}
+                  {debtor.dueDate && <p className="font-body text-xs mt-1 max-[360px]:text-[11px]" style={{ color: isOverdueDebtor(debtor) ? '#f87171' : isDueSoonDebtor(debtor) ? '#f0bc5a' : '#f0bc5a' }}>{isOverdueDebtor(debtor) ? 'Overdue since ' : 'Due '}{new Date(debtor.dueDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>}
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1.5 flex-shrink-0 text-right">
@@ -648,6 +715,7 @@ export const DebtorsPage = () => {
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
               <button onClick={() => setScheduleDebtor(debtor)} className="rounded-full px-3 py-2 font-ui font-bold text-xs w-full sm:w-auto max-[360px]:px-2.5 max-[360px]:py-1.5 max-[360px]:text-[11px]" style={{ background: 'rgba(117,133,200,0.18)', color: '#9fb0ff', border: '1px solid rgba(117,133,200,0.28)' }}>Schedule</button>
               <button onClick={() => setStatementDebtor(debtor)} className="rounded-full px-3 py-2 font-ui font-bold text-xs w-full sm:w-auto max-[360px]:px-2.5 max-[360px]:py-1.5 max-[360px]:text-[11px]" style={{ background: 'rgba(232,168,56,0.15)', color: '#f0bc5a', border: '1px solid rgba(232,168,56,0.22)' }}>Statement</button>
+              {debtor.balance > 0 && <button onClick={() => void sendReminder(debtor)} className="rounded-full px-3 py-2 font-ui font-bold text-xs w-full sm:w-auto max-[360px]:px-2.5 max-[360px]:py-1.5 max-[360px]:text-[11px]" style={{ background: 'rgba(159,176,255,0.14)', color: '#9fb0ff', border: '1px solid rgba(159,176,255,0.22)' }}>Remind</button>}
               {debtor.balance > 0 && <button onClick={() => setSelectedDebtor(debtor)} className="rounded-full px-3 py-2 font-ui font-bold text-xs w-full col-span-2 sm:col-span-1 sm:w-auto max-[360px]:px-2.5 max-[360px]:py-1.5 max-[360px]:text-[11px]" style={{ background: 'rgba(78,204,163,0.12)', color: '#4ecca3', border: '1px solid rgba(78,204,163,0.2)' }}>Pay</button>}
             </div>
           </div>

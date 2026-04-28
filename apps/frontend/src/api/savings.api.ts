@@ -1,11 +1,13 @@
 import { apiClient } from './client'
 import type {
+  ConfirmSavingsVerificationDTO,
   CreateSavingsEntryDTO,
   CursorPaginatedResponse,
   ResolveSavingsAccountDTO,
   ResolvedSavingsAccountDTO,
   SavingsAccountDestinationDTO,
   SavingsBankDTO,
+  SavingsVerificationConfirmationDTO,
   SavingsEntryDTO,
   SavingsTargetDTO,
   SavingsTargetProgressDTO,
@@ -63,6 +65,11 @@ export const savingsApi = {
 
   initiateVerification: async (id: string) => {
     const res = await apiClient.post<{ data: SavingsTransferInitiationDTO }>(`/savings/${id}/verify/initiate`)
+    return res.data.data
+  },
+
+  confirmVerification: async (id: string, input: ConfirmSavingsVerificationDTO) => {
+    const res = await apiClient.post<{ data: SavingsVerificationConfirmationDTO }>(`/savings/${id}/verify/confirm`, input)
     return res.data.data
   },
 

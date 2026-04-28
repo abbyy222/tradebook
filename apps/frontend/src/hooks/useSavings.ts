@@ -6,6 +6,7 @@ import { isNetworkReachable } from '@/services/networkHealth'
 import { getInitialSyncStatus } from '@/services/syncStatus'
 import { syncEngine } from '@/services/syncEngine'
 import type {
+  ConfirmSavingsVerificationDTO,
   CreateSavingsEntryDTO,
   CursorPaginatedResponse,
   SavingsEntryDTO,
@@ -222,6 +223,20 @@ export const useInitiateSavingsVerification = () => {
 
   return useMutation({
     mutationFn: (id: string) => savingsApi.initiateVerification(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: savingsKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: savingsKeys.todaySummary() })
+      queryClient.invalidateQueries({ queryKey: savingsKeys.target() })
+    },
+  })
+}
+
+export const useConfirmSavingsVerification = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: ConfirmSavingsVerificationDTO }) =>
+      savingsApi.confirmVerification(id, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: savingsKeys.lists() })
       queryClient.invalidateQueries({ queryKey: savingsKeys.todaySummary() })

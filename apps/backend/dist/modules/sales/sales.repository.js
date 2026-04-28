@@ -52,6 +52,36 @@ exports.salesRepository = {
                     });
                     throw new Error(`INSUFFICIENT_STOCK:${currentStock?.quantity ?? 0}:${data.quantity}`);
                 }
+                const stockSnapshot = await tx.stockItem.findFirst({
+                    where: { id: data.stockItemId, traderId },
+                    select: {
+                        id: true,
+                        quantity: true,
+                        unitPrice: true,
+                        costPrice: true,
+                        wholesalePrice: true,
+                        wholesaleMinQty: true,
+                    },
+                });
+                if (!stockSnapshot) {
+                    throw new Error(`INSUFFICIENT_STOCK:0:${data.quantity}`);
+                }
+                await tx.stockMovement.create({
+                    data: {
+                        traderId,
+                        stockItemId: stockSnapshot.id,
+                        type: 'SALE',
+                        quantityDelta: -data.quantity,
+                        quantityAfter: stockSnapshot.quantity,
+                        unitPrice: new client_1.Prisma.Decimal(data.unitPrice),
+                        costPrice: stockSnapshot.costPrice,
+                        wholesalePrice: stockSnapshot.wholesalePrice,
+                        wholesaleMinQty: stockSnapshot.wholesaleMinQty,
+                        note: `Sale recorded for ${data.itemName}`,
+                        referenceId: data.id,
+                        happenedAt: new Date(data.soldAt),
+                    },
+                });
             }
             const sale = await tx.sale.create({
                 data: {

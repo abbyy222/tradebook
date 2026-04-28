@@ -78,6 +78,14 @@ enum SavingsTargetPeriod {
   MONTHLY
 }
 
+enum StockMovementType {
+  INITIAL
+  RESTOCK
+  SALE
+  DAMAGE
+  CORRECTION
+}
+
 model Trader {
   id             String      @id @default(uuid())
   phoneNumber    String      @unique @map("phone_number")
@@ -103,6 +111,7 @@ model Trader {
   sales          Sale[]
   expenses       Expense[]
   stockItems     StockItem[]
+  stockMovements StockMovement[]
   debtors        Debtor[]
   savingsEntries SavingsEntry[] @relation("BusinessSavings")
   recordedSavings SavingsEntry[] @relation("RecordedSavings")
@@ -241,6 +250,8 @@ model StockItem {
   quantity          Int        @default(0)
   unitPrice         Decimal    @db.Decimal(12, 2) @map("unit_price")
   costPrice         Decimal    @db.Decimal(12, 2) @map("cost_price")
+  wholesalePrice    Decimal?   @db.Decimal(12, 2) @map("wholesale_price")
+  wholesaleMinQty   Int?       @map("wholesale_min_qty")
   lowStockThreshold Int        @default(5) @map("low_stock_threshold")
   syncStatus        SyncStatus @default(PENDING) @map("sync_status")
   updatedAt         DateTime   @updatedAt @map("updated_at")
@@ -248,10 +259,35 @@ model StockItem {
 
   trader            Trader     @relation(fields: [traderId], references: [id], onDelete: Cascade)
   sales             Sale[]
+  movements         StockMovement[]
 
   @@unique([traderId, itemName])
   @@index([traderId])
   @@map("stock_items")
+}
+
+model StockMovement {
+  id              String            @id @default(uuid())
+  traderId        String            @map("trader_id")
+  stockItemId     String            @map("stock_item_id")
+  type            StockMovementType
+  quantityDelta   Int               @map("quantity_delta")
+  quantityAfter   Int?              @map("quantity_after")
+  unitPrice       Decimal?          @db.Decimal(12, 2) @map("unit_price")
+  costPrice       Decimal?          @db.Decimal(12, 2) @map("cost_price")
+  wholesalePrice  Decimal?          @db.Decimal(12, 2) @map("wholesale_price")
+  wholesaleMinQty Int?              @map("wholesale_min_qty")
+  note            String?
+  referenceId     String?           @map("reference_id")
+  happenedAt      DateTime          @map("happened_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  trader          Trader            @relation(fields: [traderId], references: [id], onDelete: Cascade)
+  stockItem       StockItem         @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@index([traderId, stockItemId, happenedAt])
+  @@index([traderId, happenedAt])
+  @@map("stock_movements")
 }
 
 model Debtor {
