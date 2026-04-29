@@ -57,6 +57,14 @@ const getTodayRangeInLagos = () => {
   return { from, to }
 }
 
+const getDayRangeInLagos = (date: Date) => {
+  const lagosDate = new Date(date.getTime() + LAGOS_OFFSET_MS)
+  lagosDate.setUTCHours(0, 0, 0, 0)
+  const from = new Date(lagosDate.getTime() - LAGOS_OFFSET_MS)
+  const to = new Date(from.getTime() + (24 * 60 * 60 * 1000) - 1)
+  return { from, to }
+}
+
 const getWeekRangeInLagos = () => {
   const now = new Date()
   const lagosNow = new Date(now.getTime() + LAGOS_OFFSET_MS)
@@ -118,9 +126,12 @@ const getSavingsStatusForAmount = async (
   savedAt: string,
   excludeSavingsEntryId?: string,
 ) => {
+  const savedAtDate = new Date(savedAt)
+  const { from, to } = getDayRangeInLagos(savedAtDate)
   const inputs = await savingsRepository.getReconciliationInputs(
     traderId,
-    new Date(savedAt),
+    from,
+    to,
     excludeSavingsEntryId,
   )
 

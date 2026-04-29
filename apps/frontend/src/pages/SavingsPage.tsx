@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { MarketSceneBanner } from '@/components/MarketSceneBanner'
 import env from '@/config/env'
 import { useAuthStore } from '@/stores/authStore'
 import {
@@ -255,15 +256,17 @@ export const SavingsPage = () => {
   return (
     <div className="min-h-screen px-4 pb-8 pt-10 sm:px-5 sm:pt-12 md:px-6 xl:px-8">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-        <div>
-          <p className="label-base mb-1">Daily saving</p>
-          <h1 className="font-display text-3xl font-bold text-primary wonky">Savings</h1>
-          <p className="mt-1 text-sm text-secondary">
-            {isOwner
-              ? 'Track daily savings for your business.'
-              : 'Record today\'s savings. Owner can edit records later.'}
-          </p>
-        </div>
+        <MarketSceneBanner
+          image="/market-scenes/dashboard-market-3.jpg"
+          eyebrow="Daily saving"
+          title="Savings"
+          description={
+            isOwner
+              ? 'Track daily savings with the discipline of a full trading day close.'
+              : 'Record today\'s savings. Owner can edit records later.'
+          }
+          badge="Day close"
+        />
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-[#231510] px-4 py-3">

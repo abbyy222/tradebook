@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Navigate } from 'react-router-dom'
+import { MarketSceneBanner } from '@/components/MarketSceneBanner'
 import { useAuthStore } from '@/stores/authStore'
 import { useBusinessInsights } from '@/hooks/useInsights'
 
@@ -100,36 +101,32 @@ export const InsightsPage = () => {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(232,168,56,0.08),_transparent_28%),linear-gradient(180deg,_#140d0a_0%,_#0f0907_100%)] px-4 pb-24 pt-8 md:px-6 md:pb-10">
       <div className="mx-auto max-w-6xl space-y-5">
-        <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#1c120e] px-5 py-5 shadow-[0_30px_80px_rgba(0,0,0,0.25)] md:px-6">
-          <div className="absolute -right-12 top-0 h-32 w-32 rounded-full bg-[#e8a838]/10 blur-3xl" />
-          <div className="absolute bottom-0 left-0 h-24 w-40 bg-[linear-gradient(90deg,rgba(78,204,163,0.08),transparent)]" />
-          <div className="relative flex flex-wrap items-start justify-between gap-4">
-            <div className="max-w-2xl">
-              <p className="label-base mb-2">Business Analytics</p>
-              <h1 className="font-display text-3xl font-bold text-primary wonky md:text-4xl">Insights</h1>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-secondary">
-                A clearer reading of margin strength, sales rhythm, product winners, and the pressure points shaping cashflow.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {[7, 14, 30].map((option) => (
-                <button
-                  key={option}
-                  onClick={() => setDays(option)}
-                  className="rounded-full px-3 py-1.5 font-ui text-xs font-bold uppercase tracking-[0.08em]"
-                  style={{
-                    background: option === days ? 'linear-gradient(135deg, #c04818, #e8a838)' : 'rgba(255,255,255,0.04)',
-                    color: option === days ? '#fff' : 'rgba(245,237,224,0.68)',
-                    border: option === days ? '1px solid transparent' : '1px solid rgba(255,255,255,0.1)',
-                  }}
-                >
-                  {option}d
-                </button>
-              ))}
-            </div>
+        <MarketSceneBanner
+          image="/market-scenes/dashboard-market-2.jpg"
+          eyebrow="Business Analytics"
+          title="Insights"
+          description="A clearer reading of margin strength, sales rhythm, product winners, and the pressure points shaping cashflow."
+          badge="Market reading"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            {[7, 14, 30].map((option) => (
+              <button
+                key={option}
+                onClick={() => setDays(option)}
+                className="rounded-full px-3 py-1.5 font-ui text-xs font-bold uppercase tracking-[0.08em]"
+                style={{
+                  background: option === days ? 'linear-gradient(135deg, #c04818, #e8a838)' : 'rgba(255,255,255,0.04)',
+                  color: option === days ? '#fff' : 'rgba(245,237,224,0.68)',
+                  border: option === days ? '1px solid transparent' : '1px solid rgba(255,255,255,0.1)',
+                }}
+              >
+                {option}d
+              </button>
+            ))}
           </div>
+        </MarketSceneBanner>
 
+        <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#1c120e] px-5 py-5 shadow-[0_30px_80px_rgba(0,0,0,0.25)] md:px-6">
           {isLoading || !business ? (
             <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
               {[1, 2, 3].map((idx) => (

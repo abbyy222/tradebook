@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { MarketHeroCarousel } from '@/components/MarketHeroCarousel'
 import { StatCard } from '@/components/StatCard'
 import { RecordSaleWizard } from '@/components/RecordSaleWizard'
 import { useDashboardOverview } from '@/hooks/useDashboard'
@@ -124,42 +125,20 @@ export const DashboardPage = () => {
     .join('')
     .slice(0, 2)
 
+  const todayLabel = new Date().toLocaleDateString('en-NG', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+
   return (
     <div className="min-h-screen px-4 pb-8 pt-4 md:px-6 md:pb-10 md:pt-6 xl:px-8">
-      <section
-        className="relative overflow-hidden rounded-3xl border border-[#c4622d]/20 px-5 py-6 md:px-8 md:py-8"
-        style={{
-          background:
-            'radial-gradient(120% 180% at 0% 0%, rgba(196,98,45,0.34) 0%, rgba(196,98,45,0.06) 45%, rgba(26,15,10,0.55) 100%)',
-        }}
-      >
-        <div className="pointer-events-none absolute inset-0 pattern-dots opacity-50" />
-
-        <div className="relative z-10 flex items-start justify-between gap-4">
-          <div>
-            <p className="font-ui text-xs font-semibold uppercase tracking-[0.13em] text-[rgba(245,237,224,0.5)]">
-              {greeting()}
-            </p>
-            <h1 className="mt-1 font-display text-[clamp(1.7rem,3.5vw,2.6rem)] font-bold leading-none text-primary wonky">
-              {name}
-            </h1>
-            <p className="mt-2 font-body text-xs text-[rgba(245,237,224,0.45)] md:text-sm">
-              {new Date().toLocaleDateString('en-NG', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-              })}
-            </p>
-          </div>
-
-          <button
-            aria-label="Profile"
-            className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border-2 border-white/10 bg-gradient-to-br from-[#c04818] to-[#e8a838] font-ui text-sm font-extrabold text-white"
-          >
-            {initials || 'TB'}
-          </button>
-        </div>
-      </section>
+      <MarketHeroCarousel
+        businessName={name}
+        greeting={greeting()}
+        dateLabel={todayLabel}
+        initials={initials || 'TB'}
+      />
 
       <section className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

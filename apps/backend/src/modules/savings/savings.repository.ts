@@ -87,6 +87,17 @@ export const savingsRepository = {
     })
   },
 
+  async findBySavedAtRange(traderId: string, from: Date, to: Date) {
+    return prisma.savingsEntry.findFirst({
+      where: {
+        traderId,
+        savedAt: { gte: from, lte: to },
+      },
+      select: savingsSelect,
+      orderBy: { savedAt: 'desc' },
+    })
+  },
+
   async update(
     id: string,
     traderId: string,
@@ -222,34 +233,27 @@ export const savingsRepository = {
     return this.getSavingsAccount(traderId)
   },
 
-  async getReconciliationInputs(traderId: string, upTo: Date, excludeSavingsEntryId?: string) {
-    const [sales, debtorPayments, expenses, savedAlready] = await Promise.all([
+  async getReconciliationInputs(traderId: string, from: Date, to: Date, excludeSavingsEntryId?: string) {
+    const [sales, expenses, savedAlready] = await Promise.all([
       prisma.sale.aggregate({
         where: {
           traderId,
-          soldAt: { lte: upTo },
+          soldAt: { gte: from, lte: to },
           paymentType: { in: ['CASH', 'TRANSFER'] },
-        },
-        _sum: { amount: true },
-      }),
-      prisma.payment.aggregate({
-        where: {
-          debtor: { traderId },
-          paidAt: { lte: upTo },
         },
         _sum: { amount: true },
       }),
       prisma.expense.aggregate({
         where: {
           traderId,
-          spentAt: { lte: upTo },
+          spentAt: { gte: from, lte: to },
         },
         _sum: { amount: true },
       }),
       prisma.savingsEntry.aggregate({
         where: {
           traderId,
-          savedAt: { lte: upTo },
+          savedAt: { gte: from, lte: to },
           ...(excludeSavingsEntryId ? { NOT: { id: excludeSavingsEntryId } } : {}),
         },
         _sum: { amount: true },
@@ -257,7 +261,7 @@ export const savingsRepository = {
     ])
 
     return {
-      inflowTotal: Number(sales._sum.amount ?? 0) + Number(debtorPayments._sum.amount ?? 0),
+      inflowTotal: Number(sales._sum.amount ?? 0),
       expenseTotal: Number(expenses._sum.amount ?? 0),
       savingsAlreadyRecorded: Number(savedAlready._sum.amount ?? 0),
     }
