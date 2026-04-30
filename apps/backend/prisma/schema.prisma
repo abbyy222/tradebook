@@ -115,6 +115,7 @@ model Trader {
   debtors        Debtor[]
   savingsEntries SavingsEntry[] @relation("BusinessSavings")
   recordedSavings SavingsEntry[] @relation("RecordedSavings")
+  dayClosures     DayClose[]
   customers      Customer[]
   suppliers      Supplier[]
 
@@ -190,6 +191,41 @@ model SavingsEntry {
   @@index([traderId, savedAt])
   @@index([traderId, createdAt])
   @@map("savings_entries")
+}
+
+model DayClose {
+  id                         String   @id @default(uuid())
+  traderId                   String   @map("trader_id")
+  dayKey                     String   @map("day_key")
+  fromAt                     DateTime @map("from_at")
+  toAt                       DateTime @map("to_at")
+  salesTotal                 Decimal  @db.Decimal(12, 2) @map("sales_total")
+  salesCount                 Int      @default(0) @map("sales_count")
+  cashSalesTotal             Decimal  @db.Decimal(12, 2) @map("cash_sales_total")
+  transferSalesTotal         Decimal  @db.Decimal(12, 2) @map("transfer_sales_total")
+  debtSalesTotal             Decimal  @db.Decimal(12, 2) @map("debt_sales_total")
+  expensesTotal              Decimal  @db.Decimal(12, 2) @map("expenses_total")
+  expensesCount              Int      @default(0) @map("expenses_count")
+  collectionsTotal           Decimal  @db.Decimal(12, 2) @map("collections_total")
+  collectionsCount           Int      @default(0) @map("collections_count")
+  savingsTotal               Decimal  @db.Decimal(12, 2) @map("savings_total")
+  savingsCount               Int      @default(0) @map("savings_count")
+  reconciledSavingsCount     Int      @default(0) @map("reconciled_savings_count")
+  verifiedSavingsCount       Int      @default(0) @map("verified_savings_count")
+  operatingBalance           Decimal  @db.Decimal(12, 2) @map("operating_balance")
+  eligibleSalesAfterExpenses Decimal  @db.Decimal(12, 2) @map("eligible_sales_after_expenses")
+  stillAvailableToSave       Decimal  @db.Decimal(12, 2) @map("still_available_to_save")
+  note                       String?
+  closedByTraderId           String   @map("closed_by_trader_id")
+  closedAt                   DateTime @default(now()) @map("closed_at")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+
+  trader                     Trader   @relation(fields: [traderId], references: [id], onDelete: Cascade)
+
+  @@unique([traderId, dayKey])
+  @@index([traderId, closedAt])
+  @@map("day_closures")
 }
 
 model Sale {

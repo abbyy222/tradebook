@@ -145,6 +145,46 @@ export const savingsRepository = {
     return Number(result._sum.amount ?? 0)
   },
 
+  async getSummaryForPeriod(traderId: string, from: Date, to: Date) {
+    const [summary, statusGroups] = await Promise.all([
+      prisma.savingsEntry.aggregate({
+        where: {
+          traderId,
+          savedAt: { gte: from, lte: to },
+        },
+        _sum: { amount: true },
+        _count: { id: true },
+      }),
+      prisma.savingsEntry.groupBy({
+        by: ['status'],
+        where: {
+          traderId,
+          savedAt: { gte: from, lte: to },
+        },
+        _count: { _all: true },
+      }),
+    ])
+
+    const statusCounts = statusGroups.reduce(
+      (acc, item) => {
+        acc[item.status as 'DECLARED' | 'RECONCILED' | 'VERIFIED'] = item._count._all
+        return acc
+      },
+      {
+        DECLARED: 0,
+        RECONCILED: 0,
+        VERIFIED: 0,
+      } as Record<'DECLARED' | 'RECONCILED' | 'VERIFIED', number>,
+    )
+
+    return {
+      total: Number(summary._sum.amount ?? 0),
+      count: summary._count.id,
+      reconciledCount: statusCounts.RECONCILED,
+      verifiedCount: statusCounts.VERIFIED,
+    }
+  },
+
   async getSavingsTarget(traderId: string) {
     const rows = await prisma.$queryRaw<
       Array<{

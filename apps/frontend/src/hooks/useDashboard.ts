@@ -1,10 +1,10 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { db, type LocalDebtor, type LocalStockItem } from '@/db'
 import { salesApi } from '@/api/sales.api'
 import { debtorsApi } from '@/api/debtors.api'
 import { stockApi } from '@/api/stock.api'
 import { isNetworkReachable } from '@/services/networkHealth'
-import type { DebtorDTO, ProfitLossSummaryDTO, StockItemDTO } from '@tradebook/shared-types'
+import type { DayCloseSummaryDTO, DebtorDTO, ProfitLossSummaryDTO, StockItemDTO } from '@tradebook/shared-types'
 
 export const dashboardKeys = {
   all: ['dashboard'] as const,
@@ -19,6 +19,7 @@ type DashboardStats = {
 
 type DashboardOverview = {
   stats: DashboardStats
+  dayClose: DayCloseSummaryDTO
   operatingSnapshot: ProfitLossSummaryDTO
   activeDebtors: DebtorDTO[]
   stockAlerts: StockItemDTO[]
@@ -131,6 +132,81 @@ const buildLocalOperatingSnapshot = async (): Promise<ProfitLossSummaryDTO> => {
   }
 }
 
+const buildLocalDayCloseSummary = async (): Promise<DayCloseSummaryDTO> => {
+  const { from, to } = getTodayBounds()
+  const [sales, expenses, collections, savings] = await Promise.all([
+    db.sales.toArray(),
+    db.expenses.toArray(),
+    db.debtorPayments.toArray(),
+    db.savings.toArray(),
+  ])
+
+  const isWithinToday = (value: string) => {
+    const at = new Date(value).getTime()
+    return !Number.isNaN(at) && at >= from.getTime() && at <= to.getTime()
+  }
+
+  const todaySales = sales.filter((sale) => isWithinToday(sale.soldAt))
+  const todayExpenses = expenses.filter((expense) => isWithinToday(expense.spentAt))
+  const todayCollections = collections.filter((payment) => isWithinToday(payment.paidAt))
+  const todaySavings = savings.filter((entry) => isWithinToday(entry.savedAt))
+
+  const salesTotal = todaySales.reduce((sum, sale) => sum + sale.amount, 0)
+  const cashTotal = todaySales
+    .filter((sale) => sale.paymentType === 'CASH')
+    .reduce((sum, sale) => sum + sale.amount, 0)
+  const transferTotal = todaySales
+    .filter((sale) => sale.paymentType === 'TRANSFER')
+    .reduce((sum, sale) => sum + sale.amount, 0)
+  const debtTotal = todaySales
+    .filter((sale) => sale.paymentType === 'DEBT')
+    .reduce((sum, sale) => sum + sale.amount, 0)
+  const expenseTotal = todayExpenses.reduce((sum, expense) => sum + expense.amount, 0)
+  const collectionsTotal = todayCollections.reduce((sum, payment) => sum + payment.amount, 0)
+  const savingsTotal = todaySavings.reduce((sum, entry) => sum + entry.amount, 0)
+  const eligibleSalesAfterExpenses = Math.max(cashTotal + transferTotal - expenseTotal, 0)
+
+  return {
+    period: {
+      label: 'Today',
+      from: from.toISOString(),
+      to: to.toISOString(),
+    },
+    sales: {
+      total: salesTotal,
+      count: todaySales.length,
+      cashTotal,
+      transferTotal,
+      debtTotal,
+    },
+    expenses: {
+      total: expenseTotal,
+      count: todayExpenses.length,
+    },
+    collections: {
+      total: collectionsTotal,
+      count: todayCollections.length,
+    },
+    savings: {
+      total: savingsTotal,
+      count: todaySavings.length,
+      reconciledCount: todaySavings.filter((entry) => entry.status === 'RECONCILED').length,
+      verifiedCount: todaySavings.filter((entry) => entry.status === 'VERIFIED').length,
+    },
+    net: {
+      operatingBalance: salesTotal - expenseTotal,
+      eligibleSalesAfterExpenses,
+      stillAvailableToSave: Math.max(eligibleSalesAfterExpenses - savingsTotal, 0),
+    },
+    closure: {
+      isClosed: false,
+      closedAt: null,
+      note: null,
+      closedByTraderId: null,
+    },
+  }
+}
+
 const getLocalActiveDebtors = async () => {
   const debtors = await db.debtors.orderBy('createdAt').reverse().toArray()
 
@@ -188,6 +264,12 @@ const startOfDay = (date: Date) => {
   return normalized
 }
 
+const getTodayBounds = () => {
+  const from = startOfToday()
+  const to = new Date(from.getTime() + DAY_MS - 1)
+  return { from, to }
+}
+
 const storeServerDebtors = async (debtors: DebtorDTO[]) => {
   if (debtors.length === 0) return
 
@@ -213,8 +295,9 @@ const storeServerStockItems = async (items: StockItemDTO[]) => {
 }
 
 const getLocalDashboardOverview = async (): Promise<DashboardOverview> => {
-  const [stats, operatingSnapshot, activeDebtors, stockAlerts] = await Promise.all([
+  const [stats, dayClose, operatingSnapshot, activeDebtors, stockAlerts] = await Promise.all([
     buildLocalDashboardStats(),
+    buildLocalDayCloseSummary(),
     buildLocalOperatingSnapshot(),
     getLocalActiveDebtors(),
     getLocalStockAlerts(),
@@ -223,7 +306,7 @@ const getLocalDashboardOverview = async (): Promise<DashboardOverview> => {
   const localDebtors = await db.debtors.toArray()
   const dueReminders = getDueReminders(localDebtors)
 
-  return { stats, operatingSnapshot, activeDebtors, stockAlerts, dueReminders }
+  return { stats, dayClose, operatingSnapshot, activeDebtors, stockAlerts, dueReminders }
 }
 
 export const useDashboardOverview = () => {
@@ -232,7 +315,8 @@ export const useDashboardOverview = () => {
     queryFn: async () => {
       if (isNetworkReachable()) {
         try {
-          const [stats, operatingSnapshot, debtorsPage, stockAlerts] = await Promise.all([
+          const [dayClose, stats, operatingSnapshot, debtorsPage, stockAlerts] = await Promise.all([
+            salesApi.getDayClose(),
             salesApi.getDashboard(),
             salesApi.getProfitLoss('THIS_MONTH'),
             debtorsApi.list({ pageSize: DASHBOARD_PREVIEW_LIMIT * 5 }),
@@ -245,6 +329,7 @@ export const useDashboardOverview = () => {
           ])
 
           return {
+            dayClose,
             stats,
             operatingSnapshot,
             activeDebtors: debtorsPage.data
@@ -271,3 +356,14 @@ export const useDashboardOverview = () => {
 
 const isOwingDebtor = (debtor: Pick<DebtorDTO, 'status' | 'balance'>) =>
   (debtor.status === 'ACTIVE' || debtor.status === 'PARTIAL') && debtor.balance > 0
+
+export const useCloseBusinessDay = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (note?: string) => salesApi.closeDay({ note }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.overview() })
+    },
+  })
+}

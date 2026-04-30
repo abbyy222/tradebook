@@ -4,7 +4,7 @@ import { RecordSaleWizard } from '@/components/RecordSaleWizard'
 import { RecordSyncBadge } from '@/components/RecordSyncBadge'
 import { useRetrySalesSync, useSalesList } from '@/hooks/useSales'
 import { useAuthStore } from '@/stores/authStore'
-import { buildReceiptText, printReceipt } from '@/utils/receipt'
+import { buildReceiptText, downloadReceipt, printReceipt, shareReceipt } from '@/utils/receipt'
 import type { SaleDTO } from '@tradebook/shared-types'
 
 type FilterType = 'ALL' | 'CASH' | 'TRANSFER' | 'DEBT'
@@ -59,7 +59,7 @@ const SalesDetailSheet = ({ sale, onClose }: { sale: SaleDTO; onClose: () => voi
           </div>
           {sale.debtorId && <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.12)' }}><p className="label-base mb-1">Debt sale</p><p className="font-body text-sm" style={{ color: '#f5ede0' }}>This sale is linked to a debtor record and should stay visible in your debt collection workflow.</p></div>}
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <button
             className="btn-ghost"
             disabled={receiptBusy}
@@ -67,7 +67,7 @@ const SalesDetailSheet = ({ sale, onClose }: { sale: SaleDTO; onClose: () => voi
               printReceipt(receiptPayload)
             }}
           >
-            Reprint / PDF
+            Print / PDF
           </button>
           <button
             className="btn-ghost"
@@ -75,22 +75,22 @@ const SalesDetailSheet = ({ sale, onClose }: { sale: SaleDTO; onClose: () => voi
             onClick={async () => {
               setReceiptBusy(true)
               try {
-                const text = buildReceiptText(receiptPayload)
-                if (navigator.share) {
-                  await navigator.share({
-                    title: `Receipt ${receiptPayload.receiptNumber}`,
-                    text,
-                  })
-                } else {
-                  await navigator.clipboard.writeText(text)
-                  window.alert('Receipt copied. You can paste and send it via WhatsApp or SMS.')
-                }
+                await shareReceipt(receiptPayload)
               } finally {
                 setReceiptBusy(false)
               }
             }}
           >
             Share
+          </button>
+          <button
+            className="btn-ghost"
+            disabled={receiptBusy}
+            onClick={() => {
+              void downloadReceipt(receiptPayload)
+            }}
+          >
+            Download
           </button>
           <button
             className="btn-ghost"

@@ -39,6 +39,10 @@ export declare const debtorsRepository: {
         receivablesTotal: number;
         activeDebtorsCount: number;
     }>;
+    getPaymentsSummaryForPeriod(traderId: string, from: Date, to: Date): Promise<{
+        total: number;
+        count: number;
+    }>;
     findMany(traderId: string, query: ListDebtorsQuery): Promise<{
         debtors: {
             status: import(".prisma/client").$Enums.DebtStatus;

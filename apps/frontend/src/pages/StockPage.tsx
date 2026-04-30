@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { MarketSceneBanner } from '@/components/MarketSceneBanner'
 import { RecordSyncBadge } from '@/components/RecordSyncBadge'
 import { useAuthStore } from '@/stores/authStore'
 import {
@@ -319,14 +320,19 @@ export const StockPage = () => {
 
   return (
     <div className="min-h-screen">
-      <div className="relative overflow-hidden px-4 pt-10 pb-6 sm:px-5 sm:pt-12" style={{ background: 'linear-gradient(180deg, rgba(78,204,163,0.1) 0%, transparent 100%)' }}>
-        <div className="relative z-10 flex flex-col items-start justify-between max-w-6xl mx-auto gap-4 sm:flex-row sm:items-center">
-          <div>
-            <p className="label-base mb-0.5">Inventory</p>
-            <h1 className="font-display font-bold" style={{ fontSize: '1.75rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>Stock</h1>
-            <p className="font-body text-sm mt-1 max-w-xl" style={{ color: 'rgba(245,237,224,0.45)' }}>Cost-aware inventory for valuation, retail sales, and bulk wholesale pricing.</p>
-          </div>
-          {isOwner && <button onClick={() => setAddOpen(true)} className="rounded-xl px-4 py-2.5 font-ui font-bold text-sm shrink-0" style={{ background: 'linear-gradient(135deg, #c04818, #e8a838)', color: '#fff' }}>+ Add</button>}
+      <div className="px-4 pb-6 pt-8 sm:px-5 sm:pt-10">
+        <div className="mx-auto max-w-6xl">
+          <MarketSceneBanner
+            image="/market-scenes/dashboard-market-1.jpg"
+            eyebrow="Inventory"
+            title="Stock"
+            description="Cost-aware inventory for valuation, retail sales, and bulk wholesale pricing."
+            badge="Goods in hand"
+          >
+            {isOwner ? (
+              <button onClick={() => setAddOpen(true)} className="rounded-xl px-4 py-2.5 font-ui font-bold text-sm shrink-0" style={{ background: 'linear-gradient(135deg, #c04818, #e8a838)', color: '#fff' }}>+ Add</button>
+            ) : null}
+          </MarketSceneBanner>
         </div>
       </div>
 
@@ -349,6 +355,33 @@ export const StockPage = () => {
         {isLoading ? (
           [1, 2, 3].map((i) => <div key={i} className="h-24 rounded-2xl skeleton" />)
         ) : items.length === 0 ? (
+          <div className="relative overflow-hidden rounded-[26px] border border-white/10 px-5 py-12 text-center" style={{ background: '#231510' }}>
+            <div
+              className="absolute inset-0 bg-cover bg-center opacity-20"
+              style={{
+                backgroundImage: "linear-gradient(180deg, rgba(20,13,10,0.62) 0%, rgba(20,13,10,0.86) 100%), url('/market-scenes/dashboard-market-1.jpg')",
+              }}
+            />
+            <div className="pointer-events-none absolute inset-0 pattern-dots opacity-25" />
+            <div className="relative flex flex-col items-center gap-3">
+              <span className="text-[#f0bc5a]">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 3 4 7v10l8 4 8-4V7l-8-4Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                  <path d="M12 3v18M4 7l8 4 8-4M8.5 11.5h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <p className="font-display font-bold text-lg" style={{ color: '#f5ede0', fontVariationSettings: "'WONK' 1" }}>{search ? 'No items found' : 'No stock yet'}</p>
+              <p className="max-w-sm font-body text-sm" style={{ color: 'rgba(245,237,224,0.42)' }}>
+                {search ? 'Try another item name or clear the search.' : 'Start with your first item so TradeBook can watch quantity, stock value, and expected margin.'}
+              </p>
+              {!search && isOwner ? (
+                <button onClick={() => setAddOpen(true)} className="mt-2 rounded-xl px-4 py-2.5 font-ui font-bold text-sm" style={{ background: 'linear-gradient(135deg, #c04818, #e8a838)', color: '#fff' }}>
+                  Add first item
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : false ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <span style={{ fontSize: '2rem' }}>📦</span>
             <p className="font-display font-bold text-lg" style={{ color: '#f5ede0', fontVariationSettings: "'WONK' 1" }}>{search ? 'No items found' : 'No stock yet'}</p>
@@ -359,6 +392,9 @@ export const StockPage = () => {
           const wholesaleLabel = item.wholesalePrice != null && item.wholesaleMinQty != null
             ? `Wholesale ${fmt(item.wholesalePrice)} from ${item.wholesaleMinQty} units · `
             : ''
+          const normalizedWholesaleLabel = wholesaleLabel.replace(/\u00C2/g, '')
+          const pricingSummary = `Sell ${fmt(item.unitPrice)} · Cost ${fmt(item.costPrice)}`
+          const valuationSummary = `${normalizedWholesaleLabel}Stock value ${fmt(item.stockValue)} · Margin room ${fmt(item.expectedGrossProfit)}`
 
           return (
             <div key={item.id} className="rounded-2xl px-4 py-4 flex flex-col items-stretch gap-3 sm:px-5 sm:flex-row sm:items-center sm:gap-4" style={{ background: '#231510', border: `1px solid ${isLow ? 'rgba(226,75,74,0.2)' : 'rgba(255,255,255,0.06)'}` }}>
@@ -368,13 +404,20 @@ export const StockPage = () => {
 
               <div className="flex-1 min-w-0">
                 <p className="font-ui font-semibold text-sm truncate" style={{ color: '#f5ede0' }}>{item.itemName}</p>
-                <p className="font-body text-xs mt-0.5" style={{ color: 'rgba(245,237,224,0.35)' }}>
+                <p className="hidden font-body text-xs mt-0.5" style={{ color: 'rgba(245,237,224,0.35)' }}>
                   Sell {fmt(item.unitPrice)} · Cost {fmt(item.costPrice)}
                   {isLow && <span style={{ color: '#f87171', marginLeft: '0.5rem' }}>· Low stock!</span>}
                 </p>
-                <p className="font-body text-xs mt-1" style={{ color: 'rgba(245,237,224,0.28)' }}>
+                <p className="hidden font-body text-xs mt-1" style={{ color: 'rgba(245,237,224,0.28)' }}>
                   {wholesaleLabel}
                   Stock value {fmt(item.stockValue)} · Margin room {fmt(item.expectedGrossProfit)}
+                </p>
+                <p className="font-body text-xs mt-0.5" style={{ color: 'rgba(245,237,224,0.35)' }}>
+                  {pricingSummary}
+                  {isLow && <span style={{ color: '#f87171', marginLeft: '0.5rem' }}>· Low stock!</span>}
+                </p>
+                <p className="font-body text-xs mt-1" style={{ color: 'rgba(245,237,224,0.28)' }}>
+                  {valuationSummary}
                 </p>
               </div>
 

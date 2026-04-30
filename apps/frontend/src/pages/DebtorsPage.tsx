@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { MarketSceneBanner } from '@/components/MarketSceneBanner'
 import { RecordSyncBadge } from '@/components/RecordSyncBadge'
 import {
   useDebtorsList,
@@ -8,8 +9,21 @@ import {
   useDebtorStatement,
   useUpdateDebtorSchedule,
 } from '@/hooks/useDebtors'
+import {
+  buildDebtorStatementText,
+  downloadDebtorStatement,
+  printDebtorStatement,
+  shareDebtorStatement,
+} from '@/utils/debtorStatement'
 
 const fmt = (n: number) => 'N' + n.toLocaleString('en-NG', { maximumFractionDigits: 0 })
+const EmptyPeopleIcon = () => (
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="8" cy="9" r="2.8" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="16" cy="9" r="2.8" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M3.5 19a4.8 4.8 0 0 1 9 0M11.5 19a4.8 4.8 0 0 1 9 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+)
 type DebtorTab = 'OWING' | 'CLEARED' | 'ALL'
 
 type DebtorLike = {
@@ -436,100 +450,20 @@ const ScheduleSheet = ({ debtor, onClose }: { debtor: DebtorLike; onClose: () =>
 const StatementSheet = ({ debtor, onClose }: { debtor: DebtorLike; onClose: () => void }) => {
   const { data, isLoading } = useDebtorStatement(debtor.id)
 
-  const buildStatementText = () => {
-    if (!data) return ''
-
-    const lines = [
-      `Debtor Statement`,
-      `Customer: ${data.debtor.customerName}`,
-      data.debtor.phoneNumber ? `Phone: ${data.debtor.phoneNumber}` : '',
-      `Generated: ${formatDateTime(data.generatedAt)}`,
-      '',
-      `Total credit sales: ${fmt(data.totals.totalSalesOnCredit)}`,
-      `Total payments: ${fmt(data.totals.totalPayments)}`,
-      `Balance: ${fmt(data.totals.balance)}`,
-      '',
-      'Timeline:',
-      ...data.entries.map((entry) => `${entry.type === 'SALE' ? 'Sale' : 'Payment'} | ${formatDateTime(entry.date)} | ${fmt(entry.amount)} | Balance: ${fmt(entry.balanceAfter)}${entry.reference ? ` | ${entry.reference}` : ''}${entry.note ? ` | ${entry.note}` : ''}`),
-    ]
-
-    return lines.filter(Boolean).join('\n')
-  }
-
   const handleCopy = async () => {
     if (!data) return
-    await navigator.clipboard.writeText(buildStatementText())
+    await navigator.clipboard.writeText(buildDebtorStatementText(data))
     window.alert('Statement copied.')
   }
 
   const handleShare = async () => {
     if (!data) return
-    const text = buildStatementText()
-
-    if (navigator.share) {
-      await navigator.share({
-        title: `Statement - ${data.debtor.customerName}`,
-        text,
-      })
-      return
-    }
-
-    await navigator.clipboard.writeText(text)
-    window.alert('Statement copied. Paste to share via WhatsApp or SMS.')
+    await shareDebtorStatement(data)
   }
 
   const handlePrint = () => {
     if (!data) return
-    const printWindow = window.open('', '_blank', 'width=420,height=700')
-    if (!printWindow) return
-
-    const rows = data.entries.map((entry) => `
-      <tr>
-        <td>${entry.type === 'SALE' ? 'Sale' : 'Payment'}</td>
-        <td>${formatDateTime(entry.date)}</td>
-        <td>${entry.reference ?? '-'}</td>
-        <td>${fmt(entry.amount)}</td>
-        <td>${fmt(entry.balanceAfter)}</td>
-      </tr>
-    `).join('')
-
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Statement ${data.debtor.customerName}</title>
-          <style>
-            body { font-family: Arial, sans-serif; color: #111; margin: 20px; }
-            h1 { font-size: 18px; margin-bottom: 4px; }
-            .muted { color: #666; font-size: 12px; margin-top: 0; }
-            table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-            th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; text-align: left; }
-            th { background: #f7f7f7; }
-          </style>
-        </head>
-        <body>
-          <h1>Debtor Statement</h1>
-          <p class="muted">Customer: ${data.debtor.customerName}</p>
-          <p class="muted">Generated: ${formatDateTime(data.generatedAt)}</p>
-          <p><strong>Total credit sales:</strong> ${fmt(data.totals.totalSalesOnCredit)}</p>
-          <p><strong>Total payments:</strong> ${fmt(data.totals.totalPayments)}</p>
-          <p><strong>Balance:</strong> ${fmt(data.totals.balance)}</p>
-          <table>
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Date</th>
-                <th>Reference</th>
-                <th>Amount</th>
-                <th>Balance After</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-          <script>window.onload = () => window.print()</script>
-        </body>
-      </html>
-    `)
-    printWindow.document.close()
+    printDebtorStatement(data)
   }
 
   return (
@@ -598,9 +532,10 @@ const StatementSheet = ({ debtor, onClose }: { debtor: DebtorLike; onClose: () =
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <button className="btn-ghost" onClick={handlePrint}>Print / PDF</button>
               <button className="btn-ghost" onClick={() => void handleShare()}>Share</button>
+              <button className="btn-ghost" onClick={() => data && void downloadDebtorStatement(data)}>Download</button>
               <button className="btn-ghost" onClick={() => void handleCopy()}>Copy Text</button>
             </div>
           </>
@@ -643,13 +578,17 @@ export const DebtorsPage = () => {
 
   return (
     <div className="min-h-screen">
-      <div className="relative overflow-hidden px-4 pt-10 pb-5 max-[360px]:px-3.5 max-[360px]:pt-9 max-[360px]:pb-4 sm:px-5 sm:pt-12 sm:pb-6" style={{ background: 'linear-gradient(180deg, rgba(226,75,74,0.1) 0%, transparent 100%)' }}>
-        <div className="relative z-10 flex items-center justify-between max-w-6xl mx-auto">
-          <div>
-            <p className="label-base mb-0.5">Manage</p>
-            <h1 className="font-display font-bold max-[360px]:text-[1.55rem]" style={{ fontSize: '1.75rem', letterSpacing: '-0.02em', color: '#f5ede0', fontVariationSettings: "'WONK' 1, 'opsz' 30" }}>Debtors</h1>
-          </div>
-          <button onClick={() => setAddOpen(true)} className="rounded-xl px-3.5 py-2.5 text-[13px] font-ui font-bold max-[360px]:px-3 max-[360px]:py-2 max-[360px]:text-xs" style={{ background: 'linear-gradient(135deg, #c04818, #e8a838)', color: '#fff' }}>+ Add</button>
+      <div className="px-4 pb-5 pt-8 max-[360px]:px-3.5 max-[360px]:pt-7 sm:px-5 sm:pt-10 sm:pb-6">
+        <div className="mx-auto max-w-6xl">
+          <MarketSceneBanner
+            image="/market-scenes/dashboard-market-2.jpg"
+            eyebrow="Manage"
+            title="Debtors"
+            description="Follow up balances, watch overdue payments, and keep customer credit from quietly draining cash."
+            badge="Collections"
+          >
+            <button onClick={() => setAddOpen(true)} className="rounded-xl px-3.5 py-2.5 text-[13px] font-ui font-bold max-[360px]:px-3 max-[360px]:py-2 max-[360px]:text-xs" style={{ background: 'linear-gradient(135deg, #c04818, #e8a838)', color: '#fff' }}>+ Add</button>
+          </MarketSceneBanner>
         </div>
       </div>
 
@@ -687,10 +626,32 @@ export const DebtorsPage = () => {
         {isLoading ? (
           [1, 2, 3].map((i) => <div key={i} className="h-20 rounded-2xl skeleton" />)
         ) : filteredDebtors.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <span style={{ fontSize: '2rem' }}>People</span>
-            <p className="font-display font-bold text-lg" style={{ color: '#f5ede0', fontVariationSettings: "'WONK' 1" }}>{activeTab === 'OWING' ? 'Nobody owes you right now' : activeTab === 'CLEARED' ? 'No cleared debtors yet' : 'No debtors'}</p>
-            <p className="font-body text-sm" style={{ color: 'rgba(245,237,224,0.35)' }}>{activeTab === 'OWING' ? 'Everyone has paid. Well done!' : activeTab === 'CLEARED' ? 'Cleared records stay here for history and audits.' : 'Add your first debtor to start tracking balances.'}</p>
+          <div className="relative overflow-hidden rounded-[26px] border border-white/10 px-5 py-12 text-center" style={{ background: '#231510' }}>
+            <div
+              className="absolute inset-0 bg-cover bg-center opacity-20"
+              style={{
+                backgroundImage: "linear-gradient(180deg, rgba(20,13,10,0.62) 0%, rgba(20,13,10,0.86) 100%), url('/market-scenes/dashboard-market-2.jpg')",
+              }}
+            />
+            <div className="pointer-events-none absolute inset-0 pattern-dots opacity-25" />
+            <div className="relative flex flex-col items-center gap-3">
+              <span className="text-[#f0bc5a]">
+                <EmptyPeopleIcon />
+              </span>
+              <p className="font-display font-bold text-lg" style={{ color: '#f5ede0', fontVariationSettings: "'WONK' 1" }}>{activeTab === 'OWING' ? 'Nobody owes you right now' : activeTab === 'CLEARED' ? 'No cleared debtors yet' : 'No debtors'}</p>
+              <p className="max-w-sm font-body text-sm" style={{ color: 'rgba(245,237,224,0.42)' }}>
+                {activeTab === 'OWING'
+                  ? 'Everyone has paid. That means collections are under control for now.'
+                  : activeTab === 'CLEARED'
+                    ? 'Cleared records stay here for history and follow-up confidence.'
+                    : 'Add your first debtor so TradeBook can track balances, due dates, and reminders.'}
+              </p>
+              {activeTab === 'ALL' ? (
+                <button onClick={() => setAddOpen(true)} className="mt-2 rounded-xl px-4 py-2.5 font-ui font-bold text-sm" style={{ background: 'linear-gradient(135deg, #c04818, #e8a838)', color: '#fff' }}>
+                  Add first debtor
+                </button>
+              ) : null}
+            </div>
           </div>
         ) : filteredDebtors.map((debtor: any) => (
           <div key={debtor.id} className="rounded-2xl px-4 py-4 sm:px-5 flex flex-col gap-3 sm:gap-4 max-[360px]:px-3.5 max-[360px]:py-3.5 max-[360px]:gap-2.5" style={{ background: '#231510', border: '1px solid rgba(255,255,255,0.06)' }}>

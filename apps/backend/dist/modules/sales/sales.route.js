@@ -62,6 +62,29 @@ exports.salesRouter.get('/profit-loss', async (req, res, next) => {
         next(err);
     }
 });
+exports.salesRouter.get('/day-close', async (req, res, next) => {
+    try {
+        const traderId = req.trader.traderId;
+        const summary = await sales_service_1.salesService.getDayCloseSummary(traderId);
+        res.status(200).json({ data: summary, error: null });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.salesRouter.post('/day-close/close', async (req, res, next) => {
+    try {
+        const traderId = req.trader.traderId;
+        const actorId = req.trader.actorId;
+        const role = req.trader.role;
+        const input = sales_schema_1.closeDaySchema.parse(req.body);
+        const summary = await sales_service_1.salesService.closeBusinessDay(traderId, actorId, role, input);
+        res.status(200).json({ data: summary, error: null });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 exports.salesRouter.get('/:id', async (req, res, next) => {
     try {
         const traderId = req.trader.traderId;

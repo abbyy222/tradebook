@@ -5,7 +5,9 @@
 
 import { apiClient } from './client'
 import type {
+  CloseDayInputDTO,
   CreateSaleDTO,
+  DayCloseSummaryDTO,
   SaleDTO,
   CursorPaginatedResponse,
   ProfitLossPeriod,
@@ -52,6 +54,16 @@ export const salesApi = {
     const res = await apiClient.get<{ data: ProfitLossSummaryDTO }>('/sales/profit-loss', {
       params: { period },
     })
+    return res.data.data
+  },
+
+  getDayClose: async () => {
+    const res = await apiClient.get<{ data: DayCloseSummaryDTO }>('/sales/day-close')
+    return res.data.data
+  },
+
+  closeDay: async (input: CloseDayInputDTO) => {
+    const res = await apiClient.post<{ data: DayCloseSummaryDTO }>('/sales/day-close/close', input)
     return res.data.data
   },
 

@@ -1,9 +1,11 @@
 import { Prisma } from '@prisma/client'
 import { salesRepository } from './sales.repository'
+import { dayCloseRepository } from './dayClose.repository'
 import { debtorsRepository } from '../debtors/debtors.repository'
 import { expensesRepository } from '../expenses/expenses.repository'
+import { savingsRepository } from '../savings/savings.repository'
 import { stockRepository } from '../stock/stock.repository'
-import { CreateSaleInput, ListSalesQuery, ProfitLossQuery, SyncSalesInput } from './sales.schema'
+import { CloseDayInput, CreateSaleInput, ListSalesQuery, ProfitLossQuery, SyncSalesInput } from './sales.schema'
 import { AppError } from '../../middleware/errorHandler'
 import { logger } from '../../utils/logger'
 
@@ -53,6 +55,30 @@ const getPeriodEndInLagos = (period: ProfitLossQuery['period'], now: Date) => {
   lagosNow.setUTCHours(23, 59, 59, 999)
   return new Date(lagosNow.getTime() - LAGOS_OFFSET_MS)
 }
+
+const getTodayRangeInLagos = (now: Date) => {
+  const from = getPeriodStartInLagos('TODAY', now)
+  const to = getPeriodEndInLagos('TODAY', now)
+  return { from: from!, to }
+}
+
+const toLagosDayKey = (date: Date) => {
+  const lagosDate = new Date(date.getTime() + LAGOS_OFFSET_MS)
+  return `${lagosDate.getUTCFullYear()}-${String(lagosDate.getUTCMonth() + 1).padStart(2, '0')}-${String(lagosDate.getUTCDate()).padStart(2, '0')}`
+}
+
+const toClosureDTO = (
+  closure: {
+    closedAt: Date
+    note: string | null
+    closedByTraderId: string
+  } | null,
+) => ({
+  isClosed: Boolean(closure),
+  closedAt: closure?.closedAt?.toISOString() ?? null,
+  note: closure?.note ?? null,
+  closedByTraderId: closure?.closedByTraderId ?? null,
+})
 
 const assertSaleAmountMatches = (input: CreateSaleInput) => {
   const expected = Number((input.quantity * input.unitPrice).toFixed(2))
@@ -235,6 +261,102 @@ export const salesService = {
       unitsOnHand: inventorySummary.unitsOnHand,
       activeDebtorsCount: receivablesSummary.activeDebtorsCount,
     }
+  },
+
+  async getDayCloseSummary(traderId: string) {
+    const now = new Date()
+    const { from, to } = getTodayRangeInLagos(now)
+    const dayKey = toLagosDayKey(now)
+
+    const [salesTotals, paymentBreakdown, expenseTotals, collectionsSummary, savingsSummary, closure] = await Promise.all([
+      salesRepository.getTotalsForPeriod(traderId, from, to),
+      salesRepository.getPaymentBreakdownForPeriod(traderId, from, to),
+      expensesRepository.getTotalForPeriod(traderId, from, to),
+      debtorsRepository.getPaymentsSummaryForPeriod(traderId, from, to),
+      savingsRepository.getSummaryForPeriod(traderId, from, to),
+      dayCloseRepository.findByDayKey(traderId, dayKey),
+    ])
+
+    const breakdownMap = paymentBreakdown.reduce<Record<'CASH' | 'TRANSFER' | 'DEBT', number>>(
+      (acc, item) => {
+        acc[item.paymentType] = Number(item._sum.amount ?? 0)
+        return acc
+      },
+      { CASH: 0, TRANSFER: 0, DEBT: 0 },
+    )
+
+    const salesTotal = Number(salesTotals._sum.amount ?? 0)
+    const expenseTotal = Number(expenseTotals._sum.amount ?? 0)
+    const eligibleSalesAfterExpenses = Math.max(
+      breakdownMap.CASH + breakdownMap.TRANSFER - expenseTotal,
+      0,
+    )
+
+    return {
+      period: {
+        label: 'Today',
+        from: from.toISOString(),
+        to: to.toISOString(),
+      },
+      sales: {
+        total: salesTotal,
+        count: salesTotals._count.id,
+        cashTotal: breakdownMap.CASH,
+        transferTotal: breakdownMap.TRANSFER,
+        debtTotal: breakdownMap.DEBT,
+      },
+      expenses: {
+        total: expenseTotal,
+        count: expenseTotals._count.id,
+      },
+      collections: collectionsSummary,
+      savings: savingsSummary,
+      net: {
+        operatingBalance: salesTotal - expenseTotal,
+        eligibleSalesAfterExpenses,
+        stillAvailableToSave: Math.max(eligibleSalesAfterExpenses - savingsSummary.total, 0),
+      },
+      closure: toClosureDTO(closure),
+    }
+  },
+
+  async closeBusinessDay(
+    traderId: string,
+    actorId: string,
+    role: 'OWNER' | 'SALESPERSON',
+    input: CloseDayInput,
+  ) {
+    if (role !== 'OWNER') {
+      throw new AppError('Only business owner can close the business day', 403, 'FORBIDDEN')
+    }
+
+    const summary = await this.getDayCloseSummary(traderId)
+    const dayKey = toLagosDayKey(new Date(summary.period.from))
+
+    await dayCloseRepository.upsertForDay(traderId, dayKey, {
+      fromAt: new Date(summary.period.from),
+      toAt: new Date(summary.period.to),
+      salesTotal: summary.sales.total,
+      salesCount: summary.sales.count,
+      cashSalesTotal: summary.sales.cashTotal,
+      transferSalesTotal: summary.sales.transferTotal,
+      debtSalesTotal: summary.sales.debtTotal,
+      expensesTotal: summary.expenses.total,
+      expensesCount: summary.expenses.count,
+      collectionsTotal: summary.collections.total,
+      collectionsCount: summary.collections.count,
+      savingsTotal: summary.savings.total,
+      savingsCount: summary.savings.count,
+      reconciledSavingsCount: summary.savings.reconciledCount,
+      verifiedSavingsCount: summary.savings.verifiedCount,
+      operatingBalance: summary.net.operatingBalance,
+      eligibleSalesAfterExpenses: summary.net.eligibleSalesAfterExpenses,
+      stillAvailableToSave: summary.net.stillAvailableToSave,
+      note: input.note,
+      closedByTraderId: actorId,
+    })
+
+    return this.getDayCloseSummary(traderId)
   },
 
   async getSale(id: string, traderId: string) {

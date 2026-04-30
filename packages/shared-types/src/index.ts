@@ -45,6 +45,50 @@ export interface ProfitLossSummaryDTO {
   activeDebtorsCount: number
 }
 
+export interface DayCloseSummaryDTO {
+  period: {
+    label: 'Today'
+    from: string
+    to: string
+  }
+  sales: {
+    total: number
+    count: number
+    cashTotal: number
+    transferTotal: number
+    debtTotal: number
+  }
+  expenses: {
+    total: number
+    count: number
+  }
+  collections: {
+    total: number
+    count: number
+  }
+  savings: {
+    total: number
+    count: number
+    reconciledCount: number
+    verifiedCount: number
+  }
+  net: {
+    operatingBalance: number
+    eligibleSalesAfterExpenses: number
+    stillAvailableToSave: number
+  }
+  closure: {
+    isClosed: boolean
+    closedAt: string | null
+    note: string | null
+    closedByTraderId: string | null
+  }
+}
+
+export interface CloseDayInputDTO {
+  note?: string
+}
+
 export interface RegisterDTO {
   phoneNumber: string
   name: string

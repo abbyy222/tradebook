@@ -4,7 +4,7 @@ import { useCreateDebtor, useDebtorsList } from '@/hooks/useDebtors'
 import { useCustomersList } from '@/hooks/useCustomers'
 import { useStockList } from '@/hooks/useStock'
 import { useAuthStore } from '@/stores/authStore'
-import { buildReceiptText, printReceipt } from '@/utils/receipt'
+import { buildReceiptText, downloadReceipt, printReceipt, shareReceipt } from '@/utils/receipt'
 
 interface Props {
   onClose: () => void
@@ -285,7 +285,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
             <span className="font-display font-bold" style={{ fontSize: '1.1rem', color: '#e8a838', fontVariationSettings: "'WONK' 1" }}>{fmt(amount)}</span>
           </div>
 
-          <div className="w-full grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="w-full grid grid-cols-2 gap-2 sm:grid-cols-4">
             <button
               className="btn-ghost"
               disabled={!receiptPayload || receiptBusy}
@@ -303,22 +303,23 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
                 if (!receiptPayload) return
                 setReceiptBusy(true)
                 try {
-                  const text = buildReceiptText(receiptPayload)
-                  if (navigator.share) {
-                    await navigator.share({
-                      title: `Receipt ${receiptPayload.receiptNumber}`,
-                      text,
-                    })
-                  } else {
-                    await navigator.clipboard.writeText(text)
-                    window.alert('Receipt copied. You can paste and send it via WhatsApp or SMS.')
-                  }
+                  await shareReceipt(receiptPayload)
                 } finally {
                   setReceiptBusy(false)
                 }
               }}
             >
               Share
+            </button>
+            <button
+              className="btn-ghost"
+              disabled={!receiptPayload || receiptBusy}
+              onClick={() => {
+                if (!receiptPayload) return
+                void downloadReceipt(receiptPayload)
+              }}
+            >
+              Download
             </button>
             <button
               className="btn-ghost"

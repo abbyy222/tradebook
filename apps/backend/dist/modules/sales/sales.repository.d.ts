@@ -100,6 +100,14 @@ export declare const salesRepository: {
             id: true;
         };
     }>>;
+    getPaymentBreakdownForPeriod(traderId: string, from: Date, to: Date): Promise<(Prisma.PickEnumerable<Prisma.SaleGroupByOutputType, "paymentType"[]> & {
+        _count: {
+            id: number;
+        };
+        _sum: {
+            amount: Prisma.Decimal | null;
+        };
+    })[]>;
     findById(id: string, traderId: string): Promise<{
         id: string;
         createdAt: Date;

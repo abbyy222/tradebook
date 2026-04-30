@@ -51,7 +51,12 @@ export const profitLossQuerySchema = z.object({
   period: z.enum(['TODAY', 'THIS_WEEK', 'THIS_MONTH', 'THIS_YEAR', 'ALL_TIME']).optional().default('THIS_MONTH'),
 })
 
+export const closeDaySchema = z.object({
+  note: z.string().trim().max(300).optional(),
+})
+
 export type CreateSaleInput = z.infer<typeof createSaleSchema>
 export type SyncSalesInput = z.infer<typeof syncSalesSchema>
 export type ListSalesQuery = z.infer<typeof listSalesQuerySchema>
 export type ProfitLossQuery = z.infer<typeof profitLossQuerySchema>
+export type CloseDayInput = z.infer<typeof closeDaySchema>

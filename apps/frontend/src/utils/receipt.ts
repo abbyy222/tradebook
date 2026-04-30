@@ -1,4 +1,11 @@
-type ReceiptPayload = {
+import {
+  buildPdfFileFromHtml,
+  downloadPdfDocument,
+  openPrintDocument,
+  sharePdfDocument,
+} from './document'
+
+export type ReceiptPayload = {
   receiptNumber: string
   businessName: string
   traderName?: string
@@ -45,8 +52,7 @@ export const buildReceiptText = (payload: ReceiptPayload) => {
     .join('\n')
 }
 
-export const printReceipt = (payload: ReceiptPayload) => {
-  const receiptHtml = `
+export const buildReceiptHtml = (payload: ReceiptPayload) => `
 <!doctype html>
 <html>
   <head>
@@ -55,45 +61,79 @@ export const printReceipt = (payload: ReceiptPayload) => {
     <style>
       body {
         margin: 0;
-        font-family: Arial, sans-serif;
-        color: #111;
-        background: #fff;
+        font-family: "Segoe UI", Arial, sans-serif;
+        color: #24150f;
+        background: #f7f1ea;
+        padding: 20px;
       }
       .receipt {
-        max-width: 360px;
-        margin: 16px auto;
-        border: 1px solid #ddd;
-        padding: 16px;
+        max-width: 520px;
+        margin: 0 auto;
+        border: 1px solid #e7d5c4;
+        border-radius: 24px;
+        padding: 24px;
+        background: linear-gradient(180deg, #fffdfa 0%, #fff7ef 100%);
+        box-shadow: 0 20px 60px rgba(47, 24, 12, 0.12);
       }
       h1 {
-        font-size: 16px;
-        margin: 0 0 4px;
+        font-size: 22px;
+        margin: 0 0 6px;
+        color: #231510;
       }
       .muted {
-        color: #666;
+        color: #745846;
         font-size: 12px;
-        margin: 0;
+        margin: 3px 0;
       }
       .line {
-        border-top: 1px dashed #bbb;
-        margin: 12px 0;
+        border-top: 1px dashed #cfb49d;
+        margin: 16px 0;
       }
       .row {
         display: flex;
         justify-content: space-between;
         gap: 10px;
         font-size: 13px;
-        margin: 6px 0;
+        margin: 10px 0;
       }
       .total {
         font-weight: 700;
-        font-size: 15px;
+        font-size: 18px;
+        color: #b44d1f;
+      }
+      .pill {
+        display: inline-block;
+        margin-top: 8px;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: rgba(232, 168, 56, 0.12);
+        border: 1px solid rgba(232, 168, 56, 0.22);
+        color: #9d6505;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .thankyou {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: rgba(192, 72, 24, 0.06);
+        color: #5d4334;
+        font-size: 13px;
       }
       @media print {
+        body {
+          background: #fff;
+          padding: 0;
+        }
         .receipt {
           border: none;
           margin: 0;
           max-width: none;
+          box-shadow: none;
+          border-radius: 0;
+          padding: 0;
         }
       }
     </style>
@@ -114,7 +154,8 @@ export const printReceipt = (payload: ReceiptPayload) => {
       <div class="row"><span>Payment</span><span>${payload.paymentType}</span></div>
       ${payload.debtorName ? `<div class="row"><span>Customer</span><span>${payload.debtorName}</span></div>` : ''}
       <div class="line"></div>
-      <p class="muted">Thank you for your purchase.</p>
+      <span class="pill">TradeBook Sale Receipt</span>
+      <p class="thankyou">Thank you for your purchase. Keep this slip as your proof of payment.</p>
     </div>
     <script>
       window.onload = function () {
@@ -124,11 +165,31 @@ export const printReceipt = (payload: ReceiptPayload) => {
   </body>
 </html>`
 
-  const printWindow = window.open('', '_blank', 'width=420,height=700')
-  if (!printWindow) return false
-  printWindow.document.open()
-  printWindow.document.write(receiptHtml)
-  printWindow.document.close()
-  return true
+export const printReceipt = (payload: ReceiptPayload) => {
+  return openPrintDocument({
+    html: buildReceiptHtml(payload),
+    width: 520,
+    height: 760,
+  })
 }
 
+const buildReceiptPdfFile = (payload: ReceiptPayload) =>
+  buildPdfFileFromHtml({
+    html: buildReceiptHtml(payload),
+    fileName: `tradebook-receipt-${payload.receiptNumber}.pdf`,
+  })
+
+export const downloadReceipt = async (payload: ReceiptPayload) => {
+  const file = await buildReceiptPdfFile(payload)
+  await downloadPdfDocument({ file })
+}
+
+export const shareReceipt = async (payload: ReceiptPayload) => {
+  const file = await buildReceiptPdfFile(payload)
+  return sharePdfDocument({
+    title: `Receipt ${payload.receiptNumber}`,
+    file,
+    fallbackText: buildReceiptText(payload),
+    fallbackMessage: 'PDF downloaded. Share the receipt from your files if this device cannot share PDF files directly.',
+  })
+}

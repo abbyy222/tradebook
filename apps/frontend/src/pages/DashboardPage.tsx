@@ -3,9 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { MarketHeroCarousel } from '@/components/MarketHeroCarousel'
 import { StatCard } from '@/components/StatCard'
 import { RecordSaleWizard } from '@/components/RecordSaleWizard'
-import { useDashboardOverview } from '@/hooks/useDashboard'
+import { useCloseBusinessDay, useDashboardOverview } from '@/hooks/useDashboard'
 import { useAuthStore } from '@/stores/authStore'
-import type { DebtorDTO, StockItemDTO } from '@tradebook/shared-types'
+import {
+  downloadDayCloseSummary,
+  printDayCloseSummary,
+  shareDayCloseSummary,
+} from '@/utils/dayClose'
+import type { DayCloseSummaryDTO, DebtorDTO, StockItemDTO } from '@tradebook/shared-types'
 
 const fmt = (n: number) =>
   'NGN ' + n.toLocaleString('en-NG', { maximumFractionDigits: 0 })
@@ -15,6 +20,47 @@ const greeting = () => {
   if (h < 12) return 'Good morning'
   if (h < 17) return 'Good afternoon'
   return 'Good evening'
+}
+
+const buildDayCloseSignals = (summary: DayCloseSummaryDTO) => {
+  const grossEligibleBeforeSavings = summary.net.eligibleSalesAfterExpenses
+  const signals: Array<{ tone: 'good' | 'watch'; text: string }> = []
+
+  if (summary.sales.count === 0) {
+    signals.push({ tone: 'watch', text: 'No sales have been recorded yet today.' })
+  } else {
+    signals.push({
+      tone: 'good',
+      text: `${summary.sales.count} sale${summary.sales.count === 1 ? '' : 's'} captured for today.`,
+    })
+  }
+
+  if (summary.expenses.total > summary.sales.total) {
+    signals.push({ tone: 'watch', text: 'Today’s expenses are higher than today’s sales.' })
+  } else if (summary.expenses.total > 0) {
+    signals.push({
+      tone: 'good',
+      text: `Expenses are still within today’s sales range at ${fmt(summary.expenses.total)}.`,
+    })
+  }
+
+  if (summary.savings.total === 0 && grossEligibleBeforeSavings > 0) {
+    signals.push({ tone: 'watch', text: 'You still have room to record savings from today’s net sales.' })
+  } else if (summary.savings.total > 0) {
+    signals.push({
+      tone: 'good',
+      text: `${summary.savings.count} savings entr${summary.savings.count === 1 ? 'y is' : 'ies are'} already logged today.`,
+    })
+  }
+
+  if (summary.collections.total > 0) {
+    signals.push({
+      tone: 'good',
+      text: `${fmt(summary.collections.total)} collected back from debtors today.`,
+    })
+  }
+
+  return signals.slice(0, 4)
 }
 
 const CalendarIcon = () => (
@@ -66,6 +112,20 @@ const BellIcon = () => (
   </svg>
 )
 
+const MoonLedgerIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M19.5 14.5A7.5 7.5 0 0 1 9.5 4.5a7.5 7.5 0 1 0 10 10Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    <path d="M5 18.5h8M5 14.5h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+)
+
+const SparkCheckIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="m6.5 12 3.2 3.2L17.5 7.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M19 3.5v3M20.5 5h-3M4.5 4.5v2M5.5 5.5h-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+)
+
 const QuickActionIcon = ({ variant }: { variant: 'expenses' | 'debtors' | 'stock' | 'team' }) => {
   if (variant === 'expenses') {
     return (
@@ -103,14 +163,447 @@ const QuickActionIcon = ({ variant }: { variant: 'expenses' | 'debtors' | 'stock
   )
 }
 
+const DayCloseSheet = ({
+  summary,
+  onClose,
+}: {
+  summary: DayCloseSummaryDTO
+  onClose: () => void
+}) => {
+  const signals = buildDayCloseSignals(summary)
+  const grossEligibleBeforeSavings = summary.net.eligibleSalesAfterExpenses
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-3 pb-3 pt-6 sm:px-4 md:items-center md:p-6"
+      style={{ backdropFilter: 'blur(8px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-3xl overflow-hidden rounded-[28px] border border-white/10 bg-[#1a100c] shadow-[0_30px_90px_rgba(0,0,0,0.35)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div
+          className="relative overflow-hidden border-b border-white/10 px-4 py-4 sm:px-5 sm:py-5"
+          style={{
+            background:
+              "linear-gradient(135deg, rgba(192,72,24,0.22) 0%, rgba(232,168,56,0.12) 42%, rgba(33,20,15,0.92) 100%), url('/market-scenes/dashboard-market-3.jpg') center/cover",
+          }}
+        >
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(232,168,56,0.16),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(196,98,45,0.18),transparent_32%)]" />
+          <div className="relative flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <p className="label-base mb-2">Day Close Ritual</p>
+              <h2 className="font-display text-[1.8rem] font-bold leading-[0.95] text-primary wonky sm:text-[2.1rem]">
+                Close today with clarity
+              </h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-secondary">
+                Review the money that came in, what left the business, what was collected back, and what was truly saved before the day ends.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 self-start md:min-w-[220px]">
+              <div className="rounded-2xl border border-white/10 bg-[rgba(20,13,10,0.68)] px-3 py-3 backdrop-blur-[5px]">
+                <p className="label-base mb-1">Net after expenses</p>
+                <p className="font-display text-lg font-bold text-[#4ecca3] wonky">{fmt(summary.net.operatingBalance)}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-[rgba(20,13,10,0.68)] px-3 py-3 backdrop-blur-[5px]">
+                <p className="label-base mb-1">Still free to save</p>
+                <p className="font-display text-lg font-bold text-[#f0bc5a] wonky">{fmt(summary.net.stillAvailableToSave)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-h-[78vh] overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-white/10 bg-[#231510] px-4 py-4">
+              <p className="label-base mb-1">Sales recorded</p>
+              <p className="font-display text-2xl font-bold text-primary wonky">{fmt(summary.sales.total)}</p>
+              <p className="mt-1 text-xs text-secondary">{summary.sales.count} transaction{summary.sales.count === 1 ? '' : 's'} today</p>
+            </div>
+            <div className="rounded-2xl border border-[rgba(248,113,113,0.18)] bg-[#231510] px-4 py-4">
+              <p className="label-base mb-1">Expenses</p>
+              <p className="font-display text-2xl font-bold text-[#f87171] wonky">{fmt(summary.expenses.total)}</p>
+              <p className="mt-1 text-xs text-secondary">{summary.expenses.count} expense record{summary.expenses.count === 1 ? '' : 's'}</p>
+            </div>
+            <div className="rounded-2xl border border-[rgba(78,204,163,0.18)] bg-[#231510] px-4 py-4">
+              <p className="label-base mb-1">Debtor collections</p>
+              <p className="font-display text-2xl font-bold text-[#4ecca3] wonky">{fmt(summary.collections.total)}</p>
+              <p className="mt-1 text-xs text-secondary">{summary.collections.count} collection{summary.collections.count === 1 ? '' : 's'} received</p>
+            </div>
+            <div className="rounded-2xl border border-[rgba(232,168,56,0.18)] bg-[#231510] px-4 py-4">
+              <p className="label-base mb-1">Savings logged</p>
+              <p className="font-display text-2xl font-bold text-[#f0bc5a] wonky">{fmt(summary.savings.total)}</p>
+              <p className="mt-1 text-xs text-secondary">
+                {summary.savings.reconciledCount} reconciled • {summary.savings.verifiedCount} verified
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-3xl border border-white/10 bg-[#231510] p-4">
+              <div className="flex items-center gap-2">
+                <span className="text-[#f0bc5a]">
+                  <MoonLedgerIcon />
+                </span>
+                <p className="font-ui text-sm font-bold text-primary">Cashflow lens for today</p>
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-white/8 bg-[#1d120e] px-3 py-3">
+                  <p className="label-base mb-1">Cash sales</p>
+                  <p className="font-display text-lg font-bold text-primary wonky">{fmt(summary.sales.cashTotal)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/8 bg-[#1d120e] px-3 py-3">
+                  <p className="label-base mb-1">Transfer sales</p>
+                  <p className="font-display text-lg font-bold text-primary wonky">{fmt(summary.sales.transferTotal)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/8 bg-[#1d120e] px-3 py-3">
+                  <p className="label-base mb-1">Credit sales</p>
+                  <p className="font-display text-lg font-bold text-primary wonky">{fmt(summary.sales.debtTotal)}</p>
+                </div>
+              </div>
+              <div className="mt-4 rounded-2xl border border-[rgba(232,168,56,0.16)] bg-[rgba(232,168,56,0.06)] px-4 py-4">
+                <p className="label-base mb-1">What today’s sales can support</p>
+                <p className="font-display text-2xl font-bold text-[#f0bc5a] wonky">{fmt(grossEligibleBeforeSavings)}</p>
+                <p className="mt-1 text-xs leading-5 text-secondary">
+                  This follows your current savings rule: cash + transfer sales, minus today’s expenses, before checking what was saved.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-[#231510] p-4">
+              <div className="flex items-center gap-2">
+                <span className="text-[#4ecca3]">
+                  <SparkCheckIcon />
+                </span>
+                <p className="font-ui text-sm font-bold text-primary">Close-out read</p>
+              </div>
+              <div className="mt-4 flex flex-col gap-2.5">
+                {signals.map((signal, index) => (
+                  <div
+                    key={`${signal.text}-${index}`}
+                    className="rounded-2xl border px-3.5 py-3"
+                    style={{
+                      borderColor: signal.tone === 'good' ? 'rgba(78,204,163,0.18)' : 'rgba(240,188,90,0.16)',
+                      background: signal.tone === 'good' ? 'rgba(78,204,163,0.06)' : 'rgba(232,168,56,0.06)',
+                    }}
+                  >
+                    <p
+                      className="font-body text-sm leading-6"
+                      style={{ color: signal.tone === 'good' ? '#b6efd9' : '#f5d28a' }}
+                    >
+                      {signal.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <button
+                  onClick={onClose}
+                  className="w-full rounded-2xl bg-gradient-to-r from-[#c04818] to-[#e8a838] px-4 py-3 font-ui text-sm font-bold text-white"
+                >
+                  Done for today
+                </button>
+                <button
+                  onClick={onClose}
+                  className="w-full rounded-2xl border border-white/10 bg-[#1d120e] px-4 py-3 font-ui text-sm font-bold text-secondary"
+                >
+                  Review later
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const buildDashboardDayCloseSignals = (summary: DayCloseSummaryDTO) => {
+  const grossEligibleBeforeSavings = summary.net.eligibleSalesAfterExpenses
+  const signals: Array<{ tone: 'good' | 'watch'; text: string }> = []
+
+  if (summary.sales.count === 0) {
+    signals.push({ tone: 'watch', text: 'No sales have been recorded yet today.' })
+  } else {
+    signals.push({
+      tone: 'good',
+      text: `${summary.sales.count} sale${summary.sales.count === 1 ? '' : 's'} captured for today.`,
+    })
+  }
+
+  if (summary.expenses.total > summary.sales.total) {
+    signals.push({ tone: 'watch', text: 'Today\'s expenses are higher than today\'s sales.' })
+  } else if (summary.expenses.total > 0) {
+    signals.push({
+      tone: 'good',
+      text: `Expenses are still within today\'s sales range at ${fmt(summary.expenses.total)}.`,
+    })
+  }
+
+  if (summary.savings.total === 0 && grossEligibleBeforeSavings > 0) {
+    signals.push({ tone: 'watch', text: 'You still have room to record savings from today\'s net sales.' })
+  } else if (summary.savings.total > 0) {
+    signals.push({
+      tone: 'good',
+      text: `${summary.savings.count} savings entr${summary.savings.count === 1 ? 'y is' : 'ies are'} already logged today.`,
+    })
+  }
+
+  if (summary.collections.total > 0) {
+    signals.push({
+      tone: 'good',
+      text: `${fmt(summary.collections.total)} collected back from debtors today.`,
+    })
+  }
+
+  return signals.slice(0, 4)
+}
+
+const DashboardDayCloseSheet = ({
+  summary,
+  onClose,
+}: {
+  summary: DayCloseSummaryDTO
+  onClose: () => void
+}) => {
+  const trader = useAuthStore((state) => state.trader)
+  const [note, setNote] = useState(summary.closure.note ?? '')
+  const closeDay = useCloseBusinessDay()
+  const signals = buildDashboardDayCloseSignals(summary)
+  const grossEligibleBeforeSavings = summary.net.eligibleSalesAfterExpenses
+  const isClosed = summary.closure.isClosed
+  const closedAtLabel = summary.closure.closedAt
+    ? new Date(summary.closure.closedAt).toLocaleString('en-NG', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null
+
+  const handleCloseDay = async () => {
+    await closeDay.mutateAsync(note.trim() || undefined)
+    onClose()
+  }
+
+  const documentPayload = {
+    businessName: trader?.businessName ?? trader?.name ?? 'TradeBook',
+    ownerName: trader?.name,
+    summary: {
+      ...summary,
+      closure: {
+        ...summary.closure,
+        note: note.trim() || summary.closure.note,
+      },
+    },
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-3 pb-3 pt-6 sm:px-4 md:items-center md:p-6"
+      style={{ backdropFilter: 'blur(8px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-3xl overflow-hidden rounded-[28px] border border-white/10 bg-[#1a100c] shadow-[0_30px_90px_rgba(0,0,0,0.35)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div
+          className="relative overflow-hidden border-b border-white/10 px-4 py-4 sm:px-5 sm:py-5"
+          style={{
+            background:
+              "linear-gradient(135deg, rgba(192,72,24,0.22) 0%, rgba(232,168,56,0.12) 42%, rgba(33,20,15,0.92) 100%), url('/market-scenes/dashboard-market-3.jpg') center/cover",
+          }}
+        >
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(232,168,56,0.16),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(196,98,45,0.18),transparent_32%)]" />
+          <div className="relative flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <p className="label-base mb-2">Day Close Ritual</p>
+              <h2 className="font-display text-[1.8rem] font-bold leading-[0.95] text-primary wonky sm:text-[2.1rem]">
+                Close today with clarity
+              </h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-secondary">
+                Review what came in, what went out, what debtors returned, and what today’s sales can still support for savings before the market sleeps.
+              </p>
+              {isClosed && closedAtLabel ? (
+                <div className="mt-3 inline-flex rounded-full border border-[rgba(78,204,163,0.22)] bg-[rgba(78,204,163,0.1)] px-3 py-1 text-[11px] font-ui font-bold uppercase tracking-[0.08em] text-[#a9efd3]">
+                  Closed at {closedAtLabel}
+                </div>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-2 gap-2 self-start md:min-w-[220px]">
+              <div className="rounded-2xl border border-white/10 bg-[rgba(20,13,10,0.68)] px-3 py-3 backdrop-blur-[5px]">
+                <p className="label-base mb-1">Net after expenses</p>
+                <p className="font-display text-lg font-bold text-[#4ecca3] wonky">{fmt(summary.net.operatingBalance)}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-[rgba(20,13,10,0.68)] px-3 py-3 backdrop-blur-[5px]">
+                <p className="label-base mb-1">Still free to save</p>
+                <p className="font-display text-lg font-bold text-[#f0bc5a] wonky">{fmt(summary.net.stillAvailableToSave)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-h-[78vh] overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-white/10 bg-[#231510] px-4 py-4">
+              <p className="label-base mb-1">Sales recorded</p>
+              <p className="font-display text-2xl font-bold text-primary wonky">{fmt(summary.sales.total)}</p>
+              <p className="mt-1 text-xs text-secondary">{summary.sales.count} transaction{summary.sales.count === 1 ? '' : 's'} today</p>
+            </div>
+            <div className="rounded-2xl border border-[rgba(248,113,113,0.18)] bg-[#231510] px-4 py-4">
+              <p className="label-base mb-1">Expenses</p>
+              <p className="font-display text-2xl font-bold text-[#f87171] wonky">{fmt(summary.expenses.total)}</p>
+              <p className="mt-1 text-xs text-secondary">{summary.expenses.count} expense record{summary.expenses.count === 1 ? '' : 's'}</p>
+            </div>
+            <div className="rounded-2xl border border-[rgba(78,204,163,0.18)] bg-[#231510] px-4 py-4">
+              <p className="label-base mb-1">Debtor collections</p>
+              <p className="font-display text-2xl font-bold text-[#4ecca3] wonky">{fmt(summary.collections.total)}</p>
+              <p className="mt-1 text-xs text-secondary">{summary.collections.count} collection{summary.collections.count === 1 ? '' : 's'} received</p>
+            </div>
+            <div className="rounded-2xl border border-[rgba(232,168,56,0.18)] bg-[#231510] px-4 py-4">
+              <p className="label-base mb-1">Savings logged</p>
+              <p className="font-display text-2xl font-bold text-[#f0bc5a] wonky">{fmt(summary.savings.total)}</p>
+              <p className="mt-1 text-xs text-secondary">
+                {summary.savings.reconciledCount} reconciled • {summary.savings.verifiedCount} verified
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-3xl border border-white/10 bg-[#231510] p-4">
+              <div className="flex items-center gap-2">
+                <span className="text-[#f0bc5a]">
+                  <MoonLedgerIcon />
+                </span>
+                <p className="font-ui text-sm font-bold text-primary">Cashflow lens for today</p>
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-white/8 bg-[#1d120e] px-3 py-3">
+                  <p className="label-base mb-1">Cash sales</p>
+                  <p className="font-display text-lg font-bold text-primary wonky">{fmt(summary.sales.cashTotal)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/8 bg-[#1d120e] px-3 py-3">
+                  <p className="label-base mb-1">Transfer sales</p>
+                  <p className="font-display text-lg font-bold text-primary wonky">{fmt(summary.sales.transferTotal)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/8 bg-[#1d120e] px-3 py-3">
+                  <p className="label-base mb-1">Credit sales</p>
+                  <p className="font-display text-lg font-bold text-primary wonky">{fmt(summary.sales.debtTotal)}</p>
+                </div>
+              </div>
+              <div className="mt-4 rounded-2xl border border-[rgba(232,168,56,0.16)] bg-[rgba(232,168,56,0.06)] px-4 py-4">
+                <p className="label-base mb-1">What today&apos;s sales can support</p>
+                <p className="font-display text-2xl font-bold text-[#f0bc5a] wonky">{fmt(grossEligibleBeforeSavings)}</p>
+                <p className="mt-1 text-xs leading-5 text-secondary">
+                  This follows your current savings rule: cash + transfer sales, minus today&apos;s expenses, before checking what was saved.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-[#231510] p-4">
+              <div className="flex items-center gap-2">
+                <span className="text-[#4ecca3]">
+                  <SparkCheckIcon />
+                </span>
+                <p className="font-ui text-sm font-bold text-primary">Close-out read</p>
+              </div>
+              <div className="mt-4 flex flex-col gap-2.5">
+                {signals.map((signal, index) => (
+                  <div
+                    key={`${signal.text}-${index}`}
+                    className="rounded-2xl border px-3.5 py-3"
+                    style={{
+                      borderColor: signal.tone === 'good' ? 'rgba(78,204,163,0.18)' : 'rgba(240,188,90,0.16)',
+                      background: signal.tone === 'good' ? 'rgba(78,204,163,0.06)' : 'rgba(232,168,56,0.06)',
+                    }}
+                  >
+                    <p
+                      className="font-body text-sm leading-6"
+                      style={{ color: signal.tone === 'good' ? '#b6efd9' : '#f5d28a' }}
+                    >
+                      {signal.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 flex flex-col gap-2">
+                <label className="label-base">Close note</label>
+                <textarea
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="What happened today? Slow morning, restock, cash pressure, strong sales..."
+                  rows={4}
+                  className="input-base resize-none"
+                />
+                <p className="text-xs text-secondary">
+                  Save a short note so the business remembers the day, not just the numbers.
+                </p>
+              </div>
+
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <button
+                  onClick={() => {
+                    printDayCloseSummary(documentPayload)
+                  }}
+                  className="w-full rounded-2xl border border-white/10 bg-[#1d120e] px-4 py-3 font-ui text-sm font-bold text-secondary"
+                >
+                  Print / PDF
+                </button>
+                <button
+                  onClick={() => {
+                    void downloadDayCloseSummary(documentPayload)
+                  }}
+                  className="w-full rounded-2xl border border-white/10 bg-[#1d120e] px-4 py-3 font-ui text-sm font-bold text-secondary"
+                >
+                  Download
+                </button>
+              </div>
+
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                <button
+                  onClick={() => void shareDayCloseSummary(documentPayload)}
+                  className="w-full rounded-2xl border border-white/10 bg-[#1d120e] px-4 py-3 font-ui text-sm font-bold text-secondary"
+                >
+                  Share
+                </button>
+                <button
+                  onClick={() => void handleCloseDay()}
+                  disabled={closeDay.isPending}
+                  className="w-full rounded-2xl bg-gradient-to-r from-[#c04818] to-[#e8a838] px-4 py-3 font-ui text-sm font-bold text-white disabled:opacity-70"
+                >
+                  {closeDay.isPending ? 'Saving close...' : isClosed ? 'Refresh today close' : 'Close business day'}
+                </button>
+                <button
+                  onClick={onClose}
+                  className="w-full rounded-2xl border border-white/10 bg-[#1d120e] px-4 py-3 font-ui text-sm font-bold text-secondary"
+                >
+                  Review later
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+void DayCloseSheet
+
 export const DashboardPage = () => {
   const trader = useAuthStore((s) => s.trader)
   const isOwner = trader?.role !== 'SALESPERSON'
   const navigate = useNavigate()
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [dayCloseOpen, setDayCloseOpen] = useState(false)
 
   const { data: overview, isLoading: overviewLoading } = useDashboardOverview()
   const stats = overview?.stats
+  const dayClose = overview?.dayClose
   const operatingSnapshot = overview?.operatingSnapshot
   const activeDebtors: DebtorDTO[] = overview?.activeDebtors ?? []
   const stockAlerts: StockItemDTO[] = overview?.stockAlerts ?? []
@@ -183,6 +676,51 @@ export const DashboardPage = () => {
           onClick={() => navigate('/stock')}
         />
       </section>
+
+      {isOwner && dayClose ? (
+        <section className="mt-5">
+          <button
+            onClick={() => setDayCloseOpen(true)}
+            className="group relative w-full overflow-hidden rounded-[26px] border border-[rgba(232,168,56,0.14)] px-4 py-4 text-left transition-all duration-150 hover:-translate-y-[1px] sm:px-5 sm:py-5"
+            style={{ background: 'linear-gradient(135deg, rgba(192,72,24,0.12) 0%, rgba(232,168,56,0.05) 38%, rgba(35,21,16,0.98) 100%)' }}
+          >
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(232,168,56,0.08),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(196,98,45,0.1),transparent_32%)]" />
+            <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="max-w-2xl min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[#f0bc5a]">
+                    <MoonLedgerIcon />
+                  </span>
+                  <p className="font-ui text-xs font-bold uppercase tracking-[0.12em] text-[#f0bc5a]">
+                    Day Close
+                  </p>
+                </div>
+                <h3 className="mt-2 font-display text-[1.45rem] font-bold leading-[0.96] text-primary wonky sm:text-[1.7rem]">
+                  Review today before the market sleeps
+                </h3>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-secondary">
+                  Use the day-close ritual to judge what was truly left after expenses, what came back from debtors, and whether today’s savings still make sense.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:min-w-[360px]">
+                <div className="rounded-2xl border border-white/10 bg-[rgba(20,13,10,0.52)] px-3 py-3">
+                  <p className="label-base mb-1">Net after expenses</p>
+                  <p className="font-display text-base font-bold text-[#4ecca3] wonky">{fmt(dayClose.net.operatingBalance)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-[rgba(20,13,10,0.52)] px-3 py-3">
+                  <p className="label-base mb-1">Saved</p>
+                  <p className="font-display text-base font-bold text-[#f0bc5a] wonky">{fmt(dayClose.savings.total)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-[rgba(20,13,10,0.52)] px-3 py-3 col-span-2 sm:col-span-1">
+                  <p className="label-base mb-1">Still free</p>
+                  <p className="font-display text-base font-bold text-[#4ecca3] wonky">{fmt(dayClose.net.stillAvailableToSave)}</p>
+                </div>
+              </div>
+            </div>
+          </button>
+        </section>
+      ) : null}
 
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr]">
         <section className="rounded-3xl border border-white/10 bg-[#231510] p-4 md:p-5">
@@ -420,6 +958,7 @@ export const DashboardPage = () => {
         </section>
       )}
 
+      {dayCloseOpen && dayClose ? <DashboardDayCloseSheet summary={dayClose} onClose={() => setDayCloseOpen(false)} /> : null}
       {wizardOpen && <RecordSaleWizard onClose={() => setWizardOpen(false)} />}
     </div>
   )

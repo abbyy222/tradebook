@@ -59,7 +59,11 @@ export declare const profitLossQuerySchema: z.ZodObject<{
         ALL_TIME: "ALL_TIME";
     }>>>;
 }, z.core.$strip>;
+export declare const closeDaySchema: z.ZodObject<{
+    note: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 export type SyncSalesInput = z.infer<typeof syncSalesSchema>;
 export type ListSalesQuery = z.infer<typeof listSalesQuerySchema>;
 export type ProfitLossQuery = z.infer<typeof profitLossQuerySchema>;
+export type CloseDayInput = z.infer<typeof closeDaySchema>;

@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express'
 import { authenticate } from '../../middleware/authenticate'
 import {
   createSaleSchema,
+  closeDaySchema,
   syncSalesSchema,
   listSalesQuerySchema,
   profitLossQuerySchema,
@@ -66,6 +67,31 @@ salesRouter.get('/profit-loss', async (req: Request, res: Response, next: NextFu
     const snapshot = await salesService.getProfitLossSummary(traderId, query)
 
     res.status(200).json({ data: snapshot, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+salesRouter.get('/day-close', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const traderId = req.trader!.traderId
+    const summary = await salesService.getDayCloseSummary(traderId)
+
+    res.status(200).json({ data: summary, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+salesRouter.post('/day-close/close', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const traderId = req.trader!.traderId
+    const actorId = req.trader!.actorId
+    const role = req.trader!.role
+    const input = closeDaySchema.parse(req.body)
+    const summary = await salesService.closeBusinessDay(traderId, actorId, role, input)
+
+    res.status(200).json({ data: summary, error: null })
   } catch (err) {
     next(err)
   }

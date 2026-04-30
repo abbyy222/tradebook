@@ -294,6 +294,21 @@ export const salesRepository = {
     })
   },
 
+  async getPaymentBreakdownForPeriod(traderId: string, from: Date, to: Date) {
+    return prisma.sale.groupBy({
+      by: ['paymentType'],
+      where: {
+        traderId,
+        soldAt: {
+          gte: from,
+          lte: to,
+        },
+      },
+      _sum: { amount: true },
+      _count: { id: true },
+    })
+  },
+
   async findById(id: string, traderId: string) {
     return prisma.sale.findFirst({
       where: { id, traderId },

@@ -148,6 +148,23 @@ exports.debtorsRepository = {
             activeDebtorsCount: Number(summary?.activeDebtorsCount ?? 0),
         };
     },
+    async getPaymentsSummaryForPeriod(traderId, from, to) {
+        const summary = await client_2.prisma.payment.aggregate({
+            where: {
+                debtor: { traderId },
+                paidAt: {
+                    gte: from,
+                    lte: to,
+                },
+            },
+            _sum: { amount: true },
+            _count: { id: true },
+        });
+        return {
+            total: Number(summary._sum.amount ?? 0),
+            count: summary._count.id,
+        };
+    },
     async findMany(traderId, query) {
         const { cursor, pageSize, status } = query;
         const where = {

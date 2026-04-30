@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.profitLossQuerySchema = exports.listSalesQuerySchema = exports.syncSalesSchema = exports.createSaleSchema = void 0;
+exports.closeDaySchema = exports.profitLossQuerySchema = exports.listSalesQuerySchema = exports.syncSalesSchema = exports.createSaleSchema = void 0;
 const zod_1 = require("zod");
 exports.createSaleSchema = zod_1.z.object({
     id: zod_1.z.string().uuid('ID must be a valid UUID'),
@@ -48,4 +48,7 @@ exports.listSalesQuerySchema = zod_1.z.object({
 });
 exports.profitLossQuerySchema = zod_1.z.object({
     period: zod_1.z.enum(['TODAY', 'THIS_WEEK', 'THIS_MONTH', 'THIS_YEAR', 'ALL_TIME']).optional().default('THIS_MONTH'),
+});
+exports.closeDaySchema = zod_1.z.object({
+    note: zod_1.z.string().trim().max(300).optional(),
 });
