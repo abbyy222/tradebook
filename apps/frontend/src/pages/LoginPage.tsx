@@ -22,6 +22,22 @@ const loginSchema = z.object({
 
 type LoginForm = z.infer<typeof loginSchema>
 
+const getLoginErrorMessage = (error: unknown) => {
+  const err = error as any
+  const apiMessage = err?.response?.data?.error?.message
+  if (typeof apiMessage === 'string' && apiMessage.trim()) return apiMessage
+
+  if (err?.code === 'ERR_NETWORK' || err?.message === 'Network Error' || !err?.response) {
+    return 'Unable to reach the server right now. If this is only happening on this iPhone, reopen the app once so it can pick up the latest TradeBook update.'
+  }
+
+  if (err?.code === 'ECONNABORTED') {
+    return 'The server took too long to respond. Please try again.'
+  }
+
+  return 'Something went wrong. Try again.'
+}
+
 // Reusable field wrapper — label + input + error
 const Field = ({
   label,
@@ -145,8 +161,7 @@ export const LoginPage = () => {
               color: '#f87171',
             }}
           >
-            {(mutation.error as any)?.response?.data?.error?.message
-              ?? 'Something went wrong. Try again.'}
+            {getLoginErrorMessage(mutation.error)}
           </div>
         )}
 
