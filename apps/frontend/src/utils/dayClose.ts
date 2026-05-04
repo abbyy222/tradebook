@@ -163,6 +163,6 @@ export const shareDayCloseSummary = async (payload: {
     title: `${payload.businessName} day close`,
     file,
     fallbackText: buildDayCloseText(payload),
-    fallbackMessage: 'PDF downloaded. Share the day-close summary from your files if this device cannot share PDF files directly.',
+    fallbackMessage: 'PDF opened for preview. Use your phone share action from the PDF screen if direct file sharing is not available here.',
   })
 }

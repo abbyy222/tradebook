@@ -336,6 +336,30 @@ export const downloadPdfDocument = async ({
   URL.revokeObjectURL(url)
 }
 
+export const openPdfDocument = async ({
+  fileName,
+  file,
+}: {
+  fileName?: string
+  file: File
+}) => {
+  const blob =
+    fileName && file.name !== fileName
+      ? new File([await file.arrayBuffer()], fileName, { type: file.type })
+      : file
+
+  const url = URL.createObjectURL(blob)
+  const opened = window.open(url, '_blank', 'noopener,noreferrer')
+
+  if (!opened) {
+    URL.revokeObjectURL(url)
+    return false
+  }
+
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  return true
+}
+
 const sanitizeHtmlForPdf = (html: string) => html.replace(/<script[\s\S]*?<\/script>/gi, '')
 
 const waitForIframeReady = async (iframe: HTMLIFrameElement) => {
@@ -472,12 +496,16 @@ export const sharePdfDocument = async ({
     return 'shared' as const
   }
 
-  await downloadPdfDocument({ file })
+  const opened = await openPdfDocument({ file })
+  if (!opened) {
+    await downloadPdfDocument({ file })
+  }
+
   if (fallbackText) {
     await navigator.clipboard.writeText(fallbackText)
   }
   window.alert(fallbackMessage)
-  return 'downloaded' as const
+  return opened ? ('previewed' as const) : ('downloaded' as const)
 }
 
 export const shareTextOrCopy = async ({

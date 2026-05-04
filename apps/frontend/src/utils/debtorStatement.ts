@@ -148,6 +148,6 @@ export const shareDebtorStatement = async (data: DebtorStatementDTO) => {
     title: `Statement - ${data.debtor.customerName}`,
     file,
     fallbackText: buildDebtorStatementText(data),
-    fallbackMessage: 'PDF downloaded. Share the statement from your files if this device cannot share PDF files directly.',
+    fallbackMessage: 'PDF opened for preview. Use your phone share action from the PDF screen if direct file sharing is not available here.',
   })
 }
