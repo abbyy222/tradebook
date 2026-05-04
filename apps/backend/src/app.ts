@@ -37,11 +37,37 @@ if (env.NODE_ENV === 'production') {
 }
 
 const normalizeOrigin = (value: string) => value.trim().replace(/\/+$/, '')
-const configuredOrigins = new Set(
-  [env.FRONTEND_URL, ...(env.FRONTEND_URLS?.split(',') ?? [])]
-    .map(normalizeOrigin)
-    .filter(Boolean)
-)
+
+const buildTrustedOrigins = (values: string[]) => {
+  const trusted = new Set<string>()
+
+  for (const rawValue of values.map(normalizeOrigin).filter(Boolean)) {
+    trusted.add(rawValue)
+
+    try {
+      const url = new URL(rawValue)
+      const hostname = url.hostname.toLowerCase()
+
+      if (hostname.startsWith('www.')) {
+        url.hostname = hostname.slice(4)
+        trusted.add(normalizeOrigin(url.toString()))
+      } else if (hostname.includes('.')) {
+        url.hostname = `www.${hostname}`
+        trusted.add(normalizeOrigin(url.toString()))
+      }
+    } catch {
+      // Ignore malformed env values here; zod already validates presence, and
+      // we don't want one bad optional value to crash origin matching.
+    }
+  }
+
+  return trusted
+}
+
+const configuredOrigins = buildTrustedOrigins([
+  env.FRONTEND_URL,
+  ...(env.FRONTEND_URLS?.split(',') ?? []),
+])
 
 const isTrustedNetlifyOrigin = (origin: string) => {
   try {
