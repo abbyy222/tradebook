@@ -1,7 +1,10 @@
 import { CreateSaleInput, ListSalesQuery } from './sales.schema';
 import { Prisma } from '@prisma/client';
 export declare const salesRepository: {
-    createWithInventoryEffects(traderId: string, data: CreateSaleInput): Promise<{
+    createWithInventoryEffects(traderId: string, data: CreateSaleInput, actor: {
+        actorTraderId: string;
+        actorTraderName: string;
+    }): Promise<{
         id: string;
         createdAt: Date;
         debtorId: string | null;
@@ -10,6 +13,8 @@ export declare const salesRepository: {
         quantity: number;
         unitPrice: Prisma.Decimal;
         amount: Prisma.Decimal;
+        recordedByTraderId: string | null;
+        recordedByName: string | null;
         paymentType: import(".prisma/client").$Enums.PaymentType;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         soldAt: Date;
@@ -23,6 +28,8 @@ export declare const salesRepository: {
         quantity: number;
         unitPrice: Prisma.Decimal;
         amount: Prisma.Decimal;
+        recordedByTraderId: string | null;
+        recordedByName: string | null;
         paymentType: import(".prisma/client").$Enums.PaymentType;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         soldAt: Date;
@@ -36,6 +43,8 @@ export declare const salesRepository: {
         quantity: number;
         unitPrice: Prisma.Decimal;
         amount: Prisma.Decimal;
+        recordedByTraderId: string | null;
+        recordedByName: string | null;
         paymentType: import(".prisma/client").$Enums.PaymentType;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         soldAt: Date;
@@ -49,6 +58,8 @@ export declare const salesRepository: {
         quantity: number;
         unitPrice: Prisma.Decimal;
         amount: Prisma.Decimal;
+        recordedByTraderId: string | null;
+        recordedByName: string | null;
         paymentType: import(".prisma/client").$Enums.PaymentType;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         soldAt: Date;
@@ -64,6 +75,8 @@ export declare const salesRepository: {
             quantity: number;
             unitPrice: Prisma.Decimal;
             amount: Prisma.Decimal;
+            recordedByTraderId: string | null;
+            recordedByName: string | null;
             paymentType: import(".prisma/client").$Enums.PaymentType;
             syncStatus: import(".prisma/client").$Enums.SyncStatus;
             soldAt: Date;
@@ -117,6 +130,8 @@ export declare const salesRepository: {
         quantity: number;
         unitPrice: Prisma.Decimal;
         amount: Prisma.Decimal;
+        recordedByTraderId: string | null;
+        recordedByName: string | null;
         paymentType: import(".prisma/client").$Enums.PaymentType;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         soldAt: Date;

@@ -203,6 +203,7 @@ const buildLocalDayCloseSummary = async (): Promise<DayCloseSummaryDTO> => {
       closedAt: null,
       note: null,
       closedByTraderId: null,
+      closedByTraderName: null,
     },
   }
 }

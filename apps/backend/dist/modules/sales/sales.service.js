@@ -8,6 +8,7 @@ const debtors_repository_1 = require("../debtors/debtors.repository");
 const expenses_repository_1 = require("../expenses/expenses.repository");
 const savings_repository_1 = require("../savings/savings.repository");
 const stock_repository_1 = require("../stock/stock.repository");
+const auth_repository_1 = require("../auth/auth.repository");
 const errorHandler_1 = require("../../middleware/errorHandler");
 const logger_1 = require("../../utils/logger");
 const LAGOS_OFFSET_MS = 60 * 60 * 1000;
@@ -66,7 +67,15 @@ const toClosureDTO = (closure) => ({
     closedAt: closure?.closedAt?.toISOString() ?? null,
     note: closure?.note ?? null,
     closedByTraderId: closure?.closedByTraderId ?? null,
+    closedByTraderName: closure?.closedByTraderName ?? null,
 });
+const resolveActorSnapshot = async (actorId) => {
+    const actor = await auth_repository_1.authRepository.findById(actorId);
+    return {
+        actorTraderId: actorId,
+        actorTraderName: actor?.name ?? 'Unknown staff',
+    };
+};
 const assertSaleAmountMatches = (input) => {
     const expected = Number((input.quantity * input.unitPrice).toFixed(2));
     if (Math.abs(expected - input.amount) > 0.009) {
@@ -109,7 +118,7 @@ const normalizeSaleAgainstStock = async (traderId, input, existingSale) => {
     };
 };
 exports.salesService = {
-    async syncSale(traderId, input) {
+    async syncSale(traderId, actorId, input) {
         const existingSale = await sales_repository_1.salesRepository.findById(input.id, traderId);
         const normalizedInput = await normalizeSaleAgainstStock(traderId, input, existingSale);
         if (existingSale) {
@@ -124,9 +133,10 @@ exports.salesService = {
                 throw new errorHandler_1.AppError('Debtor not found', 404, 'NOT_FOUND');
             }
         }
+        const actor = await resolveActorSnapshot(actorId);
         let sale;
         try {
-            sale = await sales_repository_1.salesRepository.createWithInventoryEffects(traderId, normalizedInput);
+            sale = await sales_repository_1.salesRepository.createWithInventoryEffects(traderId, normalizedInput, actor);
         }
         catch (error) {
             const isDuplicateSale = error instanceof client_1.Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
@@ -149,11 +159,11 @@ exports.salesService = {
         }
         return toSaleDTO(sale);
     },
-    async syncBatch(traderId, input) {
-        logger_1.logger.info({ event: 'bulk_sync', traderId, count: input.sales.length });
+    async syncBatch(traderId, actorId, input) {
+        logger_1.logger.info({ event: 'bulk_sync', traderId, actorId, count: input.sales.length });
         const sales = [];
         for (const sale of input.sales) {
-            sales.push(await this.syncSale(traderId, sale));
+            sales.push(await this.syncSale(traderId, actorId, sale));
         }
         return {
             synced: sales.length,
@@ -259,6 +269,7 @@ exports.salesService = {
         }
         const summary = await this.getDayCloseSummary(traderId);
         const dayKey = toLagosDayKey(new Date(summary.period.from));
+        const actor = await resolveActorSnapshot(actorId);
         await dayClose_repository_1.dayCloseRepository.upsertForDay(traderId, dayKey, {
             fromAt: new Date(summary.period.from),
             toAt: new Date(summary.period.to),
@@ -280,6 +291,7 @@ exports.salesService = {
             stillAvailableToSave: summary.net.stillAvailableToSave,
             note: input.note,
             closedByTraderId: actorId,
+            closedByTraderName: actor.actorTraderName,
         });
         return this.getDayCloseSummary(traderId);
     },

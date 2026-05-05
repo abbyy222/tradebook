@@ -36,7 +36,7 @@ exports.debtorsRepository = {
                 phoneNumber: data.phoneNumber ?? null,
                 totalOwed: new client_1.Prisma.Decimal(data.totalOwed),
                 totalPaid: new client_1.Prisma.Decimal(0),
-                status: 'ACTIVE',
+                status: computeDebtorStatus(data.totalOwed, 0),
                 dueDate: data.dueDate ? new Date(data.dueDate) : null,
             },
             update: {

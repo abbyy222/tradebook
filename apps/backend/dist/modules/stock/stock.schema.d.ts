@@ -3,6 +3,7 @@ export declare const createStockItemSchema: z.ZodObject<{
     id: z.ZodString;
     itemName: z.ZodString;
     quantity: z.ZodNumber;
+    unitName: z.ZodString;
     unitPrice: z.ZodNumber;
     costPrice: z.ZodNumber;
     wholesalePrice: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
@@ -17,6 +18,7 @@ export declare const adjustStockSchema: z.ZodObject<{
         damage: "damage";
         correction: "correction";
     }>;
+    unitName: z.ZodOptional<z.ZodString>;
     unitPrice: z.ZodOptional<z.ZodNumber>;
     costPrice: z.ZodOptional<z.ZodNumber>;
     wholesalePrice: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
@@ -25,6 +27,7 @@ export declare const adjustStockSchema: z.ZodObject<{
 }, z.core.$strip>;
 export declare const updateStockItemSchema: z.ZodObject<{
     itemName: z.ZodOptional<z.ZodString>;
+    unitName: z.ZodOptional<z.ZodString>;
     unitPrice: z.ZodOptional<z.ZodNumber>;
     costPrice: z.ZodOptional<z.ZodNumber>;
     wholesalePrice: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
@@ -36,6 +39,7 @@ export declare const syncStockSchema: z.ZodObject<{
         id: z.ZodString;
         itemName: z.ZodString;
         quantity: z.ZodNumber;
+        unitName: z.ZodString;
         unitPrice: z.ZodNumber;
         costPrice: z.ZodNumber;
         wholesalePrice: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;

@@ -1,7 +1,7 @@
 import { CreateExpenseInput, ListExpensesQuery, SyncExpensesInput } from './expenses.schema';
 export declare const expensesService: {
-    syncExpense(traderId: string, input: CreateExpenseInput): Promise<any>;
-    syncBatch(traderId: string, input: SyncExpensesInput): Promise<{
+    syncExpense(traderId: string, actorId: string, input: CreateExpenseInput): Promise<any>;
+    syncBatch(traderId: string, actorId: string, input: SyncExpensesInput): Promise<{
         synced: number;
         expenses: any[];
     }>;

@@ -13,7 +13,7 @@ exports.stockRouter.use(authenticate_1.authenticate);
 exports.stockRouter.post('/sync', (0, authorizeRole_1.authorizeRole)('OWNER'), (0, enforceModuleWritable_1.enforceModuleWritable)('STOCK'), async (req, res, next) => {
     try {
         const input = stock_schema_1.createStockItemSchema.parse(req.body);
-        const item = await stock_service_1.stockService.syncItem(req.trader.traderId, input);
+        const item = await stock_service_1.stockService.syncItem(req.trader.traderId, req.trader.actorId, input);
         res.status(201).json({ data: item, error: null });
     }
     catch (err) {
@@ -23,7 +23,7 @@ exports.stockRouter.post('/sync', (0, authorizeRole_1.authorizeRole)('OWNER'), (
 exports.stockRouter.post('/sync/batch', (0, authorizeRole_1.authorizeRole)('OWNER'), (0, enforceModuleWritable_1.enforceModuleWritable)('STOCK'), async (req, res, next) => {
     try {
         const input = stock_schema_1.syncStockSchema.parse(req.body);
-        const result = await stock_service_1.stockService.syncBatch(req.trader.traderId, input);
+        const result = await stock_service_1.stockService.syncBatch(req.trader.traderId, req.trader.actorId, input);
         res.status(200).json({ data: result, error: null });
     }
     catch (err) {
@@ -55,7 +55,7 @@ exports.stockRouter.patch('/:id/adjust', (0, authorizeRole_1.authorizeRole)('OWN
     try {
         const input = stock_schema_1.adjustStockSchema.parse(req.body);
         const stockId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-        const item = await stock_service_1.stockService.adjustStock(stockId, req.trader.traderId, input);
+        const item = await stock_service_1.stockService.adjustStock(stockId, req.trader.traderId, req.trader.actorId, input);
         res.status(200).json({ data: item, error: null });
     }
     catch (err) {

@@ -28,6 +28,7 @@ const toTraderDTO = (trader) => ({
     businessName: trader.businessName ?? undefined,
     role: trader.role,
     language: trader.language,
+    isActive: trader.isActive,
     createdAt: trader.createdAt.toISOString(),
 });
 exports.authService = {
@@ -74,6 +75,50 @@ exports.authService = {
         const rows = await auth_repository_1.authRepository.listSalespeople(ownerTraderId);
         return rows.map(toTraderDTO);
     },
+    async updateSalesperson(ownerTraderId, salespersonId, input) {
+        const owner = await auth_repository_1.authRepository.findById(ownerTraderId);
+        if (!owner) {
+            throw new errorHandler_1.AppError('Owner account not found', 404, 'NOT_FOUND');
+        }
+        if (owner.role !== 'OWNER') {
+            throw new errorHandler_1.AppError('Only business owners can edit team members', 403, 'FORBIDDEN');
+        }
+        const salesperson = await auth_repository_1.authRepository.findSalespersonById(salespersonId, ownerTraderId);
+        if (!salesperson) {
+            throw new errorHandler_1.AppError('Salesperson not found', 404, 'NOT_FOUND');
+        }
+        const normalizedPhoneNumber = (0, phone_1.normalizePhoneNumber)(input.phoneNumber);
+        const existing = await auth_repository_1.authRepository.findByPhone(normalizedPhoneNumber);
+        if (existing && existing.id !== salespersonId) {
+            throw new errorHandler_1.AppError('Phone number already registered', 409, 'CONFLICT');
+        }
+        const pinHash = input.pin ? await bcryptjs_1.default.hash(input.pin, SALT_ROUNDS) : undefined;
+        await auth_repository_1.authRepository.updateSalesperson(salespersonId, ownerTraderId, {
+            ...input,
+            phoneNumber: normalizedPhoneNumber,
+            pinHash,
+        });
+        const updated = await auth_repository_1.authRepository.findSalespersonById(salespersonId, ownerTraderId);
+        if (!updated) {
+            throw new errorHandler_1.AppError('Salesperson not found', 404, 'NOT_FOUND');
+        }
+        return toTraderDTO(updated);
+    },
+    async deactivateSalesperson(ownerTraderId, salespersonId) {
+        const owner = await auth_repository_1.authRepository.findById(ownerTraderId);
+        if (!owner) {
+            throw new errorHandler_1.AppError('Owner account not found', 404, 'NOT_FOUND');
+        }
+        if (owner.role !== 'OWNER') {
+            throw new errorHandler_1.AppError('Only business owners can remove team members', 403, 'FORBIDDEN');
+        }
+        const salesperson = await auth_repository_1.authRepository.findSalespersonById(salespersonId, ownerTraderId);
+        if (!salesperson) {
+            throw new errorHandler_1.AppError('Salesperson not found', 404, 'NOT_FOUND');
+        }
+        await auth_repository_1.authRepository.setSalespersonActiveState(salespersonId, ownerTraderId, false);
+        return { removed: true };
+    },
     async login(input) {
         const normalizedPhoneNumber = (0, phone_1.normalizePhoneNumber)(input.phoneNumber);
         // 1. Find trader
@@ -82,6 +127,9 @@ exports.authService = {
         // We never tell attackers which one it was
         if (!trader) {
             throw new errorHandler_1.AppError('Invalid credentials', 401, 'UNAUTHORIZED');
+        }
+        if (!trader.isActive) {
+            throw new errorHandler_1.AppError('This salesperson account has been removed from the team.', 403, 'ACCOUNT_INACTIVE');
         }
         // 2. Compare PIN against hash
         const pinValid = await bcryptjs_1.default.compare(input.pin, trader.pinHash);

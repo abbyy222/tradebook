@@ -18,7 +18,7 @@ stockRouter.use(authenticate)
 stockRouter.post('/sync', authorizeRole('OWNER'), enforceModuleWritable('STOCK'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = createStockItemSchema.parse(req.body)
-    const item = await stockService.syncItem(req.trader!.traderId, input)
+    const item = await stockService.syncItem(req.trader!.traderId, req.trader!.actorId, input)
     res.status(201).json({ data: item, error: null })
   } catch (err) { next(err) }
 })
@@ -26,7 +26,7 @@ stockRouter.post('/sync', authorizeRole('OWNER'), enforceModuleWritable('STOCK')
 stockRouter.post('/sync/batch', authorizeRole('OWNER'), enforceModuleWritable('STOCK'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = syncStockSchema.parse(req.body)
-    const result = await stockService.syncBatch(req.trader!.traderId, input)
+    const result = await stockService.syncBatch(req.trader!.traderId, req.trader!.actorId, input)
     res.status(200).json({ data: result, error: null })
   } catch (err) { next(err) }
 })
@@ -55,6 +55,7 @@ stockRouter.patch('/:id/adjust', authorizeRole('OWNER'), enforceModuleWritable('
     const item = await stockService.adjustStock(
       stockId,
       req.trader!.traderId,
+      req.trader!.actorId,
       input
     )
     res.status(200).json({ data: item, error: null })

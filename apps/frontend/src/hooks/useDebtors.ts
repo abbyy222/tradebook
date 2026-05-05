@@ -99,6 +99,56 @@ const applyLocalPaymentToDebtor = (
   }
 }
 
+const getUnsyncedCreditSalesForDebtor = async (debtorId: string) => {
+  return db.sales
+    .filter(
+      (sale) =>
+        sale.debtorId === debtorId &&
+        sale.paymentType === 'DEBT' &&
+        sale.syncStatus !== 'SYNCED'
+    )
+    .toArray()
+}
+
+const buildSeedDebtorPayload = async (debtor: LocalDebtor) => {
+  const pendingCreditSales = await getUnsyncedCreditSalesForDebtor(debtor.id)
+  const pendingCreditTotal = pendingCreditSales.reduce((sum, sale) => sum + sale.amount, 0)
+  const openingTotalOwed = Math.max(Number((debtor.totalOwed - pendingCreditTotal).toFixed(2)), 0)
+
+  return {
+    payload: toCreateDebtorPayload({
+      id: debtor.id,
+      customerName: debtor.customerName,
+      phoneNumber: debtor.phoneNumber,
+      totalOwed: openingTotalOwed,
+      dueDate: debtor.dueDate,
+    }),
+    pendingCreditTotal,
+  }
+}
+
+const mergeQueuedCreditSalesBackIntoDebtor = (debtor: DebtorDTO, pendingCreditTotal: number): LocalDebtor => {
+  if (pendingCreditTotal <= 0) {
+    return {
+      ...debtor,
+      syncStatus: 'SYNCED',
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  const totalOwed = Number((debtor.totalOwed + pendingCreditTotal).toFixed(2))
+  const balance = Number((totalOwed - debtor.totalPaid).toFixed(2))
+
+  return {
+    ...debtor,
+    totalOwed,
+    balance,
+    status: balance <= 0 ? 'CLEARED' : debtor.totalPaid > 0 ? 'PARTIAL' : 'ACTIVE',
+    syncStatus: 'SYNCED',
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 const hasLocalUnsyncedStatementChanges = async (debtorId: string) => {
   const [unsyncedPaymentsCount, unsyncedCreditSalesCount] = await Promise.all([
     db.debtorPayments
@@ -226,9 +276,15 @@ const storeServerDebtors = async (debtors: DebtorDTO[]) => {
     db.debtorPayments.filter((payment) => payment.syncStatus !== 'SYNCED').toArray(),
     db.debtors.toArray(),
   ])
+  const unsyncedCreditSales = await db.sales
+    .filter(
+      (sale) => sale.paymentType === 'DEBT' && sale.debtorId != null && sale.syncStatus !== 'SYNCED'
+    )
+    .toArray()
   const localLockIds = new Set<string>([
     ...locallyUnsyncedDebtors.map((debtor) => debtor.id),
     ...unsyncedPayments.map((payment) => payment.debtorId),
+    ...unsyncedCreditSales.map((sale) => sale.debtorId!).filter(Boolean),
   ])
   const existingById = new Map(existingDebtors.map((debtor) => [debtor.id, debtor]))
 
@@ -261,8 +317,16 @@ const getLocallyMutatedDebtorIds = async () => {
   const unsyncedPayments = await db.debtorPayments
     .filter((payment) => payment.syncStatus !== 'SYNCED')
     .toArray()
+  const unsyncedCreditSales = await db.sales
+    .filter(
+      (sale) => sale.paymentType === 'DEBT' && sale.debtorId != null && sale.syncStatus !== 'SYNCED'
+    )
+    .toArray()
 
-  return new Set(unsyncedPayments.map((payment) => payment.debtorId))
+  return new Set([
+    ...unsyncedPayments.map((payment) => payment.debtorId),
+    ...unsyncedCreditSales.map((sale) => sale.debtorId!).filter(Boolean),
+  ])
 }
 
 const mergeServerAndLocalDebtors = async (
@@ -324,13 +388,10 @@ const syncPendingDebtors = async () => {
 
     for (const debtor of retryable) {
       try {
-        const created = await debtorsApi.create(toCreateDebtorPayload(debtor))
+        const { payload, pendingCreditTotal } = await buildSeedDebtorPayload(debtor)
+        const created = await debtorsApi.create(payload)
 
-        await db.debtors.put({
-          ...created,
-          syncStatus: 'SYNCED',
-          updatedAt: new Date().toISOString(),
-        })
+        await db.debtors.put(mergeQueuedCreditSalesBackIntoDebtor(created, pendingCreditTotal))
       } catch {
         await db.debtors.update(debtor.id, { syncStatus: 'FAILED' })
       }

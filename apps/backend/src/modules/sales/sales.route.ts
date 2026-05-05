@@ -16,8 +16,9 @@ salesRouter.use(authenticate)
 salesRouter.post('/sync', enforceModuleWritable('SALES'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const traderId = req.trader!.traderId
+    const actorId = req.trader!.actorId
     const input = createSaleSchema.parse(req.body)
-    const sale = await salesService.syncSale(traderId, input)
+    const sale = await salesService.syncSale(traderId, actorId, input)
 
     res.status(201).json({ data: sale, error: null })
   } catch (err) {
@@ -28,8 +29,9 @@ salesRouter.post('/sync', enforceModuleWritable('SALES'), async (req: Request, r
 salesRouter.post('/sync/batch', enforceModuleWritable('SALES'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const traderId = req.trader!.traderId
+    const actorId = req.trader!.actorId
     const input = syncSalesSchema.parse(req.body)
-    const result = await salesService.syncBatch(traderId, input)
+    const result = await salesService.syncBatch(traderId, actorId, input)
 
     res.status(200).json({ data: result, error: null })
   } catch (err) {

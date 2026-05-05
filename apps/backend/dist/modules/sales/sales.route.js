@@ -11,8 +11,9 @@ exports.salesRouter.use(authenticate_1.authenticate);
 exports.salesRouter.post('/sync', (0, enforceModuleWritable_1.enforceModuleWritable)('SALES'), async (req, res, next) => {
     try {
         const traderId = req.trader.traderId;
+        const actorId = req.trader.actorId;
         const input = sales_schema_1.createSaleSchema.parse(req.body);
-        const sale = await sales_service_1.salesService.syncSale(traderId, input);
+        const sale = await sales_service_1.salesService.syncSale(traderId, actorId, input);
         res.status(201).json({ data: sale, error: null });
     }
     catch (err) {
@@ -22,8 +23,9 @@ exports.salesRouter.post('/sync', (0, enforceModuleWritable_1.enforceModuleWrita
 exports.salesRouter.post('/sync/batch', (0, enforceModuleWritable_1.enforceModuleWritable)('SALES'), async (req, res, next) => {
     try {
         const traderId = req.trader.traderId;
+        const actorId = req.trader.actorId;
         const input = sales_schema_1.syncSalesSchema.parse(req.body);
-        const result = await sales_service_1.salesService.syncBatch(traderId, input);
+        const result = await sales_service_1.salesService.syncBatch(traderId, actorId, input);
         res.status(200).json({ data: result, error: null });
     }
     catch (err) {

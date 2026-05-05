@@ -4,6 +4,7 @@ exports.stockService = void 0;
 const stock_repository_1 = require("./stock.repository");
 const errorHandler_1 = require("../../middleware/errorHandler");
 const logger_1 = require("../../utils/logger");
+const auth_repository_1 = require("../auth/auth.repository");
 const toStockDTO = (item) => {
     const unitPrice = Number(item.unitPrice);
     const costPrice = Number(item.costPrice);
@@ -24,18 +25,30 @@ const toStockDTO = (item) => {
     };
 };
 exports.stockService = {
-    async syncItem(traderId, input) {
-        const item = await stock_repository_1.stockRepository.upsert(traderId, input);
+    async syncItem(traderId, actorId, input) {
+        const actor = await auth_repository_1.authRepository.findById(actorId);
+        const item = await stock_repository_1.stockRepository.upsert(traderId, input, {
+            actorTraderId: actorId,
+            actorTraderName: actor?.name ?? 'Unknown staff',
+        });
         return toStockDTO(item);
     },
-    async syncBatch(traderId, input) {
-        logger_1.logger.info({ event: 'bulk_sync_stock', traderId, count: input.items.length });
-        const synced = await stock_repository_1.stockRepository.bulkUpsert(traderId, input.items);
+    async syncBatch(traderId, actorId, input) {
+        logger_1.logger.info({ event: 'bulk_sync_stock', traderId, actorId, count: input.items.length });
+        const actor = await auth_repository_1.authRepository.findById(actorId);
+        const synced = await stock_repository_1.stockRepository.bulkUpsert(traderId, input.items, {
+            actorTraderId: actorId,
+            actorTraderName: actor?.name ?? 'Unknown staff',
+        });
         return { synced: synced.length, items: synced.map(toStockDTO) };
     },
-    async adjustStock(id, traderId, input) {
+    async adjustStock(id, traderId, actorId, input) {
         try {
-            const updated = await stock_repository_1.stockRepository.adjustQuantity(id, traderId, input);
+            const actor = await auth_repository_1.authRepository.findById(actorId);
+            const updated = await stock_repository_1.stockRepository.adjustQuantity(id, traderId, input, {
+                actorTraderId: actorId,
+                actorTraderName: actor?.name ?? 'Unknown staff',
+            });
             if (!updated) {
                 throw new errorHandler_1.AppError('Stock item not found', 404, 'NOT_FOUND');
             }
@@ -104,6 +117,9 @@ exports.stockService = {
             type: movement.type,
             quantityDelta: movement.quantityDelta,
             quantityAfter: movement.quantityAfter,
+            unitName: movement.unitName,
+            actorTraderId: movement.actorTraderId,
+            actorTraderName: movement.actorTraderName,
             unitPrice: movement.unitPrice == null ? null : Number(movement.unitPrice),
             costPrice: movement.costPrice == null ? null : Number(movement.costPrice),
             wholesalePrice: movement.wholesalePrice == null ? null : Number(movement.wholesalePrice),

@@ -21,8 +21,9 @@ expensesRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const traderId = req.trader!.traderId
+      const actorId = req.trader!.actorId
       const input = createExpenseSchema.parse(req.body)
-      const expense = await expensesService.syncExpense(traderId, input)
+      const expense = await expensesService.syncExpense(traderId, actorId, input)
       res.status(201).json({ data: expense, error: null })
     } catch (err) {
       logger.warn({
@@ -42,8 +43,9 @@ expensesRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const traderId = req.trader!.traderId
+      const actorId = req.trader!.actorId
       const input = syncExpensesSchema.parse(req.body)
-      const result = await expensesService.syncBatch(traderId, input)
+      const result = await expensesService.syncBatch(traderId, actorId, input)
       res.status(200).json({ data: result, error: null })
     } catch (err) {
       logger.warn({

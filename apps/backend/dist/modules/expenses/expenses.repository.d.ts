@@ -1,10 +1,15 @@
 import { Prisma } from '@prisma/client';
 import { CreateExpenseInput, ListExpensesQuery } from './expenses.schema';
 export declare const expensesRepository: {
-    upsert(traderId: string, data: CreateExpenseInput): Promise<{
+    upsert(traderId: string, data: CreateExpenseInput, actor: {
+        actorTraderId: string;
+        actorTraderName: string;
+    }): Promise<{
         id: string;
         createdAt: Date;
         amount: Prisma.Decimal;
+        recordedByTraderId: string | null;
+        recordedByName: string | null;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         description: string;
         category: import(".prisma/client").$Enums.ExpenseCategory;
@@ -16,10 +21,15 @@ export declare const expensesRepository: {
         endDate: Date | null;
         nextDueDate: Date | null;
     }>;
-    bulkUpsert(traderId: string, expenses: CreateExpenseInput[]): Promise<{
+    bulkUpsert(traderId: string, expenses: CreateExpenseInput[], actor: {
+        actorTraderId: string;
+        actorTraderName: string;
+    }): Promise<{
         id: string;
         createdAt: Date;
         amount: Prisma.Decimal;
+        recordedByTraderId: string | null;
+        recordedByName: string | null;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         description: string;
         category: import(".prisma/client").$Enums.ExpenseCategory;
@@ -36,6 +46,8 @@ export declare const expensesRepository: {
             id: string;
             createdAt: Date;
             amount: Prisma.Decimal;
+            recordedByTraderId: string | null;
+            recordedByName: string | null;
             syncStatus: import(".prisma/client").$Enums.SyncStatus;
             description: string;
             category: import(".prisma/client").$Enums.ExpenseCategory;
@@ -77,6 +89,8 @@ export declare const expensesRepository: {
         id: string;
         createdAt: Date;
         amount: Prisma.Decimal;
+        recordedByTraderId: string | null;
+        recordedByName: string | null;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         description: string;
         category: import(".prisma/client").$Enums.ExpenseCategory;

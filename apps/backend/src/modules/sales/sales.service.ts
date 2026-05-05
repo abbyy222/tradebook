@@ -5,6 +5,7 @@ import { debtorsRepository } from '../debtors/debtors.repository'
 import { expensesRepository } from '../expenses/expenses.repository'
 import { savingsRepository } from '../savings/savings.repository'
 import { stockRepository } from '../stock/stock.repository'
+import { authRepository } from '../auth/auth.repository'
 import { CloseDayInput, CreateSaleInput, ListSalesQuery, ProfitLossQuery, SyncSalesInput } from './sales.schema'
 import { AppError } from '../../middleware/errorHandler'
 import { logger } from '../../utils/logger'
@@ -72,13 +73,23 @@ const toClosureDTO = (
     closedAt: Date
     note: string | null
     closedByTraderId: string
+    closedByTraderName: string | null
   } | null,
 ) => ({
   isClosed: Boolean(closure),
   closedAt: closure?.closedAt?.toISOString() ?? null,
   note: closure?.note ?? null,
   closedByTraderId: closure?.closedByTraderId ?? null,
+  closedByTraderName: closure?.closedByTraderName ?? null,
 })
+
+const resolveActorSnapshot = async (actorId: string) => {
+  const actor = await authRepository.findById(actorId)
+  return {
+    actorTraderId: actorId,
+    actorTraderName: actor?.name ?? 'Unknown staff',
+  }
+}
 
 const assertSaleAmountMatches = (input: CreateSaleInput) => {
   const expected = Number((input.quantity * input.unitPrice).toFixed(2))
@@ -143,7 +154,7 @@ const normalizeSaleAgainstStock = async (traderId: string, input: CreateSaleInpu
 }
 
 export const salesService = {
-  async syncSale(traderId: string, input: CreateSaleInput) {
+  async syncSale(traderId: string, actorId: string, input: CreateSaleInput) {
     const existingSale = await salesRepository.findById(input.id, traderId)
     const normalizedInput = await normalizeSaleAgainstStock(traderId, input, existingSale)
 
@@ -162,9 +173,10 @@ export const salesService = {
       }
     }
 
+    const actor = await resolveActorSnapshot(actorId)
     let sale
     try {
-      sale = await salesRepository.createWithInventoryEffects(traderId, normalizedInput)
+      sale = await salesRepository.createWithInventoryEffects(traderId, normalizedInput, actor)
     } catch (error) {
       const isDuplicateSale = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
       if (!isDuplicateSale) {
@@ -196,12 +208,12 @@ export const salesService = {
     return toSaleDTO(sale)
   },
 
-  async syncBatch(traderId: string, input: SyncSalesInput) {
-    logger.info({ event: 'bulk_sync', traderId, count: input.sales.length })
+  async syncBatch(traderId: string, actorId: string, input: SyncSalesInput) {
+    logger.info({ event: 'bulk_sync', traderId, actorId, count: input.sales.length })
 
     const sales = []
     for (const sale of input.sales) {
-      sales.push(await this.syncSale(traderId, sale))
+      sales.push(await this.syncSale(traderId, actorId, sale))
     }
 
     return {
@@ -333,6 +345,8 @@ export const salesService = {
     const summary = await this.getDayCloseSummary(traderId)
     const dayKey = toLagosDayKey(new Date(summary.period.from))
 
+    const actor = await resolveActorSnapshot(actorId)
+
     await dayCloseRepository.upsertForDay(traderId, dayKey, {
       fromAt: new Date(summary.period.from),
       toAt: new Date(summary.period.to),
@@ -354,6 +368,7 @@ export const salesService = {
       stillAvailableToSave: summary.net.stillAvailableToSave,
       note: input.note,
       closedByTraderId: actorId,
+      closedByTraderName: actor.actorTraderName,
     })
 
     return this.getDayCloseSummary(traderId)

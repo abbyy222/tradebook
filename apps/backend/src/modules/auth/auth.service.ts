@@ -9,7 +9,7 @@ import jwt from 'jsonwebtoken'
 import { env } from '../../config/env'
 import { AppError } from '../../middleware/errorHandler'
 import { authRepository } from './auth.repository'
-import { RegisterInput, LoginInput, CreateSalespersonInput } from './auth.schema'
+import { RegisterInput, LoginInput, CreateSalespersonInput, UpdateSalespersonInput } from './auth.schema'
 import { normalizePhoneNumber } from '../../utils/phone'
 import { platformAdminRepository } from '../platformAdmin/platformAdmin.repository'
 
@@ -20,6 +20,7 @@ interface TraderDTO {
   businessName?: string
   role: 'OWNER' | 'SALESPERSON'
   language: string
+  isActive: boolean
   createdAt: string
 }
 
@@ -41,6 +42,7 @@ const toTraderDTO = (trader: any): TraderDTO => ({
   businessName: trader.businessName ?? undefined,
   role: trader.role,
   language: trader.language,
+  isActive: trader.isActive,
   createdAt: trader.createdAt.toISOString(),
 })
 
@@ -106,6 +108,61 @@ export const authService = {
     return rows.map(toTraderDTO)
   },
 
+  async updateSalesperson(ownerTraderId: string, salespersonId: string, input: UpdateSalespersonInput): Promise<TraderDTO> {
+    const owner = await authRepository.findById(ownerTraderId)
+    if (!owner) {
+      throw new AppError('Owner account not found', 404, 'NOT_FOUND')
+    }
+
+    if (owner.role !== 'OWNER') {
+      throw new AppError('Only business owners can edit team members', 403, 'FORBIDDEN')
+    }
+
+    const salesperson = await authRepository.findSalespersonById(salespersonId, ownerTraderId)
+    if (!salesperson) {
+      throw new AppError('Salesperson not found', 404, 'NOT_FOUND')
+    }
+
+    const normalizedPhoneNumber = normalizePhoneNumber(input.phoneNumber)
+    const existing = await authRepository.findByPhone(normalizedPhoneNumber)
+    if (existing && existing.id !== salespersonId) {
+      throw new AppError('Phone number already registered', 409, 'CONFLICT')
+    }
+
+    const pinHash = input.pin ? await bcrypt.hash(input.pin, SALT_ROUNDS) : undefined
+    await authRepository.updateSalesperson(salespersonId, ownerTraderId, {
+      ...input,
+      phoneNumber: normalizedPhoneNumber,
+      pinHash,
+    })
+
+    const updated = await authRepository.findSalespersonById(salespersonId, ownerTraderId)
+    if (!updated) {
+      throw new AppError('Salesperson not found', 404, 'NOT_FOUND')
+    }
+
+    return toTraderDTO(updated)
+  },
+
+  async deactivateSalesperson(ownerTraderId: string, salespersonId: string) {
+    const owner = await authRepository.findById(ownerTraderId)
+    if (!owner) {
+      throw new AppError('Owner account not found', 404, 'NOT_FOUND')
+    }
+
+    if (owner.role !== 'OWNER') {
+      throw new AppError('Only business owners can remove team members', 403, 'FORBIDDEN')
+    }
+
+    const salesperson = await authRepository.findSalespersonById(salespersonId, ownerTraderId)
+    if (!salesperson) {
+      throw new AppError('Salesperson not found', 404, 'NOT_FOUND')
+    }
+
+    await authRepository.setSalespersonActiveState(salespersonId, ownerTraderId, false)
+    return { removed: true }
+  },
+
   async login(input: LoginInput): Promise<AuthResponseDTO> {
     const normalizedPhoneNumber = normalizePhoneNumber(input.phoneNumber)
     // 1. Find trader
@@ -115,6 +172,10 @@ export const authService = {
     // We never tell attackers which one it was
     if (!trader) {
       throw new AppError('Invalid credentials', 401, 'UNAUTHORIZED')
+    }
+
+    if (!trader.isActive) {
+      throw new AppError('This salesperson account has been removed from the team.', 403, 'ACCOUNT_INACTIVE')
     }
 
     // 2. Compare PIN against hash

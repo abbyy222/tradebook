@@ -9,7 +9,7 @@ export const createDebtorSchema = z.object({
     .string()
     .regex(/^\+?[0-9]{10,15}$/)
     .optional(),
-  totalOwed: z.number().positive().multipleOf(0.01),
+  totalOwed: z.number().nonnegative().multipleOf(0.01),
   dueDate: z.string().datetime().optional(),
 })
 

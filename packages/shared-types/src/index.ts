@@ -82,6 +82,7 @@ export interface DayCloseSummaryDTO {
     closedAt: string | null
     note: string | null
     closedByTraderId: string | null
+    closedByTraderName: string | null
   }
 }
 
@@ -109,6 +110,13 @@ export interface CreateSalespersonDTO {
   language?: 'EN' | 'PIDGIN' | 'IGBO' | 'YORUBA' | 'HAUSA'
 }
 
+export interface UpdateSalespersonDTO {
+  phoneNumber: string
+  name: string
+  language?: 'EN' | 'PIDGIN' | 'IGBO' | 'YORUBA' | 'HAUSA'
+  pin?: string
+}
+
 export interface AuthResponseDTO {
   token: string
   trader: TraderDTO
@@ -121,6 +129,7 @@ export interface TraderDTO {
   businessName?: string
   role: 'OWNER' | 'SALESPERSON'
   language: string
+  isActive: boolean
   createdAt: string
 }
 
@@ -170,6 +179,8 @@ export interface SaleDTO {
   pricingMode?: 'RETAIL' | 'WHOLESALE'
   paymentType: 'CASH' | 'TRANSFER' | 'DEBT'
   debtorId?: string
+  recordedByTraderId?: string
+  recordedByName?: string
   syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
   soldAt: string
   createdAt: string
@@ -197,6 +208,8 @@ export interface ExpenseDTO {
   expenseType: ExpenseType
   frequency?: ExpenseFrequency
   note?: string
+  recordedByTraderId?: string
+  recordedByName?: string
   syncStatus: 'QUEUED' | 'PENDING' | 'SYNCED' | 'FAILED'
   spentAt: string
   startDate?: string
@@ -209,6 +222,7 @@ export interface CreateStockItemDTO {
   id: string
   itemName: string
   quantity: number
+  unitName: string
   unitPrice: number
   costPrice: number
   wholesalePrice?: number | null
@@ -220,6 +234,7 @@ export interface StockItemDTO {
   id: string
   itemName: string
   quantity: number
+  unitName: string
   unitPrice: number
   costPrice: number
   wholesalePrice?: number | null
@@ -241,6 +256,9 @@ export interface StockMovementDTO {
   type: StockMovementType
   quantityDelta: number
   quantityAfter: number | null
+  unitName: string
+  actorTraderId?: string | null
+  actorTraderName?: string | null
   unitPrice?: number | null
   costPrice?: number | null
   wholesalePrice?: number | null

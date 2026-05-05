@@ -7,6 +7,7 @@ import {
 } from './stock.schema'
 import { AppError } from '../../middleware/errorHandler'
 import { logger } from '../../utils/logger'
+import { authRepository } from '../auth/auth.repository'
 
 const toStockDTO = (item: any) => {
   const unitPrice = Number(item.unitPrice)
@@ -30,20 +31,32 @@ const toStockDTO = (item: any) => {
 }
 
 export const stockService = {
-  async syncItem(traderId: string, input: CreateStockItemInput) {
-    const item = await stockRepository.upsert(traderId, input)
+  async syncItem(traderId: string, actorId: string, input: CreateStockItemInput) {
+    const actor = await authRepository.findById(actorId)
+    const item = await stockRepository.upsert(traderId, input, {
+      actorTraderId: actorId,
+      actorTraderName: actor?.name ?? 'Unknown staff',
+    })
     return toStockDTO(item)
   },
 
-  async syncBatch(traderId: string, input: SyncStockInput) {
-    logger.info({ event: 'bulk_sync_stock', traderId, count: input.items.length })
-    const synced = await stockRepository.bulkUpsert(traderId, input.items)
+  async syncBatch(traderId: string, actorId: string, input: SyncStockInput) {
+    logger.info({ event: 'bulk_sync_stock', traderId, actorId, count: input.items.length })
+    const actor = await authRepository.findById(actorId)
+    const synced = await stockRepository.bulkUpsert(traderId, input.items, {
+      actorTraderId: actorId,
+      actorTraderName: actor?.name ?? 'Unknown staff',
+    })
     return { synced: synced.length, items: synced.map(toStockDTO) }
   },
 
-  async adjustStock(id: string, traderId: string, input: AdjustStockInput) {
+  async adjustStock(id: string, traderId: string, actorId: string, input: AdjustStockInput) {
     try {
-      const updated = await stockRepository.adjustQuantity(id, traderId, input)
+      const actor = await authRepository.findById(actorId)
+      const updated = await stockRepository.adjustQuantity(id, traderId, input, {
+        actorTraderId: actorId,
+        actorTraderName: actor?.name ?? 'Unknown staff',
+      })
       if (!updated) {
         throw new AppError('Stock item not found', 404, 'NOT_FOUND')
       }
@@ -116,6 +129,9 @@ export const stockService = {
       type: movement.type,
       quantityDelta: movement.quantityDelta,
       quantityAfter: movement.quantityAfter,
+      unitName: movement.unitName,
+      actorTraderId: movement.actorTraderId,
+      actorTraderName: movement.actorTraderName,
       unitPrice: movement.unitPrice == null ? null : Number(movement.unitPrice),
       costPrice: movement.costPrice == null ? null : Number(movement.costPrice),
       wholesalePrice: movement.wholesalePrice == null ? null : Number(movement.wholesalePrice),

@@ -226,6 +226,7 @@ const syncPendingStockItems = async () => {
           id: item.id,
           itemName: item.itemName,
           quantity: item.quantity,
+          unitName: item.unitName,
           unitPrice: item.unitPrice,
           costPrice: item.costPrice,
           wholesalePrice: item.wholesalePrice,
@@ -265,6 +266,7 @@ const syncPendingStockAdjustments = async () => {
         const synced = await stockApi.adjust(adjustment.stockItemId, {
           delta: adjustment.delta,
           reason: adjustment.reason,
+          unitName: adjustment.unitName,
           unitPrice: adjustment.unitPrice,
           costPrice: adjustment.costPrice,
           wholesalePrice: adjustment.wholesalePrice,
@@ -292,6 +294,7 @@ const applyLocalStockDelta = async (
   stockItemId: string,
   input: {
     delta: number
+    unitName?: string
     unitPrice?: number
     costPrice?: number
     wholesalePrice?: number | null
@@ -322,6 +325,7 @@ const applyLocalStockDelta = async (
 
   await db.stockItems.update(stockItemId, {
     quantity: nextQuantity,
+    ...(input.unitName ? { unitName: input.unitName } : {}),
     unitPrice: nextUnitPrice,
     costPrice: nextCostPrice,
     ...(input.wholesalePrice !== undefined ? { wholesalePrice: input.wholesalePrice } : {}),
@@ -371,6 +375,7 @@ export const useCreateStockItem = () => {
       const item = {
         ...input,
         id,
+        unitName: input.unitName.trim(),
         lowStockThreshold: input.lowStockThreshold ?? 5,
         wholesalePrice: input.wholesalePrice ?? null,
         wholesaleMinQty: input.wholesaleMinQty ?? null,
@@ -411,6 +416,7 @@ export const useAdjustStock = () => {
       stockItemId: string
       delta: number
       reason: StockAdjustmentReason
+      unitName?: string
       unitPrice?: number
       costPrice?: number
       wholesalePrice?: number | null
@@ -427,6 +433,7 @@ export const useAdjustStock = () => {
           stockItemId: input.stockItemId,
           delta: input.delta,
           reason: input.reason,
+          unitName: input.unitName,
           unitPrice: input.unitPrice,
           costPrice: input.costPrice,
           wholesalePrice: input.wholesalePrice,

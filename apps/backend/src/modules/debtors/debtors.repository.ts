@@ -42,7 +42,7 @@ export const debtorsRepository = {
         phoneNumber: data.phoneNumber ?? null,
         totalOwed: new Prisma.Decimal(data.totalOwed),
         totalPaid: new Prisma.Decimal(0),
-        status: 'ACTIVE',
+        status: computeDebtorStatus(data.totalOwed, 0),
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
       },
       update: {

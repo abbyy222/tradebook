@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { CreateSalespersonInput, RegisterInput } from './auth.schema';
+import { CreateSalespersonInput, RegisterInput, UpdateSalespersonInput } from './auth.schema';
 export declare const authRepository: {
     findByPhone(phoneNumber: string): Promise<{
         phoneNumber: string;
@@ -17,6 +17,7 @@ export declare const authRepository: {
         savingsAccountName: string | null;
         savingsAccountSetupAt: Date | null;
         role: import(".prisma/client").$Enums.TraderRole;
+        isActive: boolean;
         ownerTraderId: string | null;
         createdAt: Date;
         updatedAt: Date;
@@ -39,6 +40,7 @@ export declare const authRepository: {
         savingsAccountName: string | null;
         savingsAccountSetupAt: Date | null;
         role: import(".prisma/client").$Enums.TraderRole;
+        isActive: boolean;
         ownerTraderId: string | null;
         createdAt: Date;
         updatedAt: Date;
@@ -59,6 +61,28 @@ export declare const authRepository: {
         savingsAccountName: string | null;
         savingsAccountSetupAt: Date | null;
         role: import(".prisma/client").$Enums.TraderRole;
+        isActive: boolean;
+        ownerTraderId: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+    } | null>;
+    findSalespersonById(id: string, ownerTraderId: string): Promise<{
+        phoneNumber: string;
+        name: string;
+        language: import(".prisma/client").$Enums.Language;
+        businessName: string | null;
+        id: string;
+        pinHash: string;
+        savingsTargetAmount: Prisma.Decimal | null;
+        savingsTargetPeriod: import(".prisma/client").$Enums.SavingsTargetPeriod | null;
+        savingsTargetUpdatedAt: Date | null;
+        savingsBankName: string | null;
+        savingsBankCode: string | null;
+        savingsAccountNumber: string | null;
+        savingsAccountName: string | null;
+        savingsAccountSetupAt: Date | null;
+        role: import(".prisma/client").$Enums.TraderRole;
+        isActive: boolean;
         ownerTraderId: string | null;
         createdAt: Date;
         updatedAt: Date;
@@ -81,6 +105,7 @@ export declare const authRepository: {
         savingsAccountName: string | null;
         savingsAccountSetupAt: Date | null;
         role: import(".prisma/client").$Enums.TraderRole;
+        isActive: boolean;
         ownerTraderId: string | null;
         createdAt: Date;
         updatedAt: Date;
@@ -101,8 +126,13 @@ export declare const authRepository: {
         savingsAccountName: string | null;
         savingsAccountSetupAt: Date | null;
         role: import(".prisma/client").$Enums.TraderRole;
+        isActive: boolean;
         ownerTraderId: string | null;
         createdAt: Date;
         updatedAt: Date;
     }[]>;
+    updateSalesperson(id: string, ownerTraderId: string, data: UpdateSalespersonInput & {
+        pinHash?: string;
+    }): Promise<Prisma.BatchPayload>;
+    setSalespersonActiveState(id: string, ownerTraderId: string, isActive: boolean): Promise<Prisma.BatchPayload>;
 };

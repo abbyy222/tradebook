@@ -376,6 +376,11 @@ export const ExpensesPage = () => {
                       <span className="rounded-full px-2.5 py-1 text-[0.65rem] font-ui font-bold uppercase tracking-[0.08em]" style={{ background: 'rgba(232,168,56,0.15)', color: '#f0bc5a' }}>
                         {expense.expenseType === 'RECURRING' ? `${expense.frequency?.toLowerCase() ?? 'recurring'}` : 'one time'}
                       </span>
+                      {expense.recordedByName ? (
+                        <span className="rounded-full px-2.5 py-1 text-[0.65rem] font-ui font-bold" style={{ background: 'rgba(117,133,200,0.12)', color: '#9fb0ff' }}>
+                          By {expense.recordedByName}
+                        </span>
+                      ) : null}
                       {expense.note ? (
                         <span className="rounded-full px-2.5 py-1 text-[0.65rem] font-ui font-bold" style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(245,237,224,0.55)' }}>
                           Note saved

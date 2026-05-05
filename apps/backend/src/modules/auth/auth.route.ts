@@ -5,7 +5,7 @@
 // It just translates HTTP into service calls and back.
 
 import { Router, Request, Response, NextFunction } from 'express'
-import { registerSchema, loginSchema, createSalespersonSchema } from './auth.schema'
+import { registerSchema, loginSchema, createSalespersonSchema, updateSalespersonSchema } from './auth.schema'
 import { authService } from './auth.service'
 import { authenticate } from '../../middleware/authenticate'
 import { authorizeRole } from '../../middleware/authorizeRole'
@@ -50,6 +50,27 @@ authRouter.post('/salespeople', authenticate, authorizeRole('OWNER'), async (req
 authRouter.get('/salespeople', authenticate, authorizeRole('OWNER'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await authService.listSalespeople(req.trader!.traderId)
+    res.status(200).json({ data: result, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+authRouter.patch('/salespeople/:id', authenticate, authorizeRole('OWNER'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = updateSalespersonSchema.parse(req.body)
+    const salespersonId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    const result = await authService.updateSalesperson(req.trader!.traderId, salespersonId, input)
+    res.status(200).json({ data: result, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+authRouter.delete('/salespeople/:id', authenticate, authorizeRole('OWNER'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const salespersonId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    const result = await authService.deactivateSalesperson(req.trader!.traderId, salespersonId)
     res.status(200).json({ data: result, error: null })
   } catch (err) {
     next(err)

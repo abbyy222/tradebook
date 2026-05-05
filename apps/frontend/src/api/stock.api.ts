@@ -33,6 +33,7 @@ export const stockApi = {
     input: {
       delta: number
       reason: string
+      unitName?: string
       unitPrice?: number
       costPrice?: number
       wholesalePrice?: number | null

@@ -1,7 +1,7 @@
 import { CloseDayInput, CreateSaleInput, ListSalesQuery, ProfitLossQuery, SyncSalesInput } from './sales.schema';
 export declare const salesService: {
-    syncSale(traderId: string, input: CreateSaleInput): Promise<any>;
-    syncBatch(traderId: string, input: SyncSalesInput): Promise<{
+    syncSale(traderId: string, actorId: string, input: CreateSaleInput): Promise<any>;
+    syncBatch(traderId: string, actorId: string, input: SyncSalesInput): Promise<{
         synced: number;
         sales: any[];
     }>;
@@ -79,6 +79,7 @@ export declare const salesService: {
             closedAt: string | null;
             note: string | null;
             closedByTraderId: string | null;
+            closedByTraderName: string | null;
         };
     }>;
     closeBusinessDay(traderId: string, actorId: string, role: "OWNER" | "SALESPERSON", input: CloseDayInput): Promise<{
@@ -118,6 +119,7 @@ export declare const salesService: {
             closedAt: string | null;
             note: string | null;
             closedByTraderId: string | null;
+            closedByTraderName: string | null;
         };
     }>;
     getSale(id: string, traderId: string): Promise<any>;

@@ -10,6 +10,8 @@ const expenseSelect = {
   expenseType: true,
   frequency: true,
   note: true,
+  recordedByTraderId: true,
+  recordedByName: true,
   syncStatus: true,
   spentAt: true,
   startDate: true,
@@ -18,7 +20,11 @@ const expenseSelect = {
   createdAt: true,
 } satisfies Prisma.ExpenseSelect
 
-const toExpenseWriteInput = (traderId: string, data: CreateExpenseInput): Prisma.ExpenseUncheckedCreateInput => ({
+const toExpenseWriteInput = (
+  traderId: string,
+  data: CreateExpenseInput,
+  actor: { actorTraderId: string; actorTraderName: string },
+): Prisma.ExpenseUncheckedCreateInput => ({
   id: data.id,
   traderId,
   description: data.description,
@@ -27,6 +33,8 @@ const toExpenseWriteInput = (traderId: string, data: CreateExpenseInput): Prisma
   expenseType: data.expenseType,
   frequency: data.expenseType === 'RECURRING' ? data.frequency ?? null : null,
   note: data.note?.trim() || null,
+  recordedByTraderId: actor.actorTraderId,
+  recordedByName: actor.actorTraderName,
   syncStatus: 'SYNCED',
   spentAt: new Date(data.spentAt),
   startDate: data.startDate ? new Date(data.startDate) : null,
@@ -35,10 +43,10 @@ const toExpenseWriteInput = (traderId: string, data: CreateExpenseInput): Prisma
 })
 
 export const expensesRepository = {
-  async upsert(traderId: string, data: CreateExpenseInput) {
+  async upsert(traderId: string, data: CreateExpenseInput, actor: { actorTraderId: string; actorTraderName: string }) {
     return prisma.expense.upsert({
       where: { id: data.id },
-      create: toExpenseWriteInput(traderId, data),
+      create: toExpenseWriteInput(traderId, data, actor),
       update: {
         description: data.description,
         amount: new Prisma.Decimal(data.amount),
@@ -46,6 +54,8 @@ export const expensesRepository = {
         expenseType: data.expenseType,
         frequency: data.expenseType === 'RECURRING' ? data.frequency ?? null : null,
         note: data.note?.trim() || null,
+        recordedByTraderId: actor.actorTraderId,
+        recordedByName: actor.actorTraderName,
         syncStatus: 'SYNCED',
         spentAt: new Date(data.spentAt),
         startDate: data.startDate ? new Date(data.startDate) : null,
@@ -56,12 +66,12 @@ export const expensesRepository = {
     })
   },
 
-  async bulkUpsert(traderId: string, expenses: CreateExpenseInput[]) {
+  async bulkUpsert(traderId: string, expenses: CreateExpenseInput[], actor: { actorTraderId: string; actorTraderName: string }) {
     return prisma.$transaction(
       expenses.map(expense =>
         prisma.expense.upsert({
           where: { id: expense.id },
-          create: toExpenseWriteInput(traderId, expense),
+          create: toExpenseWriteInput(traderId, expense, actor),
           update: {
             description: expense.description,
             amount: new Prisma.Decimal(expense.amount),
@@ -69,6 +79,8 @@ export const expensesRepository = {
             expenseType: expense.expenseType,
             frequency: expense.expenseType === 'RECURRING' ? expense.frequency ?? null : null,
             note: expense.note?.trim() || null,
+            recordedByTraderId: actor.actorTraderId,
+            recordedByName: actor.actorTraderName,
             syncStatus: 'SYNCED',
             spentAt: new Date(expense.spentAt),
             startDate: expense.startDate ? new Date(expense.startDate) : null,

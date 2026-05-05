@@ -37,6 +37,7 @@ export const dayCloseRepository = {
       stillAvailableToSave: number
       note?: string | null
       closedByTraderId: string
+      closedByTraderName?: string | null
     },
   ) {
     return prisma.dayClose.upsert({
@@ -69,6 +70,7 @@ export const dayCloseRepository = {
         stillAvailableToSave: new Prisma.Decimal(input.stillAvailableToSave),
         note: input.note?.trim() || null,
         closedByTraderId: input.closedByTraderId,
+        closedByTraderName: input.closedByTraderName?.trim() || null,
         closedAt: new Date(),
       },
       update: {
@@ -92,6 +94,7 @@ export const dayCloseRepository = {
         stillAvailableToSave: new Prisma.Decimal(input.stillAvailableToSave),
         note: input.note?.trim() || null,
         closedByTraderId: input.closedByTraderId,
+        closedByTraderName: input.closedByTraderName?.trim() || null,
         closedAt: new Date(),
       },
     })

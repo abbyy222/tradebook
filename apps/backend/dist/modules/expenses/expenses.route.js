@@ -14,8 +14,9 @@ exports.expensesRouter.use(authenticate_1.authenticate);
 exports.expensesRouter.post('/sync', (0, enforceModuleWritable_1.enforceModuleWritable)('EXPENSES'), async (req, res, next) => {
     try {
         const traderId = req.trader.traderId;
+        const actorId = req.trader.actorId;
         const input = expenses_schema_1.createExpenseSchema.parse(req.body);
-        const expense = await expenses_service_1.expensesService.syncExpense(traderId, input);
+        const expense = await expenses_service_1.expensesService.syncExpense(traderId, actorId, input);
         res.status(201).json({ data: expense, error: null });
     }
     catch (err) {
@@ -31,8 +32,9 @@ exports.expensesRouter.post('/sync', (0, enforceModuleWritable_1.enforceModuleWr
 exports.expensesRouter.post('/sync/batch', (0, enforceModuleWritable_1.enforceModuleWritable)('EXPENSES'), async (req, res, next) => {
     try {
         const traderId = req.trader.traderId;
+        const actorId = req.trader.actorId;
         const input = expenses_schema_1.syncExpensesSchema.parse(req.body);
-        const result = await expenses_service_1.expensesService.syncBatch(traderId, input);
+        const result = await expenses_service_1.expensesService.syncBatch(traderId, actorId, input);
         res.status(200).json({ data: result, error: null });
     }
     catch (err) {

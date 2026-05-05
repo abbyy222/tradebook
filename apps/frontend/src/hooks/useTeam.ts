@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '@/api/auth.api'
-import type { CreateSalespersonDTO } from '@tradebook/shared-types'
+import type { CreateSalespersonDTO, UpdateSalespersonDTO } from '@tradebook/shared-types'
 
 export const teamKeys = {
   all: ['team'] as const,
@@ -26,3 +26,25 @@ export const useCreateSalesperson = () => {
   })
 }
 
+export const useUpdateSalesperson = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ salespersonId, input }: { salespersonId: string; input: UpdateSalespersonDTO }) =>
+      authApi.updateSalesperson(salespersonId, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: teamKeys.salespeople() })
+    },
+  })
+}
+
+export const useDeleteSalesperson = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (salespersonId: string) => authApi.deleteSalesperson(salespersonId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: teamKeys.salespeople() })
+    },
+  })
+}

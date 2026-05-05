@@ -4,6 +4,7 @@ export const createStockItemSchema = z.object({
   id: z.string().uuid(),
   itemName: z.string().min(1).max(200).trim(),
   quantity: z.number().int().min(0),
+  unitName: z.string().min(1).max(40).trim(),
   unitPrice: z.number().positive().multipleOf(0.01),
   // Cost price is the accounting anchor for inventory value and future profit/loss.
   costPrice: z.number().nonnegative().multipleOf(0.01),
@@ -39,6 +40,7 @@ export const createStockItemSchema = z.object({
 export const adjustStockSchema = z.object({
   delta: z.number().int(),
   reason: z.enum(['restock', 'sale_adjustment', 'damage', 'correction']),
+  unitName: z.string().min(1).max(40).trim().optional(),
   unitPrice: z.number().positive().multipleOf(0.01).optional(),
   costPrice: z.number().nonnegative().multipleOf(0.01).optional(),
   wholesalePrice: z.number().positive().multipleOf(0.01).nullable().optional(),
@@ -46,6 +48,7 @@ export const adjustStockSchema = z.object({
   lowStockThreshold: z.number().int().min(0).optional(),
 }).superRefine((value, ctx) => {
   const hasMetadataChange =
+    value.unitName !== undefined ||
     value.unitPrice !== undefined ||
     value.costPrice !== undefined ||
     value.wholesalePrice !== undefined ||
@@ -71,6 +74,7 @@ export const adjustStockSchema = z.object({
 
 export const updateStockItemSchema = z.object({
   itemName: z.string().min(1).max(200).trim().optional(),
+  unitName: z.string().min(1).max(40).trim().optional(),
   unitPrice: z.number().positive().multipleOf(0.01).optional(),
   costPrice: z.number().nonnegative().multipleOf(0.01).optional(),
   wholesalePrice: z.number().positive().multipleOf(0.01).nullable().optional(),

@@ -27,6 +27,15 @@ exports.authRepository = {
             where: { id },
         });
     },
+    async findSalespersonById(id, ownerTraderId) {
+        return client_1.prisma.trader.findFirst({
+            where: {
+                id,
+                ownerTraderId,
+                role: 'SALESPERSON',
+            },
+        });
+    },
     async createSalesperson(ownerTraderId, data) {
         return client_1.prisma.trader.create({
             data: {
@@ -46,6 +55,31 @@ exports.authRepository = {
                 role: 'SALESPERSON',
             },
             orderBy: { createdAt: 'desc' },
+        });
+    },
+    async updateSalesperson(id, ownerTraderId, data) {
+        return client_1.prisma.trader.updateMany({
+            where: {
+                id,
+                ownerTraderId,
+                role: 'SALESPERSON',
+            },
+            data: {
+                phoneNumber: data.phoneNumber,
+                name: data.name,
+                language: data.language,
+                ...(data.pinHash ? { pinHash: data.pinHash } : {}),
+            },
+        });
+    },
+    async setSalespersonActiveState(id, ownerTraderId, isActive) {
+        return client_1.prisma.trader.updateMany({
+            where: {
+                id,
+                ownerTraderId,
+                role: 'SALESPERSON',
+            },
+            data: { isActive },
         });
     },
 };

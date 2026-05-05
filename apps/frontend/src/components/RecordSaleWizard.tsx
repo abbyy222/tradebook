@@ -20,6 +20,7 @@ const STEP_LABELS = ['Item', 'Quantity', 'Payment', 'Confirm']
 const QUICK_QUANTITIES = [1, 2, 3, 5, 10]
 
 const fmt = (n: number) => 'NGN ' + n.toLocaleString('en-NG')
+const formatQuantityWithUnit = (quantity: number, unitName: string) => `${quantity.toLocaleString('en-NG')} ${unitName}`
 
 const CashIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -174,9 +175,9 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
   const quantityError = useMemo(() => {
     if (!selectedStockItem) return 'Select an inventory item first.'
     if (!qty || qty <= 0) return 'Quantity sold must be at least 1.'
-    if (qty > selectedStockItem.quantity) return 'Not enough stock. Available: ' + selectedStockItem.quantity
+    if (qty > selectedStockItem.quantity) return 'Not enough stock. Available: ' + formatQuantityWithUnit(selectedStockItem.quantity, selectedStockItem.unitName)
     if (pricingMode === 'WHOLESALE' && !qualifiesForWholesale) {
-      return 'Wholesale price starts from quantity ' + (selectedStockItem.wholesaleMinQty ?? 0)
+      return 'Wholesale price starts from quantity ' + formatQuantityWithUnit(selectedStockItem.wholesaleMinQty ?? 0, selectedStockItem.unitName)
     }
     return ''
   }, [pricingMode, qty, qualifiesForWholesale, selectedStockItem])
@@ -371,7 +372,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
                         <p className="font-ui font-bold text-sm" style={{ color: '#f5ede0' }}>{item.itemName}</p>
                         <p className="font-body text-xs mt-0.5" style={{ color: 'rgba(245,237,224,0.35)' }}>{fmt(item.unitPrice)} each</p>
                       </div>
-                      <span className="rounded-full px-2.5 py-1 font-ui font-bold text-[11px]" style={{ background: soldOut ? 'rgba(248,113,113,0.12)' : 'rgba(78,204,163,0.12)', color: soldOut ? '#f87171' : '#4ecca3' }}>{soldOut ? 'Out of stock' : item.quantity + ' left'}</span>
+                      <span className="rounded-full px-2.5 py-1 font-ui font-bold text-[11px]" style={{ background: soldOut ? 'rgba(248,113,113,0.12)' : 'rgba(78,204,163,0.12)', color: soldOut ? '#f87171' : '#4ecca3' }}>{soldOut ? 'Out of stock' : formatQuantityWithUnit(item.quantity, item.unitName) + ' left'}</span>
                     </button>
                   )
                 })
@@ -388,8 +389,8 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
               <p className="label-base mb-2">{selectedStockItem.itemName}</p>
               <p className="font-body text-sm mb-4" style={{ color: 'rgba(245,237,224,0.45)' }}>
                 Retail price is {fmt(selectedStockItem.unitPrice)}.
-                {selectedStockItem.wholesalePrice != null && selectedStockItem.wholesaleMinQty != null ? ` Wholesale is ${fmt(selectedStockItem.wholesalePrice)} from ${selectedStockItem.wholesaleMinQty} units.` : ''}
-                {' '}Available stock: {selectedStockItem.quantity}
+                {selectedStockItem.wholesalePrice != null && selectedStockItem.wholesaleMinQty != null ? ` Wholesale is ${fmt(selectedStockItem.wholesalePrice)} from ${formatQuantityWithUnit(selectedStockItem.wholesaleMinQty, selectedStockItem.unitName)}.` : ''}
+                {' '}Available stock: {formatQuantityWithUnit(selectedStockItem.quantity, selectedStockItem.unitName)}
               </p>
               <input type="number" inputMode="numeric" autoFocus min="1" max={selectedStockItem.quantity} placeholder="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="input-base" style={{ fontSize: '1.6rem', padding: '1rem 1.25rem' }} />
             </div>
@@ -404,7 +405,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
                 }}
               >
                 <p className="font-ui font-bold text-sm" style={{ color: pricingMode === 'RETAIL' ? '#f0bc5a' : '#f5ede0' }}>Retail price</p>
-                <p className="font-body text-xs mt-1" style={{ color: 'rgba(245,237,224,0.4)' }}>{fmt(selectedStockItem.unitPrice)} per unit</p>
+                <p className="font-body text-xs mt-1" style={{ color: 'rgba(245,237,224,0.4)' }}>{fmt(selectedStockItem.unitPrice)} per {selectedStockItem.unitName}</p>
               </button>
               <button
                 type="button"
@@ -420,7 +421,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
                 <p className="font-ui font-bold text-sm" style={{ color: pricingMode === 'WHOLESALE' ? '#4ecca3' : '#f5ede0' }}>Wholesale price</p>
                 <p className="font-body text-xs mt-1" style={{ color: 'rgba(245,237,224,0.4)' }}>
                   {selectedStockItem.wholesalePrice != null && selectedStockItem.wholesaleMinQty != null
-                    ? `${fmt(selectedStockItem.wholesalePrice)} from ${selectedStockItem.wholesaleMinQty} units`
+                    ? `${fmt(selectedStockItem.wholesalePrice)} from ${formatQuantityWithUnit(selectedStockItem.wholesaleMinQty, selectedStockItem.unitName)}`
                     : 'Not set on this item'}
                 </p>
               </button>
@@ -429,7 +430,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
               <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(78,204,163,0.08)', border: '1px solid rgba(78,204,163,0.18)' }}>
                 <p className="font-ui font-bold text-xs uppercase tracking-wider" style={{ color: '#4ecca3' }}>Wholesale available</p>
                 <p className="font-body text-sm mt-1" style={{ color: 'rgba(245,237,224,0.5)' }}>
-                  This quantity qualifies for the wholesale price of {fmt(selectedStockItem.wholesalePrice)} per unit.
+                  This quantity qualifies for the wholesale price of {fmt(selectedStockItem.wholesalePrice)} per {selectedStockItem.unitName}.
                 </p>
               </div>
             ) : null}
@@ -444,7 +445,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
               <p className="label-base mb-1">Total sale</p>
               <p className="font-display font-bold" style={{ color: '#e8a838', fontSize: '1.4rem', fontVariationSettings: "'WONK' 1" }}>{fmt(amount)}</p>
               <p className="font-body text-xs mt-1" style={{ color: 'rgba(245,237,224,0.4)' }}>
-                {effectivePricingMode === 'WHOLESALE' ? 'Wholesale' : 'Retail'} price applied at {fmt(activeUnitPrice)} per unit.
+                {effectivePricingMode === 'WHOLESALE' ? 'Wholesale' : 'Retail'} price applied at {fmt(activeUnitPrice)} per {selectedStockItem.unitName}.
               </p>
               {quantityError && <p className="font-body text-xs mt-2" style={{ color: '#f87171' }}>{quantityError}</p>}
             </div>
@@ -580,7 +581,7 @@ export const RecordSaleWizard = ({ onClose }: Props) => {
             <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: '#2e1c14' }}>
               {[
                 { label: 'Item', value: selectedStockItem.itemName },
-                { label: 'Qty', value: String(qty) },
+                  { label: 'Qty', value: selectedStockItem ? formatQuantityWithUnit(qty, selectedStockItem.unitName) : String(qty) },
                 { label: 'Price mode', value: effectivePricingMode === 'WHOLESALE' ? 'Wholesale' : 'Retail' },
                 { label: 'Unit price', value: fmt(activeUnitPrice) },
                 { label: 'Amount', value: fmt(amount), isAmount: true },

@@ -57,6 +57,12 @@ const SalesDetailSheet = ({ sale, onClose }: { sale: SaleDTO; onClose: () => voi
             <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.03)' }}><p className="label-base mb-1">Sold at</p><p className="font-body text-sm" style={{ color: '#f5ede0' }}>{new Date(sale.soldAt).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p></div>
             <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.03)' }}><p className="label-base mb-1">Recorded</p><p className="font-body text-sm" style={{ color: '#f5ede0' }}>{new Date(sale.createdAt).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p></div>
           </div>
+          {sale.recordedByName ? (
+            <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(117,133,200,0.08)', border: '1px solid rgba(117,133,200,0.14)' }}>
+              <p className="label-base mb-1">Recorded by</p>
+              <p className="font-body text-sm" style={{ color: '#f5ede0' }}>{sale.recordedByName}</p>
+            </div>
+          ) : null}
           {sale.debtorId && <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.12)' }}><p className="label-base mb-1">Debt sale</p><p className="font-body text-sm" style={{ color: '#f5ede0' }}>This sale is linked to a debtor record and should stay visible in your debt collection workflow.</p></div>}
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">

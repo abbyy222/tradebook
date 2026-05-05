@@ -1,6 +1,6 @@
 // src/api/auth.api.ts
 import { apiClient } from './client'
-import type { RegisterDTO, LoginDTO, AuthResponseDTO, CreateSalespersonDTO, TraderDTO } from '@tradebook/shared-types'
+import type { RegisterDTO, LoginDTO, AuthResponseDTO, CreateSalespersonDTO, TraderDTO, UpdateSalespersonDTO } from '@tradebook/shared-types'
 
 export const authApi = {
   register: async (data: RegisterDTO) => {
@@ -20,6 +20,16 @@ export const authApi = {
 
   listSalespeople: async () => {
     const res = await apiClient.get<{ data: TraderDTO[] }>('/auth/salespeople')
+    return res.data.data
+  },
+
+  updateSalesperson: async (salespersonId: string, data: UpdateSalespersonDTO) => {
+    const res = await apiClient.patch<{ data: TraderDTO }>(`/auth/salespeople/${salespersonId}`, data)
+    return res.data.data
+  },
+
+  deleteSalesperson: async (salespersonId: string) => {
+    const res = await apiClient.delete<{ data: { removed: boolean } }>(`/auth/salespeople/${salespersonId}`)
     return res.data.data
   },
 

@@ -34,6 +34,17 @@ const sanitizeEndDate = (startDate?: string, endDate?: string) => {
   return new Date(endDate).getTime() >= new Date(startDate).getTime() ? endDate : undefined
 }
 
+const getUnsyncedCreditSalesForDebtor = async (debtorId: string) => {
+  return db.sales
+    .filter(
+      (sale) =>
+        sale.debtorId === debtorId &&
+        sale.paymentType === 'DEBT' &&
+        isRetryableSyncStatus(sale.syncStatus)
+    )
+    .toArray()
+}
+
 class SyncEngine {
   private isSyncing = false
   private nextAllowedSyncAt = 0
@@ -217,6 +228,7 @@ class SyncEngine {
           id: item.id,
           itemName: item.itemName,
           quantity: item.quantity,
+          unitName: item.unitName,
           unitPrice: item.unitPrice,
           wholesalePrice: item.wholesalePrice ?? null,
           wholesaleMinQty: item.wholesaleMinQty ?? null,
@@ -244,15 +256,28 @@ class SyncEngine {
 
     for (const debtor of retryable.slice(0, MAX_SINGLE_RECORDS_PER_ENTITY_PER_CYCLE)) {
       try {
+        const pendingCreditSales = await getUnsyncedCreditSalesForDebtor(debtor.id)
+        const pendingCreditTotal = pendingCreditSales.reduce((sum, sale) => sum + sale.amount, 0)
+        const openingTotalOwed = Math.max(Number((debtor.totalOwed - pendingCreditTotal).toFixed(2)), 0)
         const created = await debtorsApi.create({
           id: debtor.id,
           customerName: debtor.customerName,
           phoneNumber: debtor.phoneNumber ?? undefined,
-          totalOwed: debtor.totalOwed,
+          totalOwed: openingTotalOwed,
           dueDate: debtor.dueDate ?? undefined,
         })
 
-        await db.debtors.put({ ...created, syncStatus: 'SYNCED', updatedAt: new Date().toISOString() })
+        const totalOwed = Number((created.totalOwed + pendingCreditTotal).toFixed(2))
+        const balance = Number((totalOwed - created.totalPaid).toFixed(2))
+
+        await db.debtors.put({
+          ...created,
+          totalOwed,
+          balance,
+          status: balance <= 0 ? 'CLEARED' : created.totalPaid > 0 ? 'PARTIAL' : 'ACTIVE',
+          syncStatus: 'SYNCED',
+          updatedAt: new Date().toISOString(),
+        })
       } catch {
         await db.debtors.update(debtor.id, { syncStatus: 'FAILED' })
       }
@@ -290,6 +315,7 @@ class SyncEngine {
         const updated = await stockApi.adjust(adjustment.stockItemId, {
           delta: adjustment.delta,
           reason: adjustment.reason,
+          unitName: adjustment.unitName,
           unitPrice: adjustment.unitPrice,
           costPrice: adjustment.costPrice,
           wholesalePrice: adjustment.wholesalePrice,

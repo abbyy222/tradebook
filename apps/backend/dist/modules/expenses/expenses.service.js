@@ -4,6 +4,7 @@ exports.expensesService = void 0;
 const expenses_repository_1 = require("./expenses.repository");
 const errorHandler_1 = require("../../middleware/errorHandler");
 const logger_1 = require("../../utils/logger");
+const auth_repository_1 = require("../auth/auth.repository");
 const toOptionalIso = (value) => (value ? value.toISOString() : undefined);
 const toExpenseDTO = (expense) => ({
     ...expense,
@@ -15,13 +16,21 @@ const toExpenseDTO = (expense) => ({
     createdAt: expense.createdAt.toISOString(),
 });
 exports.expensesService = {
-    async syncExpense(traderId, input) {
-        const expense = await expenses_repository_1.expensesRepository.upsert(traderId, input);
+    async syncExpense(traderId, actorId, input) {
+        const actor = await auth_repository_1.authRepository.findById(actorId);
+        const expense = await expenses_repository_1.expensesRepository.upsert(traderId, input, {
+            actorTraderId: actorId,
+            actorTraderName: actor?.name ?? 'Unknown staff',
+        });
         return toExpenseDTO(expense);
     },
-    async syncBatch(traderId, input) {
-        logger_1.logger.info({ event: 'bulk_sync_expenses', traderId, count: input.expenses.length });
-        const synced = await expenses_repository_1.expensesRepository.bulkUpsert(traderId, input.expenses);
+    async syncBatch(traderId, actorId, input) {
+        logger_1.logger.info({ event: 'bulk_sync_expenses', traderId, actorId, count: input.expenses.length });
+        const actor = await auth_repository_1.authRepository.findById(actorId);
+        const synced = await expenses_repository_1.expensesRepository.bulkUpsert(traderId, input.expenses, {
+            actorTraderId: actorId,
+            actorTraderName: actor?.name ?? 'Unknown staff',
+        });
         return { synced: synced.length, expenses: synced.map(toExpenseDTO) };
     },
     async listExpenses(traderId, query) {

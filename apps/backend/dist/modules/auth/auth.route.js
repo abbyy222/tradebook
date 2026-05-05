@@ -53,6 +53,27 @@ exports.authRouter.get('/salespeople', authenticate_1.authenticate, (0, authoriz
         next(err);
     }
 });
+exports.authRouter.patch('/salespeople/:id', authenticate_1.authenticate, (0, authorizeRole_1.authorizeRole)('OWNER'), async (req, res, next) => {
+    try {
+        const input = auth_schema_1.updateSalespersonSchema.parse(req.body);
+        const salespersonId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const result = await auth_service_1.authService.updateSalesperson(req.trader.traderId, salespersonId, input);
+        res.status(200).json({ data: result, error: null });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.authRouter.delete('/salespeople/:id', authenticate_1.authenticate, (0, authorizeRole_1.authorizeRole)('OWNER'), async (req, res, next) => {
+    try {
+        const salespersonId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const result = await auth_service_1.authService.deactivateSalesperson(req.trader.traderId, salespersonId);
+        res.status(200).json({ data: result, error: null });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 exports.authRouter.post('/logout', authenticate_1.authenticate, async (_req, res) => {
     // JWT is stateless in current architecture, so logout is handled client-side
     // by dropping token/session. This endpoint exists for explicit API semantics.

@@ -10,6 +10,7 @@ const stockSelect = {
   id: true,
   itemName: true,
   quantity: true,
+  unitName: true,
   unitPrice: true,
   costPrice: true,
   wholesalePrice: true,
@@ -26,6 +27,9 @@ const movementSelect = {
   type: true,
   quantityDelta: true,
   quantityAfter: true,
+  unitName: true,
+  actorTraderId: true,
+  actorTraderName: true,
   unitPrice: true,
   costPrice: true,
   wholesalePrice: true,
@@ -42,7 +46,7 @@ const movementSelect = {
 } as const
 
 export const stockRepository = {
-  async upsert(traderId: string, data: CreateStockItemInput) {
+  async upsert(traderId: string, data: CreateStockItemInput, actor: { actorTraderId: string; actorTraderName: string }) {
     return prisma.$transaction(async (tx) => {
       const existing = await tx.stockItem.findUnique({
         where: {
@@ -60,6 +64,7 @@ export const stockRepository = {
           traderId,
           itemName: data.itemName,
           quantity: data.quantity,
+          unitName: data.unitName,
           unitPrice: new Prisma.Decimal(data.unitPrice),
           costPrice: new Prisma.Decimal(data.costPrice),
           wholesalePrice: data.wholesalePrice != null ? new Prisma.Decimal(data.wholesalePrice) : null,
@@ -69,6 +74,7 @@ export const stockRepository = {
         },
         update: {
           quantity: data.quantity,
+          unitName: data.unitName,
           unitPrice: new Prisma.Decimal(data.unitPrice),
           costPrice: new Prisma.Decimal(data.costPrice),
           wholesalePrice: data.wholesalePrice != null ? new Prisma.Decimal(data.wholesalePrice) : null,
@@ -87,6 +93,9 @@ export const stockRepository = {
             type: 'INITIAL',
             quantityDelta: data.quantity,
             quantityAfter: data.quantity,
+            unitName: data.unitName,
+            actorTraderId: actor.actorTraderId,
+            actorTraderName: actor.actorTraderName,
             unitPrice: new Prisma.Decimal(data.unitPrice),
             costPrice: new Prisma.Decimal(data.costPrice),
             wholesalePrice: data.wholesalePrice != null ? new Prisma.Decimal(data.wholesalePrice) : null,
@@ -101,7 +110,7 @@ export const stockRepository = {
     })
   },
 
-  async bulkUpsert(traderId: string, items: CreateStockItemInput[]) {
+  async bulkUpsert(traderId: string, items: CreateStockItemInput[], _actor: { actorTraderId: string; actorTraderName: string }) {
     return prisma.$transaction(
       items.map(item =>
         prisma.stockItem.upsert({
@@ -113,6 +122,7 @@ export const stockRepository = {
             traderId,
             itemName: item.itemName,
             quantity: item.quantity,
+            unitName: item.unitName,
             unitPrice: new Prisma.Decimal(item.unitPrice),
             costPrice: new Prisma.Decimal(item.costPrice),
             wholesalePrice: item.wholesalePrice != null ? new Prisma.Decimal(item.wholesalePrice) : null,
@@ -122,6 +132,7 @@ export const stockRepository = {
           },
           update: {
             quantity: item.quantity,
+            unitName: item.unitName,
             unitPrice: new Prisma.Decimal(item.unitPrice),
             costPrice: new Prisma.Decimal(item.costPrice),
             wholesalePrice: item.wholesalePrice != null ? new Prisma.Decimal(item.wholesalePrice) : null,
@@ -135,7 +146,7 @@ export const stockRepository = {
     )
   },
 
-  async adjustQuantity(id: string, traderId: string, input: AdjustStockInput) {
+  async adjustQuantity(id: string, traderId: string, input: AdjustStockInput, actor: { actorTraderId: string; actorTraderName: string }) {
     const item = await prisma.stockItem.findFirst({
       where: { id, traderId },
       select: { id: true, quantity: true, lowStockThreshold: true },
@@ -152,6 +163,7 @@ export const stockRepository = {
         where: { id },
         data: {
           quantity: { increment: input.delta },
+          ...(input.unitName ? { unitName: input.unitName } : {}),
           ...(input.unitPrice != null ? { unitPrice: new Prisma.Decimal(input.unitPrice) } : {}),
           ...(input.costPrice != null ? { costPrice: new Prisma.Decimal(input.costPrice) } : {}),
           ...(input.wholesalePrice !== undefined ? { wholesalePrice: input.wholesalePrice != null ? new Prisma.Decimal(input.wholesalePrice) : null } : {}),
@@ -176,6 +188,9 @@ export const stockRepository = {
           type: movementType,
           quantityDelta: input.delta,
           quantityAfter: updated.quantity,
+          unitName: input.unitName ?? updated.unitName,
+          actorTraderId: actor.actorTraderId,
+          actorTraderName: actor.actorTraderName,
           unitPrice: input.unitPrice != null ? new Prisma.Decimal(input.unitPrice) : updated.unitPrice,
           costPrice: input.costPrice != null ? new Prisma.Decimal(input.costPrice) : updated.costPrice,
           wholesalePrice:
@@ -229,9 +244,9 @@ export const stockRepository = {
 
   async getLowStockItems(traderId: string) {
     return prisma.$queryRaw<
-      Array<{ id: string; itemName: string; quantity: number; lowStockThreshold: number; unitPrice: Prisma.Decimal; costPrice: Prisma.Decimal; wholesalePrice: Prisma.Decimal | null; wholesaleMinQty: number | null }>
+      Array<{ id: string; itemName: string; quantity: number; unitName: string; lowStockThreshold: number; unitPrice: Prisma.Decimal; costPrice: Prisma.Decimal; wholesalePrice: Prisma.Decimal | null; wholesaleMinQty: number | null }>
     >`
-      SELECT id, item_name as "itemName", quantity, low_stock_threshold as "lowStockThreshold", unit_price as "unitPrice", cost_price as "costPrice", wholesale_price as "wholesalePrice", wholesale_min_qty as "wholesaleMinQty"
+      SELECT id, item_name as "itemName", quantity, unit_name as "unitName", low_stock_threshold as "lowStockThreshold", unit_price as "unitPrice", cost_price as "costPrice", wholesale_price as "wholesalePrice", wholesale_min_qty as "wholesaleMinQty"
       FROM stock_items
       WHERE trader_id = ${traderId}
         AND quantity <= low_stock_threshold

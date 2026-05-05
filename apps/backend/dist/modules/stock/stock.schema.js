@@ -6,6 +6,7 @@ exports.createStockItemSchema = zod_1.z.object({
     id: zod_1.z.string().uuid(),
     itemName: zod_1.z.string().min(1).max(200).trim(),
     quantity: zod_1.z.number().int().min(0),
+    unitName: zod_1.z.string().min(1).max(40).trim(),
     unitPrice: zod_1.z.number().positive().multipleOf(0.01),
     // Cost price is the accounting anchor for inventory value and future profit/loss.
     costPrice: zod_1.z.number().nonnegative().multipleOf(0.01),
@@ -38,13 +39,15 @@ exports.createStockItemSchema = zod_1.z.object({
 exports.adjustStockSchema = zod_1.z.object({
     delta: zod_1.z.number().int(),
     reason: zod_1.z.enum(['restock', 'sale_adjustment', 'damage', 'correction']),
+    unitName: zod_1.z.string().min(1).max(40).trim().optional(),
     unitPrice: zod_1.z.number().positive().multipleOf(0.01).optional(),
     costPrice: zod_1.z.number().nonnegative().multipleOf(0.01).optional(),
     wholesalePrice: zod_1.z.number().positive().multipleOf(0.01).nullable().optional(),
     wholesaleMinQty: zod_1.z.number().int().min(2).nullable().optional(),
     lowStockThreshold: zod_1.z.number().int().min(0).optional(),
 }).superRefine((value, ctx) => {
-    const hasMetadataChange = value.unitPrice !== undefined ||
+    const hasMetadataChange = value.unitName !== undefined ||
+        value.unitPrice !== undefined ||
         value.costPrice !== undefined ||
         value.wholesalePrice !== undefined ||
         value.wholesaleMinQty !== undefined ||
@@ -66,6 +69,7 @@ exports.adjustStockSchema = zod_1.z.object({
 });
 exports.updateStockItemSchema = zod_1.z.object({
     itemName: zod_1.z.string().min(1).max(200).trim().optional(),
+    unitName: zod_1.z.string().min(1).max(40).trim().optional(),
     unitPrice: zod_1.z.number().positive().multipleOf(0.01).optional(),
     costPrice: zod_1.z.number().nonnegative().multipleOf(0.01).optional(),
     wholesalePrice: zod_1.z.number().positive().multipleOf(0.01).nullable().optional(),

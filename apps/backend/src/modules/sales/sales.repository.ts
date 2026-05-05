@@ -26,6 +26,8 @@ const saleSelect = {
   quantity: true,
   unitPrice: true,
   amount: true,
+  recordedByTraderId: true,
+  recordedByName: true,
   paymentType: true,
   debtorId: true,
   syncStatus: true,
@@ -34,7 +36,11 @@ const saleSelect = {
 } satisfies Prisma.SaleSelect
 
 export const salesRepository = {
-  async createWithInventoryEffects(traderId: string, data: CreateSaleInput) {
+  async createWithInventoryEffects(
+    traderId: string,
+    data: CreateSaleInput,
+    actor: { actorTraderId: string; actorTraderName: string },
+  ) {
     return prisma.$transaction(async (tx) => {
       if (data.stockItemId) {
         const stockUpdate = await tx.stockItem.updateMany({
@@ -81,6 +87,8 @@ export const salesRepository = {
             type: 'SALE',
             quantityDelta: -data.quantity,
             quantityAfter: stockSnapshot.quantity,
+            actorTraderId: actor.actorTraderId,
+            actorTraderName: actor.actorTraderName,
             unitPrice: new Prisma.Decimal(data.unitPrice),
             costPrice: stockSnapshot.costPrice,
             wholesalePrice: stockSnapshot.wholesalePrice,
@@ -101,6 +109,8 @@ export const salesRepository = {
           quantity: data.quantity,
           unitPrice: new Prisma.Decimal(data.unitPrice),
           amount: new Prisma.Decimal(data.amount),
+          recordedByTraderId: actor.actorTraderId,
+          recordedByName: actor.actorTraderName,
           paymentType: data.paymentType,
           debtorId: data.debtorId ?? null,
           syncStatus: 'SYNCED',

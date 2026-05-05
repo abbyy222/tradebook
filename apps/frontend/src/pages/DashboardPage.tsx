@@ -429,7 +429,7 @@ const DashboardDayCloseSheet = ({
               </p>
               {isClosed && closedAtLabel ? (
                 <div className="mt-3 inline-flex rounded-full border border-[rgba(78,204,163,0.22)] bg-[rgba(78,204,163,0.1)] px-3 py-1 text-[11px] font-ui font-bold uppercase tracking-[0.08em] text-[#a9efd3]">
-                  Closed at {closedAtLabel}
+                  Closed at {closedAtLabel}{summary.closure.closedByTraderName ? ` by ${summary.closure.closedByTraderName}` : ''}
                 </div>
               ) : null}
             </div>

@@ -10,7 +10,7 @@ exports.createDebtorSchema = zod_1.z.object({
         .string()
         .regex(/^\+?[0-9]{10,15}$/)
         .optional(),
-    totalOwed: zod_1.z.number().positive().multipleOf(0.01),
+    totalOwed: zod_1.z.number().nonnegative().multipleOf(0.01),
     dueDate: zod_1.z.string().datetime().optional(),
 });
 exports.recordPaymentSchema = zod_1.z.object({

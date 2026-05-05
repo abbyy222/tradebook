@@ -1,7 +1,10 @@
 import { Prisma } from '@prisma/client';
 import { CreateStockItemInput, ListStockQuery, AdjustStockInput } from './stock.schema';
 export declare const stockRepository: {
-    upsert(traderId: string, data: CreateStockItemInput): Promise<{
+    upsert(traderId: string, data: CreateStockItemInput, actor: {
+        actorTraderId: string;
+        actorTraderName: string;
+    }): Promise<{
         id: string;
         createdAt: Date;
         updatedAt: Date;
@@ -9,12 +12,16 @@ export declare const stockRepository: {
         quantity: number;
         unitPrice: Prisma.Decimal;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
+        unitName: string;
         costPrice: Prisma.Decimal;
         wholesalePrice: Prisma.Decimal | null;
         wholesaleMinQty: number | null;
         lowStockThreshold: number;
     }>;
-    bulkUpsert(traderId: string, items: CreateStockItemInput[]): Promise<{
+    bulkUpsert(traderId: string, items: CreateStockItemInput[], _actor: {
+        actorTraderId: string;
+        actorTraderName: string;
+    }): Promise<{
         id: string;
         createdAt: Date;
         updatedAt: Date;
@@ -22,12 +29,16 @@ export declare const stockRepository: {
         quantity: number;
         unitPrice: Prisma.Decimal;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
+        unitName: string;
         costPrice: Prisma.Decimal;
         wholesalePrice: Prisma.Decimal | null;
         wholesaleMinQty: number | null;
         lowStockThreshold: number;
     }[]>;
-    adjustQuantity(id: string, traderId: string, input: AdjustStockInput): Promise<{
+    adjustQuantity(id: string, traderId: string, input: AdjustStockInput, actor: {
+        actorTraderId: string;
+        actorTraderName: string;
+    }): Promise<{
         id: string;
         createdAt: Date;
         updatedAt: Date;
@@ -35,6 +46,7 @@ export declare const stockRepository: {
         quantity: number;
         unitPrice: Prisma.Decimal;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
+        unitName: string;
         costPrice: Prisma.Decimal;
         wholesalePrice: Prisma.Decimal | null;
         wholesaleMinQty: number | null;
@@ -49,6 +61,7 @@ export declare const stockRepository: {
             quantity: number;
             unitPrice: Prisma.Decimal;
             syncStatus: import(".prisma/client").$Enums.SyncStatus;
+            unitName: string;
             costPrice: Prisma.Decimal;
             wholesalePrice: Prisma.Decimal | null;
             wholesaleMinQty: number | null;
@@ -61,6 +74,7 @@ export declare const stockRepository: {
         id: string;
         itemName: string;
         quantity: number;
+        unitName: string;
         lowStockThreshold: number;
         unitPrice: Prisma.Decimal;
         costPrice: Prisma.Decimal;
@@ -81,6 +95,7 @@ export declare const stockRepository: {
         quantity: number;
         unitPrice: Prisma.Decimal;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
+        unitName: string;
         costPrice: Prisma.Decimal;
         wholesalePrice: Prisma.Decimal | null;
         wholesaleMinQty: number | null;
