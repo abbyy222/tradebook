@@ -4,15 +4,43 @@ import { CreateSavingsEntryInput, ListSavingsEntriesQuery, UpdateSavingsEntryInp
 
 const savingsSelect = {
   id: true,
+  traderId: true,
   amount: true,
   note: true,
   status: true,
   reconciledAt: true,
   verifiedAt: true,
+  verificationReference: true,
+  verificationTransferId: true,
+  verificationLastStatus: true,
+  payoutRecipientCode: true,
+  payoutReference: true,
+  payoutTransferId: true,
+  payoutStatus: true,
+  payoutFailureReason: true,
+  payoutTransferredAt: true,
   savedAt: true,
   createdByTraderId: true,
   createdAt: true,
 } satisfies Prisma.SavingsEntrySelect
+
+const verificationAttemptSelect = {
+  id: true,
+  savingsEntryId: true,
+  traderId: true,
+  reference: true,
+  expectedAmount: true,
+  status: true,
+  authorizationUrl: true,
+  accessCode: true,
+  paystackEmail: true,
+  paystackTransactionId: true,
+  paystackReference: true,
+  expiresAt: true,
+  verifiedAt: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.SavingsVerificationAttemptSelect
 
 export const savingsRepository = {
   async upsert(
@@ -87,17 +115,6 @@ export const savingsRepository = {
     })
   },
 
-  async findBySavedAtRange(traderId: string, from: Date, to: Date) {
-    return prisma.savingsEntry.findFirst({
-      where: {
-        traderId,
-        savedAt: { gte: from, lte: to },
-      },
-      select: savingsSelect,
-      orderBy: { savedAt: 'desc' },
-    })
-  },
-
   async update(
     id: string,
     traderId: string,
@@ -123,44 +140,30 @@ export const savingsRepository = {
 
   async getTodayTotal(traderId: string, from: Date, to: Date) {
     const result = await prisma.savingsEntry.aggregate({
-      where: {
-        traderId,
-        savedAt: { gte: from, lte: to },
-      },
+      where: { traderId, savedAt: { gte: from, lte: to } },
       _sum: { amount: true },
     })
-
     return Number(result._sum.amount ?? 0)
   },
 
   async getTotalForPeriod(traderId: string, from: Date, to: Date) {
     const result = await prisma.savingsEntry.aggregate({
-      where: {
-        traderId,
-        savedAt: { gte: from, lte: to },
-      },
+      where: { traderId, savedAt: { gte: from, lte: to } },
       _sum: { amount: true },
     })
-
     return Number(result._sum.amount ?? 0)
   },
 
   async getSummaryForPeriod(traderId: string, from: Date, to: Date) {
     const [summary, statusGroups] = await Promise.all([
       prisma.savingsEntry.aggregate({
-        where: {
-          traderId,
-          savedAt: { gte: from, lte: to },
-        },
+        where: { traderId, savedAt: { gte: from, lte: to } },
         _sum: { amount: true },
         _count: { id: true },
       }),
       prisma.savingsEntry.groupBy({
         by: ['status'],
-        where: {
-          traderId,
-          savedAt: { gte: from, lte: to },
-        },
+        where: { traderId, savedAt: { gte: from, lte: to } },
         _count: { _all: true },
       }),
     ])
@@ -170,11 +173,7 @@ export const savingsRepository = {
         acc[item.status as 'DECLARED' | 'RECONCILED' | 'VERIFIED'] = item._count._all
         return acc
       },
-      {
-        DECLARED: 0,
-        RECONCILED: 0,
-        VERIFIED: 0,
-      } as Record<'DECLARED' | 'RECONCILED' | 'VERIFIED', number>,
+      { DECLARED: 0, RECONCILED: 0, VERIFIED: 0 } as Record<'DECLARED' | 'RECONCILED' | 'VERIFIED', number>,
     )
 
     return {
@@ -187,11 +186,7 @@ export const savingsRepository = {
 
   async getSavingsTarget(traderId: string) {
     const rows = await prisma.$queryRaw<
-      Array<{
-        amount: Prisma.Decimal | null
-        period: string | null
-        updatedAt: Date | null
-      }>
+      Array<{ amount: Prisma.Decimal | null; period: string | null; updatedAt: Date | null }>
     >`
       SELECT
         savings_target_amount as "amount",
@@ -214,7 +209,7 @@ export const savingsRepository = {
 
   async updateSavingsTarget(
     traderId: string,
-    input: { amount: number; period: 'DAILY' | 'WEEKLY' | 'MONTHLY' }
+    input: { amount: number; period: 'DAILY' | 'WEEKLY' | 'MONTHLY' },
   ) {
     await prisma.$executeRaw`
       UPDATE traders
@@ -224,7 +219,6 @@ export const savingsRepository = {
         savings_target_updated_at = NOW()
       WHERE id = ${traderId}
     `
-
     return this.getSavingsTarget(traderId)
   },
 
@@ -250,8 +244,7 @@ export const savingsRepository = {
     `
 
     const row = rows[0]
-    if (!row?.bankName || !row.accountNumber || !row.accountName || !row.setupAt) return null
-
+    if (!row?.bankName || !row.bankCode || !row.accountNumber || !row.accountName || !row.setupAt) return null
     return row
   },
 
@@ -269,25 +262,17 @@ export const savingsRepository = {
         savings_account_setup_at = COALESCE(savings_account_setup_at, NOW())
       WHERE id = ${traderId}
     `
-
     return this.getSavingsAccount(traderId)
   },
 
   async getReconciliationInputs(traderId: string, from: Date, to: Date, excludeSavingsEntryId?: string) {
     const [sales, expenses, savedAlready] = await Promise.all([
       prisma.sale.aggregate({
-        where: {
-          traderId,
-          soldAt: { gte: from, lte: to },
-          paymentType: { in: ['CASH', 'TRANSFER'] },
-        },
+        where: { traderId, soldAt: { gte: from, lte: to }, paymentType: { in: ['CASH', 'TRANSFER'] } },
         _sum: { amount: true },
       }),
       prisma.expense.aggregate({
-        where: {
-          traderId,
-          spentAt: { gte: from, lte: to },
-        },
+        where: { traderId, spentAt: { gte: from, lte: to } },
         _sum: { amount: true },
       }),
       prisma.savingsEntry.aggregate({
@@ -305,6 +290,121 @@ export const savingsRepository = {
       expenseTotal: Number(expenses._sum.amount ?? 0),
       savingsAlreadyRecorded: Number(savedAlready._sum.amount ?? 0),
     }
+  },
+
+  async getPaystackTransferRecipient(traderId: string) {
+    return prisma.paystackTransferRecipient.findUnique({ where: { traderId } })
+  },
+
+  async upsertPaystackTransferRecipient(
+    traderId: string,
+    input: { recipientCode: string; accountNumber: string; bankCode: string; accountName: string; bankName: string },
+  ) {
+    return prisma.paystackTransferRecipient.upsert({
+      where: { traderId },
+      create: { traderId, ...input },
+      update: input,
+    })
+  },
+
+  async getLatestVerificationAttemptForEntry(savingsEntryId: string, traderId: string) {
+    return prisma.savingsVerificationAttempt.findFirst({
+      where: { savingsEntryId, traderId },
+      select: verificationAttemptSelect,
+      orderBy: { createdAt: 'desc' },
+    })
+  },
+
+  async findReusablePendingVerificationAttempt(savingsEntryId: string, traderId: string, now: Date) {
+    return prisma.savingsVerificationAttempt.findFirst({
+      where: {
+        savingsEntryId,
+        traderId,
+        status: 'PENDING',
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      select: verificationAttemptSelect,
+      orderBy: { createdAt: 'desc' },
+    })
+  },
+
+  async createVerificationAttempt(
+    traderId: string,
+    savingsEntryId: string,
+    input: {
+      reference: string
+      expectedAmount: number
+      authorizationUrl: string
+      accessCode: string | null
+      paystackEmail: string
+      expiresAt: Date | null
+    },
+  ) {
+    return prisma.savingsVerificationAttempt.create({
+      data: {
+        traderId,
+        savingsEntryId,
+        reference: input.reference,
+        expectedAmount: new Prisma.Decimal(input.expectedAmount),
+        status: 'PENDING',
+        authorizationUrl: input.authorizationUrl,
+        accessCode: input.accessCode,
+        paystackEmail: input.paystackEmail,
+        expiresAt: input.expiresAt,
+      },
+      select: verificationAttemptSelect,
+    })
+  },
+
+  async findVerificationAttemptByReference(reference: string, traderId?: string) {
+    return prisma.savingsVerificationAttempt.findFirst({
+      where: { reference, ...(traderId ? { traderId } : {}) },
+      select: verificationAttemptSelect,
+    })
+  },
+
+  async markVerificationAttemptSuccess(
+    attemptId: string,
+    input: { paystackReference: string | null; paystackTransactionId: string | null; verifiedAt: Date },
+  ) {
+    return prisma.savingsVerificationAttempt.update({
+      where: { id: attemptId },
+      data: {
+        status: 'SUCCESS',
+        paystackReference: input.paystackReference,
+        paystackTransactionId: input.paystackTransactionId,
+        verifiedAt: input.verifiedAt,
+      },
+      select: verificationAttemptSelect,
+    })
+  },
+
+  async markVerificationAttemptStatus(attemptId: string, status: 'FAILED' | 'EXPIRED') {
+    return prisma.savingsVerificationAttempt.update({
+      where: { id: attemptId },
+      data: { status },
+      select: verificationAttemptSelect,
+    })
+  },
+
+  async createPaystackWebhookEvent(input: {
+    traderId?: string | null
+    eventType: string
+    externalReference?: string | null
+    signature?: string | null
+    payload: Prisma.InputJsonValue
+    processedAt?: Date | null
+  }) {
+    return prisma.paystackWebhookEvent.create({
+      data: {
+        traderId: input.traderId ?? null,
+        eventType: input.eventType,
+        externalReference: input.externalReference ?? null,
+        signature: input.signature ?? null,
+        payload: input.payload,
+        processedAt: input.processedAt ?? null,
+      },
+    })
   },
 
   async markVerificationInitiated(
@@ -334,13 +434,35 @@ export const savingsRepository = {
     })
   },
 
-  async markVerificationStatusByReference(reference: string, transferId: string | null, status: string) {
+  async updatePayoutByEntryId(
+    id: string,
+    traderId: string,
+    input: {
+      recipientCode?: string | null
+      payoutReference?: string | null
+      payoutTransferId?: string | null
+      payoutStatus?: string | null
+      payoutFailureReason?: string | null
+      payoutTransferredAt?: Date | null
+    },
+  ) {
     return prisma.savingsEntry.updateMany({
-      where: { verificationReference: reference },
+      where: { id, traderId },
       data: {
-        verificationTransferId: transferId,
-        verificationLastStatus: status,
+        ...(input.recipientCode !== undefined ? { payoutRecipientCode: input.recipientCode } : {}),
+        ...(input.payoutReference !== undefined ? { payoutReference: input.payoutReference } : {}),
+        ...(input.payoutTransferId !== undefined ? { payoutTransferId: input.payoutTransferId } : {}),
+        ...(input.payoutStatus !== undefined ? { payoutStatus: input.payoutStatus } : {}),
+        ...(input.payoutFailureReason !== undefined ? { payoutFailureReason: input.payoutFailureReason } : {}),
+        ...(input.payoutTransferredAt !== undefined ? { payoutTransferredAt: input.payoutTransferredAt } : {}),
       },
+    })
+  },
+
+  async findByPayoutReference(reference: string) {
+    return prisma.savingsEntry.findFirst({
+      where: { payoutReference: reference },
+      select: savingsSelect,
     })
   },
 }

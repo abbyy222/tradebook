@@ -86,6 +86,13 @@ enum StockMovementType {
   CORRECTION
 }
 
+enum SavingsVerificationAttemptStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  EXPIRED
+}
+
 model Trader {
   id             String      @id @default(uuid())
   phoneNumber    String      @unique @map("phone_number")
@@ -119,6 +126,9 @@ model Trader {
   dayClosures     DayClose[]
   customers      Customer[]
   suppliers      Supplier[]
+  savingsVerificationAttempts SavingsVerificationAttempt[]
+  paystackWebhookEvents     PaystackWebhookEvent[]
+  paystackTransferRecipient PaystackTransferRecipient?
 
   @@index([phoneNumber])
   @@index([ownerTraderId])
@@ -183,15 +193,81 @@ model SavingsEntry {
   verificationReference String? @map("verification_reference")
   verificationTransferId String? @map("verification_transfer_id")
   verificationLastStatus String? @map("verification_last_status")
+  payoutRecipientCode String? @map("payout_recipient_code")
+  payoutReference String? @map("payout_reference")
+  payoutTransferId String? @map("payout_transfer_id")
+  payoutStatus String? @map("payout_status")
+  payoutFailureReason String? @map("payout_failure_reason")
+  payoutTransferredAt DateTime? @map("payout_transferred_at")
   savedAt           DateTime @map("saved_at")
   createdAt         DateTime @default(now()) @map("created_at")
 
   trader            Trader   @relation("BusinessSavings", fields: [traderId], references: [id], onDelete: Cascade)
   createdBy         Trader   @relation("RecordedSavings", fields: [createdByTraderId], references: [id], onDelete: Cascade)
+  verificationAttempts SavingsVerificationAttempt[]
 
   @@index([traderId, savedAt])
   @@index([traderId, createdAt])
   @@map("savings_entries")
+}
+
+model SavingsVerificationAttempt {
+  id                    String   @id @default(uuid())
+  savingsEntryId        String   @map("savings_entry_id")
+  traderId              String   @map("trader_id")
+  reference             String   @unique
+  expectedAmount        Decimal  @db.Decimal(12, 2) @map("expected_amount")
+  status                SavingsVerificationAttemptStatus @default(PENDING)
+  authorizationUrl      String   @map("authorization_url")
+  accessCode            String?  @map("access_code")
+  paystackEmail         String   @map("paystack_email")
+  paystackTransactionId String?  @map("paystack_transaction_id")
+  paystackReference     String?  @map("paystack_reference")
+  expiresAt             DateTime? @map("expires_at")
+  verifiedAt            DateTime? @map("verified_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  savingsEntry          SavingsEntry @relation(fields: [savingsEntryId], references: [id], onDelete: Cascade)
+  trader                Trader       @relation(fields: [traderId], references: [id], onDelete: Cascade)
+
+  @@index([traderId, status, createdAt])
+  @@index([savingsEntryId, createdAt])
+  @@map("savings_verification_attempts")
+}
+
+model PaystackTransferRecipient {
+  id            String   @id @default(uuid())
+  traderId      String   @unique @map("trader_id")
+  recipientCode String   @unique @map("recipient_code")
+  accountNumber String   @map("account_number")
+  bankCode      String   @map("bank_code")
+  accountName   String   @map("account_name")
+  bankName      String   @map("bank_name")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  trader        Trader   @relation(fields: [traderId], references: [id], onDelete: Cascade)
+
+  @@index([recipientCode])
+  @@map("paystack_transfer_recipients")
+}
+
+model PaystackWebhookEvent {
+  id                  String   @id @default(uuid())
+  traderId            String?  @map("trader_id")
+  eventType           String   @map("event_type")
+  externalReference   String?  @map("external_reference")
+  signature           String?  @map("signature")
+  payload             Json
+  processedAt         DateTime? @map("processed_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  trader              Trader?  @relation(fields: [traderId], references: [id], onDelete: SetNull)
+
+  @@index([traderId, createdAt])
+  @@index([eventType, createdAt])
+  @@map("paystack_webhook_events")
 }
 
 model DayClose {

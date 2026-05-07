@@ -338,6 +338,15 @@ export interface SavingsEntryDTO {
   status: SavingsVerificationStatus
   reconciledAt?: string | null
   verifiedAt?: string | null
+  verificationReference?: string | null
+  verificationTransferId?: string | null
+  verificationLastStatus?: string | null
+  payoutRecipientCode?: string | null
+  payoutReference?: string | null
+  payoutTransferId?: string | null
+  payoutStatus?: string | null
+  payoutFailureReason?: string | null
+  payoutTransferredAt?: string | null
   createdByTraderId: string
   createdAt: string
 }
@@ -359,9 +368,10 @@ export interface UpdateSavingsAccountDestinationDTO {
 
 export interface SavingsVerificationPreviewDTO {
   entry: SavingsEntryDTO
-  destination: SavingsAccountDestinationDTO
+  payoutDestination: SavingsAccountDestinationDTO | null
+  activeAttempt: SavingsVerificationAttemptDTO | null
   canProceed: boolean
-  mode: 'PREVIEW'
+  mode: 'PAYSTACK_TRANSFER'
   message: string
 }
 
@@ -382,22 +392,35 @@ export interface ResolvedSavingsAccountDTO {
 
 export interface SavingsTransferInitiationDTO {
   entry: SavingsEntryDTO
-  reference: string
-  transferId: string | null
-  status: 'PENDING'
+  attempt: SavingsVerificationAttemptDTO
   message: string
 }
 
 export interface ConfirmSavingsVerificationDTO {
-  txRef: string
-  transactionId?: string | null
+  reference: string
 }
 
 export interface SavingsVerificationConfirmationDTO {
-  verified: true
+  verified: boolean
   reference: string
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED'
   entry: SavingsEntryDTO
   message: string
+}
+
+export interface SavingsVerificationAttemptDTO {
+  reference: string
+  expectedAmount: number
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED'
+  paymentUrl: string
+  accessCode?: string | null
+  paystackEmail: string
+  paystackTransactionId?: string | null
+  paystackReference?: string | null
+  expiresAt?: string | null
+  verifiedAt?: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export type SavingsTargetPeriod = 'DAILY' | 'WEEKLY' | 'MONTHLY'

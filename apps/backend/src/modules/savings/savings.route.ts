@@ -14,28 +14,12 @@ import { enforceModuleWritable } from '../../middleware/enforceModuleWritable'
 
 export const savingsRouter = Router()
 
-savingsRouter.post('/provider/callback', async (req: Request, res: Response, next: NextFunction) => {
+savingsRouter.post('/paystack/webhook', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const providedSecret =
-      (req.headers['x-tradebook-payout-secret'] as string | undefined) ??
-      (req.headers['x-provider-callback-secret'] as string | undefined) ??
-      null
-
-    const result = await savingsService.handleGatewayCallback(req.body, providedSecret)
-    res.status(200).json({ data: result, error: null })
-  } catch (err) {
-    next(err)
-  }
-})
-
-savingsRouter.post('/flutterwave/webhook', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const providedSecret =
-      (req.headers['verif-hash'] as string | undefined) ??
-      (req.headers['flutterwave-signature'] as string | undefined) ??
-      null
-
-    const result = await savingsService.handleFlutterwaveWebhook(req.body, providedSecret)
+    const result = await savingsService.handlePaystackWebhook(
+      req.body,
+      req.headers['x-paystack-signature'],
+    )
     res.status(200).json({ data: result, error: null })
   } catch (err) {
     next(err)

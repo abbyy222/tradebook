@@ -1,6 +1,6 @@
 import { AppError } from '../../middleware/errorHandler'
-import { env } from '../../config/env'
 import { savingsRepository } from './savings.repository'
+import { logger } from '../../utils/logger'
 import {
   ConfirmSavingsVerificationInput,
   CreateSavingsEntryInput,
@@ -10,21 +10,27 @@ import {
   UpdateSavingsTargetInput,
 } from './savings.schema'
 import {
-  initiateSavingsPayoutTransfer,
   listSavingsPayoutBanks,
   resolveSavingsPayoutAccount,
 } from '../../utils/savingsPayoutGateway'
-import { verifyFlutterwaveTransactionByReference } from '../../utils/flutterwave'
+import {
+  createPaystackTransferRecipient,
+  initiatePaystackTransfer,
+  initializePaystackTransaction,
+  verifyPaystackTransaction,
+  verifyPaystackWebhookSignature,
+} from '../../utils/paystack'
+import { authRepository } from '../auth/auth.repository'
 
 const LAGOS_OFFSET_MS = 60 * 60 * 1000
-const FLUTTERWAVE_VERIFY_ATTEMPTS = 6
-const FLUTTERWAVE_VERIFY_DELAY_MS = 2000
+const PAYSTACK_ATTEMPT_TTL_MS = 30 * 60 * 1000
 
 const toSavingsEntryDTO = (entry: any) => ({
   ...entry,
   amount: Number(entry.amount),
   reconciledAt: entry.reconciledAt ? entry.reconciledAt.toISOString() : null,
   verifiedAt: entry.verifiedAt ? entry.verifiedAt.toISOString() : null,
+  payoutTransferredAt: entry.payoutTransferredAt ? entry.payoutTransferredAt.toISOString() : null,
   savedAt: entry.savedAt.toISOString(),
   createdAt: entry.createdAt.toISOString(),
 })
@@ -41,6 +47,34 @@ const toSavingsAccountDTO = (account: {
   accountNumber: account.accountNumber,
   accountName: account.accountName,
   setupAt: account.setupAt.toISOString(),
+})
+
+const toVerificationAttemptDTO = (attempt: {
+  reference: string
+  expectedAmount: number | { toString(): string }
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED'
+  authorizationUrl: string
+  accessCode: string | null
+  paystackEmail: string
+  paystackTransactionId: string | null
+  paystackReference: string | null
+  expiresAt: Date | null
+  verifiedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}) => ({
+  reference: attempt.reference,
+  expectedAmount: Number(attempt.expectedAmount),
+  status: attempt.status,
+  paymentUrl: attempt.authorizationUrl,
+  accessCode: attempt.accessCode,
+  paystackEmail: attempt.paystackEmail,
+  paystackTransactionId: attempt.paystackTransactionId,
+  paystackReference: attempt.paystackReference,
+  expiresAt: attempt.expiresAt ? attempt.expiresAt.toISOString() : null,
+  verifiedAt: attempt.verifiedAt ? attempt.verifiedAt.toISOString() : null,
+  createdAt: attempt.createdAt.toISOString(),
+  updatedAt: attempt.updatedAt.toISOString(),
 })
 
 const toLagosDayKey = (date: Date) => {
@@ -128,52 +162,142 @@ const getSavingsStatusForAmount = async (
 ) => {
   const savedAtDate = new Date(savedAt)
   const { from, to } = getDayRangeInLagos(savedAtDate)
-  const inputs = await savingsRepository.getReconciliationInputs(
-    traderId,
-    from,
-    to,
-    excludeSavingsEntryId,
-  )
-
-  const availableToSave = Math.max(
-    inputs.inflowTotal - inputs.expenseTotal - inputs.savingsAlreadyRecorded,
-    0,
-  )
-
+  const inputs = await savingsRepository.getReconciliationInputs(traderId, from, to, excludeSavingsEntryId)
+  const availableToSave = Math.max(inputs.inflowTotal - inputs.expenseTotal - inputs.savingsAlreadyRecorded, 0)
   return amount <= availableToSave ? 'RECONCILED' as const : 'DECLARED' as const
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-const verifyCheckoutPaymentWithRetry = async (txRef: string) => {
-  let lastVerifiedPayment: Awaited<ReturnType<typeof verifyFlutterwaveTransactionByReference>> | null = null
-
-  for (let attempt = 0; attempt < FLUTTERWAVE_VERIFY_ATTEMPTS; attempt += 1) {
-    lastVerifiedPayment = await verifyFlutterwaveTransactionByReference(txRef)
-    const normalizedStatus = lastVerifiedPayment.status.toLowerCase()
-
-    if (normalizedStatus === 'successful' || normalizedStatus === 'completed') {
-      return lastVerifiedPayment
-    }
-
-    if (attempt < FLUTTERWAVE_VERIFY_ATTEMPTS - 1) {
-      await sleep(FLUTTERWAVE_VERIFY_DELAY_MS)
-    }
+const buildPaystackEmailForTrader = async (traderId: string) => {
+  const trader = await authRepository.findById(traderId)
+  if (!trader) {
+    throw new AppError('Trader not found for savings verification', 404, 'NOT_FOUND')
   }
 
-  return lastVerifiedPayment
+  const emailSeed = (trader.phoneNumber || trader.id).replace(/\D/g, '') || trader.id.replace(/-/g, '')
+  return {
+    trader,
+    email: `${emailSeed}@tradebookapp.com`,
+  }
+}
+
+const getPayoutDestination = async (traderId: string) => {
+  const destination = await savingsRepository.getSavingsAccount(traderId)
+  if (!destination?.bankName || !destination.bankCode || !destination.accountNumber || !destination.accountName) {
+    throw new AppError('Savings payout account is not set up yet', 400, 'SAVINGS_ACCOUNT_REQUIRED')
+  }
+
+  return {
+    bankName: destination.bankName,
+    bankCode: destination.bankCode,
+    accountNumber: destination.accountNumber,
+    accountName: destination.accountName,
+  }
+}
+
+const ensurePaystackTransferRecipient = async (traderId: string) => {
+  const destination = await getPayoutDestination(traderId)
+  const existing = await savingsRepository.getPaystackTransferRecipient(traderId)
+
+  if (
+    existing &&
+    existing.accountNumber === destination.accountNumber &&
+    existing.bankCode === destination.bankCode &&
+    existing.accountName === destination.accountName
+  ) {
+    logger.info({
+      event: 'savings_payout_recipient_reused',
+      traderId,
+      bankCode: destination.bankCode,
+      accountNumberLast4: destination.accountNumber.slice(-4),
+      recipientCode: existing.recipientCode,
+    })
+    return { destination, recipientCode: existing.recipientCode }
+  }
+
+  logger.info({
+    event: 'savings_payout_recipient_create_started',
+    traderId,
+    bankCode: destination.bankCode,
+    accountNumberLast4: destination.accountNumber.slice(-4),
+  })
+
+  const created = await createPaystackTransferRecipient({
+    name: destination.accountName,
+    accountNumber: destination.accountNumber,
+    bankCode: destination.bankCode,
+  })
+
+  const saved = await savingsRepository.upsertPaystackTransferRecipient(traderId, {
+    recipientCode: created.recipientCode,
+    accountNumber: created.accountNumber,
+    bankCode: created.bankCode,
+    accountName: created.accountName,
+    bankName: created.bankName || destination.bankName,
+  })
+
+  logger.info({
+    event: 'savings_payout_recipient_create_completed',
+    traderId,
+    bankCode: saved.bankCode,
+    accountNumberLast4: saved.accountNumber.slice(-4),
+    recipientCode: saved.recipientCode,
+  })
+
+  return { destination, recipientCode: saved.recipientCode }
+}
+
+const maybeInitiatePayoutForEntry = async (entryId: string, traderId: string, amount: number) => {
+  const { destination, recipientCode } = await ensurePaystackTransferRecipient(traderId)
+  const payoutReference = `svpayout_${entryId.replace(/-/g, '').slice(0, 18)}_${Date.now()}`
+
+  logger.info({
+    event: 'savings_payout_initiate_started',
+    traderId,
+    entryId,
+    amount,
+    payoutReference,
+    bankCode: destination.bankCode,
+    accountNumberLast4: destination.accountNumber.slice(-4),
+    recipientCode,
+  })
+
+  const transfer = await initiatePaystackTransfer({
+    recipientCode,
+    amount,
+    reference: payoutReference,
+    reason: `TradeBook savings payout for ${entryId}`,
+  })
+
+  logger.info({
+    event: 'savings_payout_initiate_completed',
+    traderId,
+    entryId,
+    amount,
+    payoutReference: transfer.reference,
+    payoutTransferId: transfer.transferId,
+    payoutStatus: transfer.status,
+    providerMessage: transfer.message ?? null,
+  })
+
+  await savingsRepository.updatePayoutByEntryId(entryId, traderId, {
+    recipientCode,
+    payoutReference: transfer.reference,
+    payoutTransferId: transfer.transferId,
+    payoutStatus: transfer.status,
+    payoutFailureReason:
+      transfer.status === 'FAILED' || transfer.status === 'OTP'
+        ? (transfer.message ?? 'Could not initiate payout')
+        : null,
+    payoutTransferredAt: transfer.status === 'SUCCESS' ? new Date() : null,
+  })
 }
 
 export const savingsService = {
   async listBanks() {
     const banks = await listSavingsPayoutBanks()
     return banks
-      .filter((bank) => bank.code && bank.name)
-      .map((bank) => ({
-        id: bank.id,
-        code: bank.code,
-        name: bank.name,
-      }))
+      .filter((bank): bank is { id: number | string; code: string; name: string } => Boolean(bank.code && bank.name))
+      .map((bank) => ({ id: bank.id, code: bank.code, name: bank.name }))
       .sort((a, b) => a.name.localeCompare(b.name))
   },
 
@@ -182,12 +306,7 @@ export const savingsService = {
     return { accountName }
   },
 
-  async createOrSync(
-    traderId: string,
-    actorId: string,
-    role: 'OWNER' | 'SALESPERSON',
-    input: CreateSavingsEntryInput
-  ) {
+  async createOrSync(traderId: string, actorId: string, role: 'OWNER' | 'SALESPERSON', input: CreateSavingsEntryInput) {
     assertSalespersonCanWriteDate(role, input.savedAt)
     const status = await getSavingsStatusForAmount(traderId, input.amount, input.savedAt, input.id)
     const entry = await savingsRepository.upsert(traderId, actorId, input, status)
@@ -210,13 +329,7 @@ export const savingsService = {
   async summaryToday(traderId: string) {
     const { from, to } = getTodayRangeInLagos()
     const total = await savingsRepository.getTodayTotal(traderId, from, to)
-    return {
-      period: {
-        from: from.toISOString(),
-        to: to.toISOString(),
-      },
-      total,
-    }
+    return { period: { from: from.toISOString(), to: to.toISOString() }, total }
   },
 
   async getTargetProgress(traderId: string) {
@@ -235,9 +348,7 @@ export const savingsService = {
     const window = getTargetWindow(target.period)
     const currentSaved = await savingsRepository.getTotalForPeriod(traderId, window.from, window.to)
     const remaining = Math.max(target.amount - currentSaved, 0)
-    const progressPercent = target.amount > 0
-      ? Math.min(Math.round((currentSaved / target.amount) * 1000) / 10, 100)
-      : 0
+    const progressPercent = target.amount > 0 ? Math.min(Math.round((currentSaved / target.amount) * 1000) / 10, 100) : 0
 
     return {
       target: {
@@ -257,20 +368,14 @@ export const savingsService = {
     }
   },
 
-  async updateTarget(
-    traderId: string,
-    role: 'OWNER' | 'SALESPERSON',
-    input: UpdateSavingsTargetInput,
-  ) {
+  async updateTarget(traderId: string, role: 'OWNER' | 'SALESPERSON', input: UpdateSavingsTargetInput) {
     if (role !== 'OWNER') {
       throw new AppError('Only business owner can update savings target', 403, 'FORBIDDEN')
     }
-
     const target = await savingsRepository.updateSavingsTarget(traderId, input)
     if (!target) {
       throw new AppError('Savings target could not be updated', 500, 'INTERNAL_ERROR')
     }
-
     return {
       amount: target.amount,
       period: target.period,
@@ -283,7 +388,6 @@ export const savingsService = {
     if (!account?.bankName || !account.bankCode || !account.accountNumber || !account.accountName || !account.setupAt) {
       return null
     }
-
     return toSavingsAccountDTO({
       bankName: account.bankName,
       bankCode: account.bankCode,
@@ -293,20 +397,14 @@ export const savingsService = {
     })
   },
 
-  async updateSavingsAccount(
-    traderId: string,
-    role: 'OWNER' | 'SALESPERSON',
-    input: UpdateSavingsAccountInput,
-  ) {
+  async updateSavingsAccount(traderId: string, role: 'OWNER' | 'SALESPERSON', input: UpdateSavingsAccountInput) {
     if (role !== 'OWNER') {
       throw new AppError('Only business owner can update savings account', 403, 'FORBIDDEN')
     }
-
     const account = await savingsRepository.upsertSavingsAccount(traderId, input)
     if (!account?.bankName || !account.bankCode || !account.accountNumber || !account.accountName || !account.setupAt) {
       throw new AppError('Savings account could not be updated', 500, 'INTERNAL_ERROR')
     }
-
     return toSavingsAccountDTO({
       bankName: account.bankName,
       bankCode: account.bankCode,
@@ -316,11 +414,7 @@ export const savingsService = {
     })
   },
 
-  async getVerificationPreview(
-    id: string,
-    traderId: string,
-    role: 'OWNER' | 'SALESPERSON',
-  ) {
+  async getVerificationPreview(id: string, traderId: string, role: 'OWNER' | 'SALESPERSON') {
     if (role !== 'OWNER') {
       throw new AppError('Only business owner can verify savings entries', 403, 'FORBIDDEN')
     }
@@ -330,36 +424,38 @@ export const savingsService = {
       throw new AppError('Savings entry not found', 404, 'NOT_FOUND')
     }
 
-    const account = await savingsRepository.getSavingsAccount(traderId)
-    if (!account?.bankName || !account.bankCode || !account.accountNumber || !account.accountName || !account.setupAt) {
-      throw new AppError('Set up a savings account before verifying entries', 400, 'SAVINGS_ACCOUNT_REQUIRED')
-    }
-
-    const entryDto = toSavingsEntryDTO(entry)
-    const destination = toSavingsAccountDTO({
-      bankName: account.bankName,
-      bankCode: account.bankCode,
-      accountNumber: account.accountNumber,
-      accountName: account.accountName,
-      setupAt: account.setupAt,
-    })
+    const payoutDestination = await savingsRepository.getSavingsAccount(traderId)
+    const latestAttempt = await savingsRepository.getLatestVerificationAttemptForEntry(id, traderId)
 
     return {
-      entry: entryDto,
-      destination,
+      entry: toSavingsEntryDTO(entry),
+      payoutDestination:
+        payoutDestination?.bankName &&
+        payoutDestination.bankCode &&
+        payoutDestination.accountNumber &&
+        payoutDestination.accountName &&
+        payoutDestination.setupAt
+          ? toSavingsAccountDTO({
+              bankName: payoutDestination.bankName,
+              bankCode: payoutDestination.bankCode,
+              accountNumber: payoutDestination.accountNumber,
+              accountName: payoutDestination.accountName,
+              setupAt: payoutDestination.setupAt,
+            })
+          : null,
+      activeAttempt: latestAttempt ? toVerificationAttemptDTO(latestAttempt) : null,
       canProceed: entry.status !== 'VERIFIED',
-      mode: 'PREVIEW' as const,
-      message: entry.status === 'VERIFIED'
-        ? 'This savings entry has already been verified.'
-        : 'Verification review is ready. You can now start the transfer when you are satisfied with the destination account.',
+      mode: 'PAYSTACK_TRANSFER' as const,
+      message:
+        entry.status === 'VERIFIED'
+          ? 'This savings entry has already been verified.'
+          : latestAttempt?.status === 'PENDING'
+            ? 'Paystack payment is active. Complete the payment through the link below and TradeBook will verify it automatically.'
+            : 'Generate a Paystack payment session to verify this savings entry.',
     }
   },
 
-  async initiateVerification(
-    id: string,
-    traderId: string,
-    role: 'OWNER' | 'SALESPERSON',
-  ) {
+  async initiateVerification(id: string, traderId: string, role: 'OWNER' | 'SALESPERSON') {
     if (role !== 'OWNER') {
       throw new AppError('Only business owner can verify savings entries', 403, 'FORBIDDEN')
     }
@@ -373,32 +469,44 @@ export const savingsService = {
       throw new AppError('This savings entry has already been verified', 400, 'ALREADY_VERIFIED')
     }
 
-    const account = await savingsRepository.getSavingsAccount(traderId)
-    if (!account?.bankName || !account.bankCode || !account.accountNumber || !account.accountName) {
-      throw new AppError('Update the savings account with a verified bank code before initiating transfer', 400, 'SAVINGS_ACCOUNT_REQUIRED')
+    const now = new Date()
+    const reusableAttempt = await savingsRepository.findReusablePendingVerificationAttempt(id, traderId, now)
+    if (reusableAttempt) {
+      return {
+        entry: toSavingsEntryDTO(entry),
+        attempt: toVerificationAttemptDTO(reusableAttempt),
+        message: 'Paystack payment session is already active for this savings entry.',
+      }
     }
 
-    if (!env.BACKEND_PUBLIC_URL) {
-      throw new AppError('BACKEND_PUBLIC_URL is required before initiating savings verification', 500, 'BACKEND_URL_MISSING')
-    }
-
-    const reference = `sv_${entry.id.replace(/-/g, '').slice(0, 20)}_${Date.now()}`
-    const callbackUrl = `${env.BACKEND_PUBLIC_URL.replace(/\/+$/, '')}/api/v1/savings/flutterwave/webhook`
-    const transfer = await initiateSavingsPayoutTransfer({
-      accountBank: account.bankCode,
-      accountNumber: account.accountNumber,
-      beneficiaryName: account.accountName,
-      bankName: account.bankName,
+    const { trader, email } = await buildPaystackEmailForTrader(traderId)
+    const reference = `svpay_${entry.id.replace(/-/g, '').slice(0, 18)}_${Date.now()}`
+    const transaction = await initializePaystackTransaction({
+      email,
       amount: Number(entry.amount),
       reference,
-      callbackUrl,
-      narration: `TradeBook savings verification for ${entry.id}`,
+      metadata: {
+        traderId,
+        savingsEntryId: entry.id,
+        verificationType: 'savings',
+        businessName: trader.businessName ?? trader.name,
+      },
+      channels: ['bank_transfer', 'ussd', 'bank', 'card'],
+    })
+
+    const attempt = await savingsRepository.createVerificationAttempt(traderId, id, {
+      reference: transaction.reference,
+      expectedAmount: Number(entry.amount),
+      authorizationUrl: transaction.authorizationUrl,
+      accessCode: transaction.accessCode,
+      paystackEmail: email,
+      expiresAt: new Date(now.getTime() + PAYSTACK_ATTEMPT_TTL_MS),
     })
 
     await savingsRepository.markVerificationInitiated(id, traderId, {
-      reference: transfer.reference,
-      transferId: transfer.transferId,
-      status: transfer.status,
+      reference: transaction.reference,
+      transferId: null,
+      status: 'PENDING',
     })
 
     const updated = await savingsRepository.findById(id, traderId)
@@ -408,10 +516,8 @@ export const savingsService = {
 
     return {
       entry: toSavingsEntryDTO(updated),
-      reference: transfer.reference,
-      transferId: transfer.transferId,
-      status: 'PENDING' as const,
-      message: 'Transfer initiated. TradeBook will mark this entry verified when Flutterwave confirms the payout.',
+      attempt: toVerificationAttemptDTO(attempt),
+      message: 'Paystack payment session generated. Complete the payment and TradeBook will verify it automatically.',
     }
   },
 
@@ -432,128 +538,224 @@ export const savingsService = {
 
     if (entry.status === 'VERIFIED') {
       return {
-        verified: true as const,
-        reference: input.txRef,
+        verified: true,
+        reference: input.reference,
+        status: 'SUCCESS' as const,
         entry: toSavingsEntryDTO(entry),
         message: 'This savings entry is already verified.',
       }
     }
 
-    const verifiedPayment = await verifyCheckoutPaymentWithRetry(input.txRef)
-    if (!verifiedPayment) {
-      throw new AppError('Could not verify Flutterwave payment right now', 500, 'PAYMENT_VERIFY_RETRY_FAILED')
+    const attempt = await savingsRepository.findVerificationAttemptByReference(input.reference, traderId)
+    if (!attempt) {
+      throw new AppError('Savings verification attempt not found', 404, 'NOT_FOUND')
     }
 
-    const normalizedStatus = verifiedPayment?.status?.toLowerCase() ?? 'unknown'
-    if (normalizedStatus !== 'successful' && normalizedStatus !== 'completed') {
-      throw new AppError('Flutterwave payment is not successful yet', 400, 'PAYMENT_NOT_SUCCESSFUL')
-    }
-
-    if (verifiedPayment.currency.toUpperCase() !== 'NGN') {
-      throw new AppError('Flutterwave payment currency did not match NGN', 400, 'PAYMENT_CURRENCY_MISMATCH')
-    }
-
-    const expectedAmount = Number(entry.amount)
-    if (Math.abs(verifiedPayment.amount - expectedAmount) > 0.009) {
-      throw new AppError('Flutterwave payment amount did not match the savings entry', 400, 'PAYMENT_AMOUNT_MISMATCH')
-    }
-
-    await savingsRepository.markVerificationInitiated(id, traderId, {
-      reference: input.txRef,
-      transferId: input.transactionId ?? verifiedPayment.transactionId,
-      status: 'SUCCESSFUL',
+    const verifiedPayment = await verifyPaystackTransaction(input.reference)
+    logger.info({
+      event: 'savings_paystack_verification_checked',
+      traderId,
+      entryId: id,
+      reference: input.reference,
+      paymentStatus: verifiedPayment.status,
+      amount: verifiedPayment.amount,
+      transactionId: verifiedPayment.transactionId,
     })
-    await savingsRepository.markVerifiedByReference(
-      input.txRef,
-      input.transactionId ?? verifiedPayment.transactionId,
-      'SUCCESSFUL',
-    )
+
+    if (verifiedPayment.status === 'success') {
+      const expectedAmount = Number(attempt.expectedAmount)
+      if (Math.abs(verifiedPayment.amount - expectedAmount) > 0.009) {
+        throw new AppError('Paystack payment amount did not match the savings entry', 400, 'PAYMENT_AMOUNT_MISMATCH')
+      }
+
+      await savingsRepository.markVerificationAttemptSuccess(attempt.id, {
+        paystackReference: verifiedPayment.reference,
+        paystackTransactionId: verifiedPayment.transactionId,
+        verifiedAt: verifiedPayment.paidAt ?? new Date(),
+      })
+      await savingsRepository.markVerifiedByReference(
+        attempt.reference,
+        verifiedPayment.transactionId,
+        'SUCCESS',
+      )
+
+      try {
+        logger.info({
+          event: 'savings_payout_trigger_from_manual_refresh',
+          traderId,
+          entryId: entry.id,
+          amount: Number(entry.amount),
+          reference: input.reference,
+        })
+        await maybeInitiatePayoutForEntry(entry.id, traderId, Number(entry.amount))
+      } catch (error: any) {
+        logger.warn({
+          event: 'savings_payout_trigger_failed',
+          traderId,
+          entryId: entry.id,
+          reference: input.reference,
+          error: error?.message ?? 'Could not initiate payout',
+        })
+        await savingsRepository.updatePayoutByEntryId(entry.id, traderId, {
+          payoutStatus: 'FAILED',
+          payoutFailureReason: error?.message ?? 'Could not initiate payout',
+        })
+      }
+    }
 
     const updated = await savingsRepository.findById(id, traderId)
     if (!updated) {
-      throw new AppError('Savings entry not found after payment verification', 404, 'NOT_FOUND')
+      throw new AppError('Savings entry not found after verification refresh', 404, 'NOT_FOUND')
     }
+
+    const currentAttempt = await savingsRepository.findVerificationAttemptByReference(input.reference, traderId)
+    const status = currentAttempt?.status ?? (verifiedPayment.status === 'success' ? 'SUCCESS' : 'PENDING')
 
     return {
-      verified: true as const,
-      reference: input.txRef,
+      verified: updated.status === 'VERIFIED',
+      reference: input.reference,
+      status,
       entry: toSavingsEntryDTO(updated),
-      message: 'Savings payment verified successfully.',
+      message:
+        updated.status === 'VERIFIED'
+          ? 'Savings payment verified successfully.'
+          : 'TradeBook is still waiting for Paystack to confirm this payment.',
     }
   },
 
-  async handleFlutterwaveWebhook(
-    payload: any,
-    providedSecret?: string | null,
-  ) {
-    if (!env.FLW_WEBHOOK_SECRET) {
-      throw new AppError('Flutterwave webhook secret is missing in backend environment', 500, 'FLW_NOT_CONFIGURED')
+  async handlePaystackWebhook(payload: any, providedSignature?: string | string[] | undefined) {
+    if (!verifyPaystackWebhookSignature(payload, providedSignature)) {
+      throw new AppError('Invalid Paystack webhook signature', 401, 'INVALID_WEBHOOK_SIGNATURE')
     }
 
-    if (!providedSecret || providedSecret !== env.FLW_WEBHOOK_SECRET) {
-      throw new AppError('Invalid Flutterwave webhook signature', 401, 'INVALID_WEBHOOK_SIGNATURE')
-    }
+    const eventType = String(payload?.event ?? 'unknown')
+    const data = payload?.data ?? {}
+    const externalReference = data?.reference ? String(data.reference) : null
+    const signature = Array.isArray(providedSignature) ? providedSignature[0] : providedSignature
 
-    const reference = payload?.data?.reference
-    const transferId = payload?.data?.id ? String(payload.data.id) : null
-    const status = String(payload?.data?.status ?? payload?.status ?? 'UNKNOWN').toUpperCase()
+    logger.info({
+      event: 'savings_paystack_webhook_received',
+      eventType,
+      externalReference,
+      dataId: data?.id ? String(data.id) : null,
+      dataStatus: data?.status ? String(data.status) : null,
+    })
 
-    if (!reference) {
-      return { accepted: true, updated: false }
-    }
+    if (eventType === 'charge.success') {
+      const attempt = externalReference
+        ? await savingsRepository.findVerificationAttemptByReference(externalReference)
+        : null
 
-    if (status === 'SUCCESSFUL' || status === 'SUCCESS') {
-      await savingsRepository.markVerifiedByReference(reference, transferId, status)
+      await savingsRepository.createPaystackWebhookEvent({
+        traderId: attempt?.traderId ?? null,
+        eventType,
+        externalReference,
+        signature,
+        payload,
+        processedAt: new Date(),
+      })
+
+      if (!attempt) {
+        return { accepted: true, updated: false }
+      }
+
+      const amount = Number(data?.amount ?? 0) / 100
+      const expectedAmount = Number(attempt.expectedAmount)
+      if (Math.abs(amount - expectedAmount) > 0.009) {
+        await savingsRepository.markVerificationAttemptStatus(attempt.id, 'FAILED')
+        return { accepted: true, updated: false }
+      }
+
+      await savingsRepository.markVerificationAttemptSuccess(attempt.id, {
+        paystackReference: externalReference,
+        paystackTransactionId: data?.id ? String(data.id) : null,
+        verifiedAt: data?.paid_at ? new Date(data.paid_at) : new Date(),
+      })
+      await savingsRepository.markVerifiedByReference(attempt.reference, data?.id ? String(data.id) : null, 'SUCCESS')
+
+      try {
+        logger.info({
+          event: 'savings_payout_trigger_from_charge_success',
+          traderId: attempt.traderId,
+          entryId: attempt.savingsEntryId,
+          expectedAmount,
+          externalReference,
+        })
+        await maybeInitiatePayoutForEntry(attempt.savingsEntryId, attempt.traderId, expectedAmount)
+      } catch (error: any) {
+        logger.warn({
+          event: 'savings_payout_trigger_failed',
+          traderId: attempt.traderId,
+          entryId: attempt.savingsEntryId,
+          externalReference,
+          error: error?.message ?? 'Could not initiate payout',
+        })
+        await savingsRepository.updatePayoutByEntryId(attempt.savingsEntryId, attempt.traderId, {
+          payoutStatus: 'FAILED',
+          payoutFailureReason: error?.message ?? 'Could not initiate payout',
+        })
+      }
+
       return { accepted: true, updated: true }
     }
 
-    await savingsRepository.markVerificationStatusByReference(reference, transferId, status)
-    return { accepted: true, updated: true }
-  },
+    if (eventType === 'transfer.success' || eventType === 'transfer.failed' || eventType === 'transfer.reversed') {
+      const entry = externalReference ? await savingsRepository.findByPayoutReference(externalReference) : null
 
-  async handleGatewayCallback(
-    payload: {
-      reference?: string
-      transferId?: string | null
-      status?: string
-    },
-    providedSecret?: string | null,
-  ) {
-    if (!env.SAVINGS_PAYOUT_CALLBACK_SECRET) {
-      throw new AppError('Savings payout callback secret is missing in backend environment', 500, 'PAYOUT_CALLBACK_NOT_CONFIGURED')
-    }
+      await savingsRepository.createPaystackWebhookEvent({
+        traderId: entry?.traderId ?? null,
+        eventType,
+        externalReference,
+        signature,
+        payload,
+        processedAt: new Date(),
+      })
 
-    if (!providedSecret || providedSecret !== env.SAVINGS_PAYOUT_CALLBACK_SECRET) {
-      throw new AppError('Invalid savings payout callback signature', 401, 'INVALID_PAYOUT_CALLBACK_SIGNATURE')
-    }
+      if (!entry) {
+        return { accepted: true, updated: false }
+      }
 
-    const reference = payload.reference?.trim()
-    const transferId = payload.transferId ? String(payload.transferId) : null
-    const status = String(payload.status ?? 'UNKNOWN').toUpperCase()
+      const payoutStatus = eventType === 'transfer.success'
+        ? 'SUCCESS'
+        : eventType === 'transfer.failed'
+          ? 'FAILED'
+          : 'REVERSED'
 
-    if (!reference) {
-      return { accepted: true, updated: false }
-    }
+      logger.info({
+        event: 'savings_paystack_transfer_webhook_processed',
+        traderId: entry.traderId,
+        entryId: entry.id,
+        externalReference,
+        payoutStatus,
+        reason: data?.reason ? String(data.reason) : null,
+        providerStatus: data?.status ? String(data.status) : null,
+      })
 
-    if (status === 'SUCCESSFUL' || status === 'SUCCESS' || status === 'COMPLETED') {
-      await savingsRepository.markVerifiedByReference(reference, transferId, status)
+      await savingsRepository.updatePayoutByEntryId(entry.id, entry.traderId, {
+        payoutTransferId: data?.id ? String(data.id) : entry.payoutTransferId ?? null,
+        payoutStatus,
+        payoutFailureReason: data?.reason ? String(data.reason) : null,
+        payoutTransferredAt: eventType === 'transfer.success' ? new Date() : null,
+      })
+
       return { accepted: true, updated: true }
     }
 
-    await savingsRepository.markVerificationStatusByReference(reference, transferId, status)
-    return { accepted: true, updated: true }
+    await savingsRepository.createPaystackWebhookEvent({
+      eventType,
+      externalReference,
+      signature,
+      payload,
+      processedAt: new Date(),
+    })
+
+    return { accepted: true, updated: false }
   },
 
-  async update(
-    id: string,
-    traderId: string,
-    role: 'OWNER' | 'SALESPERSON',
-    input: UpdateSavingsEntryInput
-  ) {
+  async update(id: string, traderId: string, role: 'OWNER' | 'SALESPERSON', input: UpdateSavingsEntryInput) {
     if (role !== 'OWNER') {
       throw new AppError('Only business owner can edit savings records', 403, 'FORBIDDEN')
     }
-
     const status = await getSavingsStatusForAmount(traderId, input.amount, input.savedAt, id)
     const result = await savingsRepository.update(id, traderId, input, status)
     if (result.count === 0) throw new AppError('Savings entry not found', 404, 'NOT_FOUND')
@@ -564,7 +766,6 @@ export const savingsService = {
     if (role !== 'OWNER') {
       throw new AppError('Only business owner can delete savings records', 403, 'FORBIDDEN')
     }
-
     const result = await savingsRepository.delete(id, traderId)
     if (result.count === 0) throw new AppError('Savings entry not found', 404, 'NOT_FOUND')
     return { deleted: true }

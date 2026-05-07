@@ -1,7 +1,8 @@
 import https from 'https'
 import { env } from '../config/env'
 import { AppError } from '../middleware/errorHandler'
-import { initiateFlutterwaveTransfer, listFlutterwaveBanks, resolveFlutterwaveAccount } from './flutterwave'
+import { initiateFlutterwaveTransfer } from './flutterwave'
+import { listPaystackBanks, resolvePaystackAccount } from './paystack'
 
 type SavingsBank = {
   id: number | string
@@ -24,6 +25,7 @@ type TransferResult = {
   transferId: string | null
   reference: string
   status: string
+  message?: string | null
 }
 
 const ensureProxyConfigured = () => {
@@ -97,7 +99,7 @@ export const listSavingsPayoutBanks = async () => {
     return makeProxyRequest<SavingsBank[]>('GET', '/api/v1/banks')
   }
 
-  return listFlutterwaveBanks('NG')
+  return listPaystackBanks('nigeria')
 }
 
 export const resolveSavingsPayoutAccount = async (accountNumber: string, bankCode: string) => {
@@ -109,7 +111,7 @@ export const resolveSavingsPayoutAccount = async (accountNumber: string, bankCod
     return result.accountName
   }
 
-  return resolveFlutterwaveAccount(accountNumber, bankCode)
+  return resolvePaystackAccount(accountNumber, bankCode)
 }
 
 export const initiateSavingsPayoutTransfer = async (input: TransferRequest): Promise<TransferResult> => {

@@ -1,4 +1,3 @@
-import 'dotenv/config';
 export declare const env: {
     INTERNAL_JWT_SECRET: string;
     NODE_ENV: "development" | "production" | "test";
@@ -15,6 +14,8 @@ export declare const env: {
     FEEDBACK_DEV_EMAIL: string;
     SAVINGS_PAYOUT_PROVIDER: "DIRECT" | "PROXY";
     FLW_BASE_URL: string;
+    PAYSTACK_BASE_URL: string;
+    KORA_BASE_URL: string;
     PLATFORM_SEED_DEV_PHONE?: string | undefined;
     PLATFORM_SEED_DEV_PASSWORD?: string | undefined;
     PLATFORM_SEED_DEV_NAME?: string | undefined;
@@ -25,4 +26,6 @@ export declare const env: {
     SAVINGS_PAYOUT_CALLBACK_SECRET?: string | undefined;
     FLW_SECRET_KEY?: string | undefined;
     FLW_WEBHOOK_SECRET?: string | undefined;
+    PAYSTACK_SECRET_KEY?: string | undefined;
+    KORA_SECRET_KEY?: string | undefined;
 };

@@ -40,8 +40,7 @@ export const resolveSavingsAccountSchema = z.object({
 })
 
 export const confirmSavingsVerificationSchema = z.object({
-  txRef: z.string().trim().min(6).max(120),
-  transactionId: z.string().trim().optional().nullable(),
+  reference: z.string().trim().min(6).max(120),
 })
 
 export type CreateSavingsEntryInput = z.infer<typeof createSavingsEntrySchema>

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { MarketSceneBanner } from '@/components/MarketSceneBanner'
-import env from '@/config/env'
 import { useAuthStore } from '@/stores/authStore'
 import {
   useConfirmSavingsVerification,
   useCreateSavingsEntry,
+  useInitiateSavingsVerification,
   useSavingsAccount,
   useSavingsBanks,
   useSavingsEntries,
@@ -43,6 +43,21 @@ const statusClasses: Record<SavingsVerificationStatus, string> = {
   VERIFIED: 'border-[#4ecca3]/30 bg-[rgba(78,204,163,0.14)] text-[#4ecca3]',
 }
 
+const payoutStatusTone = (status?: string | null) => {
+  switch ((status ?? '').toUpperCase()) {
+    case 'SUCCESS':
+      return 'border-[#4ecca3]/30 bg-[rgba(78,204,163,0.14)] text-[#4ecca3]'
+    case 'FAILED':
+    case 'REVERSED':
+      return 'border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.08)] text-[#fca5a5]'
+    case 'PENDING':
+    case 'PROCESSING':
+      return 'border-[#e8a838]/30 bg-[#3a2319] text-[#f0bc5a]'
+    default:
+      return 'border-white/10 bg-[#2b1912] text-secondary'
+  }
+}
+
 export const SavingsPage = () => {
   const trader = useAuthStore((state) => state.trader)
   const isOwner = trader?.role !== 'SALESPERSON'
@@ -63,13 +78,13 @@ export const SavingsPage = () => {
   const [verifyError, setVerifyError] = useState('')
   const [verifyPreview, setVerifyPreview] = useState<SavingsVerificationPreviewDTO | null>(null)
   const [verificationResult, setVerificationResult] = useState<SavingsVerificationConfirmationDTO | null>(null)
-  const [flutterwaveReady, setFlutterwaveReady] = useState(Boolean(window.FlutterwaveCheckout))
 
   const createSavings = useCreateSavingsEntry()
   const updateTarget = useUpdateSavingsTarget()
   const updateAccount = useUpdateSavingsAccount()
   const resolveAccount = useResolveSavingsAccount()
   const verificationPreview = useSavingsVerificationPreview()
+  const initiateVerification = useInitiateSavingsVerification()
   const confirmVerification = useConfirmSavingsVerification()
   const { data: listData, isLoading } = useSavingsEntries()
   const { data: todaySummary } = useSavingsTodaySummary()
@@ -91,24 +106,6 @@ export const SavingsPage = () => {
     setAccountNumber(savingsAccount.accountNumber)
     setAccountName(savingsAccount.accountName)
   }, [savingsAccount])
-
-  useEffect(() => {
-    if (window.FlutterwaveCheckout) {
-      setFlutterwaveReady(true)
-      return
-    }
-
-    const script = document.createElement('script')
-    script.src = 'https://checkout.flutterwave.com/v3.js'
-    script.async = true
-    script.onload = () => setFlutterwaveReady(true)
-    script.onerror = () => setFlutterwaveReady(false)
-    document.body.appendChild(script)
-
-    return () => {
-      script.remove()
-    }
-  }, [])
 
   const thisWeekTotal = useMemo(() => {
     const now = new Date()
@@ -190,67 +187,38 @@ export const SavingsPage = () => {
     setAccountName(resolved.accountName)
   }
 
-  const handleCheckoutVerification = () => {
-    if (!selectedEntryId || !verifyPreview) return
-    if (!env.FLUTTERWAVE_PUBLIC_KEY) {
-      setVerifyError('Flutterwave public key is missing. Add VITE_FLUTTERWAVE_PUBLIC_KEY to the frontend environment.')
-      return
+  const handleStartVerification = async () => {
+    if (!selectedEntryId) return
+
+    try {
+      const result = await initiateVerification.mutateAsync(selectedEntryId)
+      setVerifyPreview((current) => current ? { ...current, activeAttempt: result.attempt, entry: result.entry, message: result.message } : null)
+      setVerifyError('')
+      setVerificationResult(null)
+    } catch (error: any) {
+      const message = error?.response?.data?.error?.message ?? 'Could not generate transfer instructions right now.'
+      setVerifyError(message)
     }
-    if (!window.FlutterwaveCheckout || !flutterwaveReady) {
-      setVerifyError('Flutterwave checkout is still loading. Please wait a moment and try again.')
-      return
+  }
+
+  const handleRefreshVerification = async () => {
+    if (!selectedEntryId) return
+    const reference = verifyPreview?.activeAttempt?.reference
+    if (!reference) return
+
+    try {
+      const result = await confirmVerification.mutateAsync({
+        id: selectedEntryId,
+        input: { reference },
+      })
+      setVerificationResult(result)
+      setVerifyError('')
+      const refreshedPreview = await verificationPreview.mutateAsync(selectedEntryId)
+      setVerifyPreview(refreshedPreview)
+    } catch (error: any) {
+      const message = error?.response?.data?.error?.message ?? 'We could not refresh this payment yet.'
+      setVerifyError(message)
     }
-
-    const txRef = `savings-${selectedEntryId}-${Date.now()}`
-    const customerName = trader?.businessName ?? trader?.name ?? 'TradeBook User'
-    const customerEmail = `${(trader?.phoneNumber ?? 'user').replace(/\D/g, '') || 'user'}@tradebook.local`
-
-    window.FlutterwaveCheckout({
-      public_key: env.FLUTTERWAVE_PUBLIC_KEY,
-      tx_ref: txRef,
-      amount: verifyPreview.entry.amount,
-      currency: 'NGN',
-      payment_options: 'card,banktransfer,ussd',
-      customer: {
-        email: customerEmail,
-        phone_number: trader?.phoneNumber,
-        name: customerName,
-      },
-      meta: {
-        savingsEntryId: selectedEntryId,
-        traderId: trader?.id,
-        verificationType: 'savings',
-      },
-      customizations: {
-        title: 'TradeBook Savings Verification',
-        description: `Verify savings entry of ${fmt(verifyPreview.entry.amount)}`,
-      },
-      callback: async (response) => {
-        const normalizedStatus = String(response.status ?? '').toLowerCase()
-        if (!['successful', 'completed'].includes(normalizedStatus) || !response.tx_ref) {
-          setVerifyError('Payment was not successful. Please try again.')
-          return
-        }
-
-        try {
-          const result = await confirmVerification.mutateAsync({
-            id: selectedEntryId,
-            input: {
-              txRef: response.tx_ref,
-              transactionId: response.transaction_id ? String(response.transaction_id) : null,
-            },
-          })
-          setVerificationResult(result)
-          setVerifyError('')
-        } catch (error: any) {
-          const message = error?.response?.data?.error?.message ?? 'We could not confirm the payment yet. Please contact support if you were charged.'
-          setVerifyError(message)
-        }
-      },
-      onclose: () => {
-        // Keep modal open so the owner can retry or review the result.
-      },
-    })
   }
 
   return (
@@ -316,7 +284,7 @@ export const SavingsPage = () => {
           ) : (
             <div className="mt-4 rounded-2xl border border-dashed border-[#e8a838]/30 bg-[#1f130e] p-4 text-sm text-secondary">
               {isOwner
-                ? 'Set a savings account so TradeBook can later verify transfers made into your savings destination.'
+                ? 'Set a savings account so TradeBook can later pay verified savings into your chosen destination.'
                 : 'The business owner has not set the savings account yet.'}
             </div>
           )}
@@ -640,33 +608,111 @@ export const SavingsPage = () => {
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-[#1f130e] p-4">
-                  <p className="label-base mb-2">Savings destination</p>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <div>
-                      <p className="text-xs text-secondary">Bank</p>
-                      <p className="mt-1 font-ui text-sm font-bold text-primary">{verifyPreview.destination.bankName}</p>
+                  <p className="label-base mb-2">Payout destination</p>
+                  {verifyPreview.payoutDestination ? (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div>
+                        <p className="text-xs text-secondary">Bank</p>
+                        <p className="mt-1 font-ui text-sm font-bold text-primary">{verifyPreview.payoutDestination.bankName}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-secondary">Account number</p>
+                        <p className="mt-1 font-ui text-sm font-bold text-primary">{verifyPreview.payoutDestination.accountNumber}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-secondary">Account name</p>
+                        <p className="mt-1 font-ui text-sm font-bold text-primary">{verifyPreview.payoutDestination.accountName}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs text-secondary">Account number</p>
-                      <p className="mt-1 font-ui text-sm font-bold text-primary">{verifyPreview.destination.accountNumber}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-secondary">Account name</p>
-                      <p className="mt-1 font-ui text-sm font-bold text-primary">{verifyPreview.destination.accountName}</p>
-                    </div>
-                  </div>
+                  ) : (
+                    <p className="text-sm text-secondary">
+                      No payout destination has been saved yet. You can still verify inbound payment first and set the payout account later.
+                    </p>
+                  )}
                 </div>
+
+                {verifyPreview.activeAttempt ? (
+                  <div className="rounded-2xl border border-[#e8a838]/25 bg-[#2d1b14] p-4">
+                    <p className="font-ui text-sm font-bold text-[#f0bc5a]">Paystack payment session</p>
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div>
+                        <p className="text-xs text-secondary">Exact amount</p>
+                        <p className="mt-1 font-ui text-sm font-bold text-[#4ecca3]">{fmt(verifyPreview.activeAttempt.expectedAmount)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-secondary">Reference</p>
+                        <p className="mt-1 break-all font-ui text-sm font-bold text-primary">{verifyPreview.activeAttempt.reference}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-secondary">Status</p>
+                        <p className="mt-1 font-ui text-sm font-bold text-primary">{verifyPreview.activeAttempt.status}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-[#20130e] p-3">
+                      <p className="text-xs text-secondary">Paystack email</p>
+                      <p className="mt-1 break-all font-ui text-sm font-bold text-primary">{verifyPreview.activeAttempt.paystackEmail}</p>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-secondary">
+                      Open Paystack, complete the payment with bank transfer, USSD, card, or bank, and then come back here. TradeBook will verify the payment and trigger payout to the saved savings account.
+                    </p>
+                  </div>
+                ) : null}
 
                 <div className="rounded-2xl border border-[#e8a838]/25 bg-[#2d1b14] p-4 text-sm text-secondary">
                   <p className="font-ui text-sm font-bold text-[#f0bc5a]">Verification review</p>
                   <p className="mt-2 leading-6">{verifyPreview.message}</p>
                 </div>
 
+                {(verifyPreview.entry.payoutStatus || verifyPreview.entry.payoutFailureReason || verifyPreview.entry.payoutReference) ? (
+                  <div className="rounded-2xl border border-white/10 bg-[#1f130e] p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                      <div>
+                        <p className="label-base mb-1">Payout progress</p>
+                        <p className="text-sm leading-6 text-secondary">
+                          This shows whether TradeBook has started the Kora payout after Paystack verification.
+                        </p>
+                      </div>
+                      <span className={`rounded-full border px-2.5 py-1 text-[11px] font-ui font-bold uppercase tracking-[0.08em] ${payoutStatusTone(verifyPreview.entry.payoutStatus)}`}>
+                        {verifyPreview.entry.payoutStatus ?? 'Not started'}
+                      </span>
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <p className="text-xs text-secondary">Payout reference</p>
+                        <p className="mt-1 break-all font-ui text-sm font-bold text-primary">
+                          {verifyPreview.entry.payoutReference || 'No payout reference yet'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-secondary">Transferred at</p>
+                        <p className="mt-1 font-ui text-sm font-bold text-primary">
+                          {verifyPreview.entry.payoutTransferredAt
+                            ? new Date(verifyPreview.entry.payoutTransferredAt).toLocaleString('en-NG')
+                            : 'Not transferred yet'}
+                        </p>
+                      </div>
+                    </div>
+                    {verifyPreview.entry.payoutFailureReason ? (
+                      <div className="mt-4 rounded-2xl border border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.08)] p-3 text-sm text-[#fca5a5]">
+                        {verifyPreview.entry.payoutFailureReason}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 {verificationResult ? (
                   <div className="rounded-2xl border border-[#4ecca3]/25 bg-[rgba(78,204,163,0.12)] p-4 text-sm text-[#b8f0dd]">
                     <p className="font-ui text-sm font-bold text-[#4ecca3]">Verification completed</p>
                     <p className="mt-2 leading-6">{verificationResult.message}</p>
                     <p className="mt-2 text-xs text-[#d9f8ee]">Reference: {verificationResult.reference}</p>
+                    <p className="mt-2 text-xs text-[#d9f8ee]">
+                      Payout status: {verificationResult.entry.payoutStatus ?? 'Not started'}
+                    </p>
+                    {verificationResult.entry.payoutFailureReason ? (
+                      <p className="mt-2 text-xs text-[#fca5a5]">
+                        Failure reason: {verificationResult.entry.payoutFailureReason}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -674,11 +720,36 @@ export const SavingsPage = () => {
                   <button
                     type="button"
                     className="btn-primary w-full sm:w-auto"
-                    disabled={!verifyPreview.canProceed || confirmVerification.isPending || !flutterwaveReady}
-                    onClick={() => handleCheckoutVerification()}
+                    disabled={!verifyPreview.canProceed || initiateVerification.isPending || verifyPreview.activeAttempt?.status === 'PENDING'}
+                    onClick={() => void handleStartVerification()}
                   >
-                    {confirmVerification.isPending ? 'Confirming payment...' : flutterwaveReady ? 'Start verification' : 'Loading checkout...'}
+                    {initiateVerification.isPending
+                      ? 'Generating...'
+                      : verifyPreview.activeAttempt?.status === 'PENDING'
+                        ? 'Payment session ready'
+                        : verifyPreview.activeAttempt
+                          ? 'Generate new payment session'
+                          : 'Generate payment session'}
                   </button>
+                  {verifyPreview.activeAttempt ? (
+                    <button
+                      type="button"
+                      className="btn-secondary w-full sm:w-auto"
+                      onClick={() => window.open(verifyPreview.activeAttempt!.paymentUrl, '_blank', 'noopener,noreferrer')}
+                    >
+                      Open Paystack
+                    </button>
+                  ) : null}
+                  {verifyPreview.activeAttempt ? (
+                    <button
+                      type="button"
+                      className="btn-secondary w-full sm:w-auto"
+                      disabled={confirmVerification.isPending}
+                      onClick={() => void handleRefreshVerification()}
+                    >
+                      {confirmVerification.isPending ? 'Checking payment...' : 'I have sent the money'}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ) : null}

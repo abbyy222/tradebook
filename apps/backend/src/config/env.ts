@@ -3,8 +3,21 @@
 // If DATABASE_URL is missing, the app crashes immediately with a clear message
 // rather than failing silently 10 minutes later on first DB call.
 
-import 'dotenv/config'
+import fs from 'node:fs'
+import path from 'node:path'
+import dotenv from 'dotenv'
 import { z } from 'zod'
+
+const envCandidates = [
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(process.cwd(), 'apps/backend/.env'),
+]
+
+for (const envPath of envCandidates) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath, override: false })
+  }
+}
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -32,6 +45,10 @@ const envSchema = z.object({
   FLW_SECRET_KEY: z.string().min(1, 'FLW_SECRET_KEY is required').optional(),
   FLW_WEBHOOK_SECRET: z.string().min(8, 'FLW_WEBHOOK_SECRET must be at least 8 characters').optional(),
   FLW_BASE_URL: z.string().default('https://api.flutterwave.com'),
+  PAYSTACK_SECRET_KEY: z.string().min(1, 'PAYSTACK_SECRET_KEY is required').optional(),
+  PAYSTACK_BASE_URL: z.string().default('https://api.paystack.co'),
+  KORA_SECRET_KEY: z.string().min(1, 'KORA_SECRET_KEY is required').optional(),
+  KORA_BASE_URL: z.string().default('https://api.korapay.com'),
 })
 
 const parsed = envSchema.safeParse(process.env)

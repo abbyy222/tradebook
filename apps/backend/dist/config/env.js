@@ -3,10 +3,24 @@
 // Senior principle: load and VALIDATE all env vars at startup.
 // If DATABASE_URL is missing, the app crashes immediately with a clear message
 // rather than failing silently 10 minutes later on first DB call.
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.env = void 0;
-require("dotenv/config");
+const node_fs_1 = __importDefault(require("node:fs"));
+const node_path_1 = __importDefault(require("node:path"));
+const dotenv_1 = __importDefault(require("dotenv"));
 const zod_1 = require("zod");
+const envCandidates = [
+    node_path_1.default.resolve(process.cwd(), '.env'),
+    node_path_1.default.resolve(process.cwd(), 'apps/backend/.env'),
+];
+for (const envPath of envCandidates) {
+    if (node_fs_1.default.existsSync(envPath)) {
+        dotenv_1.default.config({ path: envPath, override: false });
+    }
+}
 const envSchema = zod_1.z.object({
     NODE_ENV: zod_1.z.enum(['development', 'production', 'test']).default('development'),
     PORT: zod_1.z.string().default('3000'),
@@ -33,6 +47,10 @@ const envSchema = zod_1.z.object({
     FLW_SECRET_KEY: zod_1.z.string().min(1, 'FLW_SECRET_KEY is required').optional(),
     FLW_WEBHOOK_SECRET: zod_1.z.string().min(8, 'FLW_WEBHOOK_SECRET must be at least 8 characters').optional(),
     FLW_BASE_URL: zod_1.z.string().default('https://api.flutterwave.com'),
+    PAYSTACK_SECRET_KEY: zod_1.z.string().min(1, 'PAYSTACK_SECRET_KEY is required').optional(),
+    PAYSTACK_BASE_URL: zod_1.z.string().default('https://api.paystack.co'),
+    KORA_SECRET_KEY: zod_1.z.string().min(1, 'KORA_SECRET_KEY is required').optional(),
+    KORA_BASE_URL: zod_1.z.string().default('https://api.korapay.com'),
 });
 const parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {
