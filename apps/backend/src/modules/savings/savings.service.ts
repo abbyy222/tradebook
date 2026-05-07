@@ -752,6 +752,41 @@ export const savingsService = {
     return { accepted: true, updated: false }
   },
 
+  async handleProviderCallback(input: { reference: string; transferId?: string | null; status: string }) {
+    const entry = await savingsRepository.findByPayoutReference(input.reference)
+    if (!entry) {
+      return { accepted: true, updated: false }
+    }
+
+    const normalizedStatus = String(input.status ?? 'UNKNOWN').toUpperCase()
+    const payoutStatus =
+      normalizedStatus === 'SUCCESSFUL' || normalizedStatus === 'SUCCESS'
+        ? 'SUCCESS'
+        : normalizedStatus === 'FAILED'
+          ? 'FAILED'
+          : normalizedStatus === 'REVERSED'
+            ? 'REVERSED'
+            : normalizedStatus
+
+    logger.info({
+      event: 'savings_provider_callback_processed',
+      traderId: entry.traderId,
+      entryId: entry.id,
+      externalReference: input.reference,
+      payoutTransferId: input.transferId ?? null,
+      payoutStatus,
+    })
+
+    await savingsRepository.updatePayoutByEntryId(entry.id, entry.traderId, {
+      payoutTransferId: input.transferId ?? entry.payoutTransferId ?? null,
+      payoutStatus,
+      payoutFailureReason: payoutStatus === 'FAILED' ? 'Provider reported payout failure' : null,
+      payoutTransferredAt: payoutStatus === 'SUCCESS' ? new Date() : null,
+    })
+
+    return { accepted: true, updated: true }
+  },
+
   async update(id: string, traderId: string, role: 'OWNER' | 'SALESPERSON', input: UpdateSavingsEntryInput) {
     if (role !== 'OWNER') {
       throw new AppError('Only business owner can edit savings records', 403, 'FORBIDDEN')

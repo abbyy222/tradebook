@@ -14,6 +14,22 @@ import { enforceModuleWritable } from '../../middleware/enforceModuleWritable'
 
 export const savingsRouter = Router()
 
+savingsRouter.post('/provider/callback', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const providedSecret = req.headers['x-tradebook-payout-secret']
+    const expectedSecret = process.env.SAVINGS_PAYOUT_CALLBACK_SECRET
+
+    if (!expectedSecret || providedSecret !== expectedSecret) {
+      return res.status(401).json({ data: null, error: { message: 'Invalid callback secret', code: 'INVALID_CALLBACK_SECRET' } })
+    }
+
+    const result = await savingsService.handleProviderCallback(req.body)
+    res.status(200).json({ data: result, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
 savingsRouter.post('/paystack/webhook', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await savingsService.handlePaystackWebhook(
