@@ -22,6 +22,25 @@ type FlutterwaveTransferResponse = {
   }
 }
 
+type FlutterwavePaymentInitializeResponse = {
+  data?: {
+    link?: string
+  }
+  message?: string
+}
+
+type FlutterwaveVerifyTransactionResponse = {
+  data?: {
+    id?: number | string
+    tx_ref?: string
+    status?: string
+    amount?: number | string
+    currency?: string
+    created_at?: string
+  }
+  message?: string
+}
+
 const makeFlutterwaveRequest = async <T>(
   method: 'GET' | 'POST',
   path: string,
@@ -117,5 +136,61 @@ export const initiateFlutterwaveTransfer = async (input: {
     transferId: response.data?.id ? String(response.data.id) : null,
     reference: response.data?.reference ?? input.reference,
     status: response.data?.status ?? 'PENDING',
+  }
+}
+
+export const initializeFlutterwavePayment = async (input: {
+  email: string
+  amount: number
+  reference: string
+  redirectUrl: string
+  customerName: string
+  metadata: Record<string, unknown>
+}) => {
+  const response = await makeFlutterwaveRequest<FlutterwavePaymentInitializeResponse>('POST', '/v3/payments', {
+    tx_ref: input.reference,
+    amount: input.amount,
+    currency: 'NGN',
+    redirect_url: input.redirectUrl,
+    customer: {
+      email: input.email,
+      name: input.customerName,
+    },
+    customizations: {
+      title: 'TradeBook Savings Verification',
+      description: 'Verify daily savings and trigger payout to your saved savings account.',
+    },
+    meta: input.metadata,
+  })
+
+  const paymentUrl = response.data?.link?.trim()
+  if (!paymentUrl) {
+    throw new Error(response.message || 'Could not initialize Flutterwave payment')
+  }
+
+  return {
+    reference: input.reference,
+    authorizationUrl: paymentUrl,
+    accessCode: null,
+  }
+}
+
+export const verifyFlutterwaveTransactionByReference = async (reference: string) => {
+  const response = await makeFlutterwaveRequest<FlutterwaveVerifyTransactionResponse>(
+    'GET',
+    `/v3/transactions/verify_by_reference?tx_ref=${encodeURIComponent(reference)}`,
+  )
+
+  if (!response.data?.tx_ref) {
+    throw new Error(response.message || 'Could not verify Flutterwave transaction')
+  }
+
+  return {
+    transactionId: response.data.id ? String(response.data.id) : null,
+    txRef: response.data.tx_ref,
+    status: String(response.data.status ?? 'UNKNOWN').toLowerCase(),
+    amount: Number(response.data.amount ?? 0),
+    currency: String(response.data.currency ?? ''),
+    paidAt: response.data.created_at ? response.data.created_at : null,
   }
 }

@@ -371,7 +371,7 @@ export interface SavingsVerificationPreviewDTO {
   payoutDestination: SavingsAccountDestinationDTO | null
   activeAttempt: SavingsVerificationAttemptDTO | null
   canProceed: boolean
-  mode: 'PAYSTACK_TRANSFER'
+  mode: 'FLUTTERWAVE_CHECKOUT'
   message: string
 }
 
@@ -393,6 +393,11 @@ export interface ResolvedSavingsAccountDTO {
 export interface SavingsTransferInitiationDTO {
   entry: SavingsEntryDTO
   attempt: SavingsVerificationAttemptDTO
+  message: string
+}
+
+export interface SavingsWithdrawalResultDTO {
+  entry: SavingsEntryDTO
   message: string
 }
 
@@ -576,6 +581,45 @@ export interface BusinessInsightsDTO {
     }>
   }
   activityTrend: ActivityTrendPointDTO[]
+  dayCloseRitual: {
+    readinessPercent: number
+    title: string
+    message: string
+    checks: Array<{
+      label: string
+      complete: boolean
+      message: string
+    }>
+  }
+  smartWarnings: Array<{
+    id: string
+    severity: 'GOOD' | 'WATCH' | 'RISK'
+    title: string
+    message: string
+    action: string
+  }>
+  marketInsights: Array<{
+    id: string
+    title: string
+    message: string
+    metricLabel: string
+    metricValue: string
+  }>
+  debtorTrustScores: Array<{
+    debtorId: string
+    customerName: string
+    phoneNumber: string | null
+    balance: number
+    totalOwed: number
+    totalPaid: number
+    paymentCount: number
+    lastPaymentAt: string | null
+    dueDate: string | null
+    daysOverdue: number
+    score: number
+    risk: 'LOW' | 'MEDIUM' | 'HIGH'
+    recommendation: string
+  }>
 }
 
 export interface EndpointLatencyStatDTO {

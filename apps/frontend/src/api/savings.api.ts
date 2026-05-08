@@ -13,6 +13,7 @@ import type {
   SavingsTargetProgressDTO,
   SavingsTransferInitiationDTO,
   SavingsVerificationPreviewDTO,
+  SavingsWithdrawalResultDTO,
   UpdateSavingsAccountDestinationDTO,
   UpdateSavingsTargetDTO,
 } from '@tradebook/shared-types'
@@ -70,6 +71,11 @@ export const savingsApi = {
 
   confirmVerification: async (id: string, input: ConfirmSavingsVerificationDTO) => {
     const res = await apiClient.post<{ data: SavingsVerificationConfirmationDTO }>(`/savings/${id}/verify/confirm`, input)
+    return res.data.data
+  },
+
+  withdraw: async (id: string) => {
+    const res = await apiClient.post<{ data: SavingsWithdrawalResultDTO }>(`/savings/${id}/withdraw`)
     return res.data.data
   },
 

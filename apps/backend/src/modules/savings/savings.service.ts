@@ -10,20 +10,29 @@ import {
   UpdateSavingsTargetInput,
 } from './savings.schema'
 import {
+  initializeSavingsPayment,
+  initiateSavingsPayoutTransfer,
   listSavingsPayoutBanks,
   resolveSavingsPayoutAccount,
+  verifySavingsPaymentByReference,
 } from '../../utils/savingsPayoutGateway'
 import {
-  createPaystackTransferRecipient,
-  initiatePaystackTransfer,
-  initializePaystackTransaction,
-  verifyPaystackTransaction,
   verifyPaystackWebhookSignature,
 } from '../../utils/paystack'
 import { authRepository } from '../auth/auth.repository'
+import { env } from '../../config/env'
 
 const LAGOS_OFFSET_MS = 60 * 60 * 1000
-const PAYSTACK_ATTEMPT_TTL_MS = 30 * 60 * 1000
+const PAYMENT_ATTEMPT_TTL_MS = 30 * 60 * 1000
+
+const getPayoutGatewayWebhookUrl = () => {
+  const baseUrl = process.env.SAVINGS_PAYOUT_SERVICE_URL?.trim()
+  if (baseUrl) {
+    return new URL('/api/v1/flutterwave/webhook', baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`).toString()
+  }
+
+  return process.env.FLW_WEBHOOK_URL?.trim() || `${process.env.BACKEND_PUBLIC_URL ?? ''}/api/v1/savings/flutterwave/webhook`
+}
 
 const toSavingsEntryDTO = (entry: any) => ({
   ...entry,
@@ -167,7 +176,7 @@ const getSavingsStatusForAmount = async (
   return amount <= availableToSave ? 'RECONCILED' as const : 'DECLARED' as const
 }
 
-const buildPaystackEmailForTrader = async (traderId: string) => {
+const buildPaymentCustomerForTrader = async (traderId: string) => {
   const trader = await authRepository.findById(traderId)
   if (!trader) {
     throw new AppError('Trader not found for savings verification', 404, 'NOT_FOUND')
@@ -177,6 +186,7 @@ const buildPaystackEmailForTrader = async (traderId: string) => {
   return {
     trader,
     email: `${emailSeed}@tradebookapp.com`,
+    name: trader.businessName ?? trader.name ?? 'TradeBook Trader',
   }
 }
 
@@ -194,60 +204,8 @@ const getPayoutDestination = async (traderId: string) => {
   }
 }
 
-const ensurePaystackTransferRecipient = async (traderId: string) => {
-  const destination = await getPayoutDestination(traderId)
-  const existing = await savingsRepository.getPaystackTransferRecipient(traderId)
-
-  if (
-    existing &&
-    existing.accountNumber === destination.accountNumber &&
-    existing.bankCode === destination.bankCode &&
-    existing.accountName === destination.accountName
-  ) {
-    logger.info({
-      event: 'savings_payout_recipient_reused',
-      traderId,
-      bankCode: destination.bankCode,
-      accountNumberLast4: destination.accountNumber.slice(-4),
-      recipientCode: existing.recipientCode,
-    })
-    return { destination, recipientCode: existing.recipientCode }
-  }
-
-  logger.info({
-    event: 'savings_payout_recipient_create_started',
-    traderId,
-    bankCode: destination.bankCode,
-    accountNumberLast4: destination.accountNumber.slice(-4),
-  })
-
-  const created = await createPaystackTransferRecipient({
-    name: destination.accountName,
-    accountNumber: destination.accountNumber,
-    bankCode: destination.bankCode,
-  })
-
-  const saved = await savingsRepository.upsertPaystackTransferRecipient(traderId, {
-    recipientCode: created.recipientCode,
-    accountNumber: created.accountNumber,
-    bankCode: created.bankCode,
-    accountName: created.accountName,
-    bankName: created.bankName || destination.bankName,
-  })
-
-  logger.info({
-    event: 'savings_payout_recipient_create_completed',
-    traderId,
-    bankCode: saved.bankCode,
-    accountNumberLast4: saved.accountNumber.slice(-4),
-    recipientCode: saved.recipientCode,
-  })
-
-  return { destination, recipientCode: saved.recipientCode }
-}
-
 const maybeInitiatePayoutForEntry = async (entryId: string, traderId: string, amount: number) => {
-  const { destination, recipientCode } = await ensurePaystackTransferRecipient(traderId)
+  const destination = await getPayoutDestination(traderId)
   const payoutReference = `svpayout_${entryId.replace(/-/g, '').slice(0, 18)}_${Date.now()}`
 
   logger.info({
@@ -258,14 +216,17 @@ const maybeInitiatePayoutForEntry = async (entryId: string, traderId: string, am
     payoutReference,
     bankCode: destination.bankCode,
     accountNumberLast4: destination.accountNumber.slice(-4),
-    recipientCode,
   })
 
-  const transfer = await initiatePaystackTransfer({
-    recipientCode,
+  const transfer = await initiateSavingsPayoutTransfer({
+    accountBank: destination.bankCode,
+    accountNumber: destination.accountNumber,
+    beneficiaryName: destination.accountName,
+    bankName: destination.bankName,
     amount,
     reference: payoutReference,
-    reason: `TradeBook savings payout for ${entryId}`,
+    callbackUrl: getPayoutGatewayWebhookUrl(),
+    narration: `TradeBook savings payout for ${entryId}`,
   })
 
   logger.info({
@@ -280,7 +241,7 @@ const maybeInitiatePayoutForEntry = async (entryId: string, traderId: string, am
   })
 
   await savingsRepository.updatePayoutByEntryId(entryId, traderId, {
-    recipientCode,
+    recipientCode: destination.accountNumber,
     payoutReference: transfer.reference,
     payoutTransferId: transfer.transferId,
     payoutStatus: transfer.status,
@@ -290,6 +251,11 @@ const maybeInitiatePayoutForEntry = async (entryId: string, traderId: string, am
         : null,
     payoutTransferredAt: transfer.status === 'SUCCESS' ? new Date() : null,
   })
+}
+
+const isPayoutInFlight = (status?: string | null) => {
+  const normalized = String(status ?? '').toUpperCase()
+  return ['NEW', 'PENDING', 'PROCESSING', 'QUEUED'].includes(normalized)
 }
 
 export const savingsService = {
@@ -445,13 +411,13 @@ export const savingsService = {
           : null,
       activeAttempt: latestAttempt ? toVerificationAttemptDTO(latestAttempt) : null,
       canProceed: entry.status !== 'VERIFIED',
-      mode: 'PAYSTACK_TRANSFER' as const,
+      mode: 'FLUTTERWAVE_CHECKOUT' as const,
       message:
         entry.status === 'VERIFIED'
           ? 'This savings entry has already been verified.'
           : latestAttempt?.status === 'PENDING'
-            ? 'Paystack payment is active. Complete the payment through the link below and TradeBook will verify it automatically.'
-            : 'Generate a Paystack payment session to verify this savings entry.',
+            ? 'Flutterwave payment is active. Complete the payment through the link below and TradeBook will verify it automatically.'
+            : 'Generate a Flutterwave payment session to verify this savings entry.',
     }
   },
 
@@ -475,23 +441,28 @@ export const savingsService = {
       return {
         entry: toSavingsEntryDTO(entry),
         attempt: toVerificationAttemptDTO(reusableAttempt),
-        message: 'Paystack payment session is already active for this savings entry.',
+        message: 'Flutterwave payment session is already active for this savings entry.',
       }
     }
 
-    const { trader, email } = await buildPaystackEmailForTrader(traderId)
+    const { trader, email, name } = await buildPaymentCustomerForTrader(traderId)
     const reference = `svpay_${entry.id.replace(/-/g, '').slice(0, 18)}_${Date.now()}`
-    const transaction = await initializePaystackTransaction({
+    const redirectUrl = new URL('/savings', env.FRONTEND_URL.endsWith('/') ? env.FRONTEND_URL : `${env.FRONTEND_URL}/`)
+    redirectUrl.searchParams.set('savingsVerificationEntryId', id)
+    redirectUrl.searchParams.set('savingsVerificationReference', reference)
+
+    const transaction = await initializeSavingsPayment({
       email,
       amount: Number(entry.amount),
       reference,
+      redirectUrl: redirectUrl.toString(),
+      customerName: name,
       metadata: {
         traderId,
         savingsEntryId: entry.id,
         verificationType: 'savings',
         businessName: trader.businessName ?? trader.name,
       },
-      channels: ['bank_transfer', 'ussd', 'bank', 'card'],
     })
 
     const attempt = await savingsRepository.createVerificationAttempt(traderId, id, {
@@ -500,7 +471,7 @@ export const savingsService = {
       authorizationUrl: transaction.authorizationUrl,
       accessCode: transaction.accessCode,
       paystackEmail: email,
-      expiresAt: new Date(now.getTime() + PAYSTACK_ATTEMPT_TTL_MS),
+      expiresAt: new Date(now.getTime() + PAYMENT_ATTEMPT_TTL_MS),
     })
 
     await savingsRepository.markVerificationInitiated(id, traderId, {
@@ -517,7 +488,7 @@ export const savingsService = {
     return {
       entry: toSavingsEntryDTO(updated),
       attempt: toVerificationAttemptDTO(attempt),
-      message: 'Paystack payment session generated. Complete the payment and TradeBook will verify it automatically.',
+      message: 'Flutterwave payment session generated. Complete the payment and TradeBook will verify it automatically.',
     }
   },
 
@@ -551,9 +522,9 @@ export const savingsService = {
       throw new AppError('Savings verification attempt not found', 404, 'NOT_FOUND')
     }
 
-    const verifiedPayment = await verifyPaystackTransaction(input.reference)
+    const verifiedPayment = await verifySavingsPaymentByReference(input.reference)
     logger.info({
-      event: 'savings_paystack_verification_checked',
+      event: 'savings_flutterwave_verification_checked',
       traderId,
       entryId: id,
       reference: input.reference,
@@ -562,14 +533,14 @@ export const savingsService = {
       transactionId: verifiedPayment.transactionId,
     })
 
-    if (verifiedPayment.status === 'success') {
+    if (verifiedPayment.status === 'successful') {
       const expectedAmount = Number(attempt.expectedAmount)
       if (Math.abs(verifiedPayment.amount - expectedAmount) > 0.009) {
-        throw new AppError('Paystack payment amount did not match the savings entry', 400, 'PAYMENT_AMOUNT_MISMATCH')
+        throw new AppError('Flutterwave payment amount did not match the savings entry', 400, 'PAYMENT_AMOUNT_MISMATCH')
       }
 
       await savingsRepository.markVerificationAttemptSuccess(attempt.id, {
-        paystackReference: verifiedPayment.reference,
+        paystackReference: verifiedPayment.txRef,
         paystackTransactionId: verifiedPayment.transactionId,
         verifiedAt: verifiedPayment.paidAt ?? new Date(),
       })
@@ -578,29 +549,10 @@ export const savingsService = {
         verifiedPayment.transactionId,
         'SUCCESS',
       )
-
-      try {
-        logger.info({
-          event: 'savings_payout_trigger_from_manual_refresh',
-          traderId,
-          entryId: entry.id,
-          amount: Number(entry.amount),
-          reference: input.reference,
-        })
-        await maybeInitiatePayoutForEntry(entry.id, traderId, Number(entry.amount))
-      } catch (error: any) {
-        logger.warn({
-          event: 'savings_payout_trigger_failed',
-          traderId,
-          entryId: entry.id,
-          reference: input.reference,
-          error: error?.message ?? 'Could not initiate payout',
-        })
-        await savingsRepository.updatePayoutByEntryId(entry.id, traderId, {
-          payoutStatus: 'FAILED',
-          payoutFailureReason: error?.message ?? 'Could not initiate payout',
-        })
-      }
+      await savingsRepository.updatePayoutByEntryId(entry.id, traderId, {
+        payoutStatus: 'READY_TO_WITHDRAW',
+        payoutFailureReason: null,
+      })
     }
 
     const updated = await savingsRepository.findById(id, traderId)
@@ -609,7 +561,7 @@ export const savingsService = {
     }
 
     const currentAttempt = await savingsRepository.findVerificationAttemptByReference(input.reference, traderId)
-    const status = currentAttempt?.status ?? (verifiedPayment.status === 'success' ? 'SUCCESS' : 'PENDING')
+    const status = currentAttempt?.status ?? (verifiedPayment.status === 'successful' ? 'SUCCESS' : 'PENDING')
 
     return {
       verified: updated.status === 'VERIFIED',
@@ -618,8 +570,8 @@ export const savingsService = {
       entry: toSavingsEntryDTO(updated),
       message:
         updated.status === 'VERIFIED'
-          ? 'Savings payment verified successfully.'
-          : 'TradeBook is still waiting for Paystack to confirm this payment.',
+          ? 'Savings payment verified successfully. You can withdraw this saving when payout funds are available.'
+          : 'TradeBook is still waiting for Flutterwave to confirm this payment.',
     }
   },
 
@@ -672,29 +624,10 @@ export const savingsService = {
         verifiedAt: data?.paid_at ? new Date(data.paid_at) : new Date(),
       })
       await savingsRepository.markVerifiedByReference(attempt.reference, data?.id ? String(data.id) : null, 'SUCCESS')
-
-      try {
-        logger.info({
-          event: 'savings_payout_trigger_from_charge_success',
-          traderId: attempt.traderId,
-          entryId: attempt.savingsEntryId,
-          expectedAmount,
-          externalReference,
-        })
-        await maybeInitiatePayoutForEntry(attempt.savingsEntryId, attempt.traderId, expectedAmount)
-      } catch (error: any) {
-        logger.warn({
-          event: 'savings_payout_trigger_failed',
-          traderId: attempt.traderId,
-          entryId: attempt.savingsEntryId,
-          externalReference,
-          error: error?.message ?? 'Could not initiate payout',
-        })
-        await savingsRepository.updatePayoutByEntryId(attempt.savingsEntryId, attempt.traderId, {
-          payoutStatus: 'FAILED',
-          payoutFailureReason: error?.message ?? 'Could not initiate payout',
-        })
-      }
+      await savingsRepository.updatePayoutByEntryId(attempt.savingsEntryId, attempt.traderId, {
+        payoutStatus: 'READY_TO_WITHDRAW',
+        payoutFailureReason: null,
+      })
 
       return { accepted: true, updated: true }
     }
@@ -785,6 +718,72 @@ export const savingsService = {
     })
 
     return { accepted: true, updated: true }
+  },
+
+  async withdrawSavingsEntry(id: string, traderId: string, role: 'OWNER' | 'SALESPERSON') {
+    if (role !== 'OWNER') {
+      throw new AppError('Only business owner can withdraw savings', 403, 'FORBIDDEN')
+    }
+
+    const entry = await savingsRepository.findById(id, traderId)
+    if (!entry) {
+      throw new AppError('Savings entry not found', 404, 'NOT_FOUND')
+    }
+
+    if (entry.status !== 'VERIFIED') {
+      throw new AppError('Only verified savings can be withdrawn', 400, 'SAVINGS_NOT_VERIFIED')
+    }
+
+    if (String(entry.payoutStatus ?? '').toUpperCase() === 'SUCCESS') {
+      throw new AppError('This saving has already been withdrawn', 400, 'ALREADY_WITHDRAWN')
+    }
+
+    if (isPayoutInFlight(entry.payoutStatus)) {
+      throw new AppError('Withdrawal is already processing for this saving', 400, 'PAYOUT_ALREADY_PROCESSING')
+    }
+
+    try {
+      logger.info({
+        event: 'savings_manual_withdrawal_requested',
+        traderId,
+        entryId: id,
+        amount: Number(entry.amount),
+      })
+      await maybeInitiatePayoutForEntry(id, traderId, Number(entry.amount))
+    } catch (error: any) {
+      const message = error?.message ?? 'Could not initiate withdrawal'
+      logger.warn({
+        event: 'savings_manual_withdrawal_failed',
+        traderId,
+        entryId: id,
+        amount: Number(entry.amount),
+        error: message,
+      })
+      await savingsRepository.updatePayoutByEntryId(id, traderId, {
+        payoutStatus: 'FAILED',
+        payoutFailureReason: message,
+      })
+
+      const failed = await savingsRepository.findById(id, traderId)
+      if (!failed) {
+        throw new AppError('Savings entry not found after withdrawal attempt', 404, 'NOT_FOUND')
+      }
+
+      return {
+        entry: toSavingsEntryDTO(failed),
+        message,
+      }
+    }
+
+    const updated = await savingsRepository.findById(id, traderId)
+    if (!updated) {
+      throw new AppError('Savings entry not found after withdrawal attempt', 404, 'NOT_FOUND')
+    }
+
+    return {
+      entry: toSavingsEntryDTO(updated),
+      message: 'Withdrawal request sent. TradeBook will update the status once Flutterwave completes it.',
+    }
   },
 
   async update(id: string, traderId: string, role: 'OWNER' | 'SALESPERSON', input: UpdateSavingsEntryInput) {

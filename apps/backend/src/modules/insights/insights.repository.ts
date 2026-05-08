@@ -12,6 +12,19 @@ type ProductProfitRow = {
   estimatedProfit: number
 }
 
+type DebtorTrustRow = {
+  id: string
+  customerName: string
+  phoneNumber: string | null
+  totalOwed: number
+  totalPaid: number
+  balance: number
+  dueDate: Date | null
+  status: string
+  paymentCount: number
+  lastPaymentAt: Date | null
+}
+
 const getSalesCountByDay = (traderId: string, from: Date) =>
   prisma.$queryRaw<CountByDayRow[]>`
     SELECT date_trunc('day', sold_at) AS day, count(*)::int AS count
@@ -64,6 +77,28 @@ const getTopProductsByProfit = (traderId: string, from: Date) =>
     LIMIT 5
   `
 
+const getDebtorTrustRows = (traderId: string) =>
+  prisma.$queryRaw<DebtorTrustRow[]>`
+    SELECT
+      d.id,
+      d.customer_name AS "customerName",
+      d.phone_number AS "phoneNumber",
+      d.total_owed::float AS "totalOwed",
+      d.total_paid::float AS "totalPaid",
+      GREATEST((d.total_owed - d.total_paid), 0)::float AS balance,
+      d.due_date AS "dueDate",
+      d.status::text AS status,
+      COUNT(p.id)::int AS "paymentCount",
+      MAX(p.paid_at) AS "lastPaymentAt"
+    FROM debtors d
+    LEFT JOIN payments p ON p.debtor_id = d.id
+    WHERE d.trader_id = ${traderId}
+      AND d.status IN ('ACTIVE', 'PARTIAL')
+    GROUP BY d.id
+    ORDER BY balance DESC, d.created_at DESC
+    LIMIT 8
+  `
+
 export const insightsRepository = {
   async getBusinessMetrics(traderId: string, from: Date) {
     const [
@@ -89,6 +124,7 @@ export const insightsRepository = {
       debtorsByDay,
       savingsByDay,
       topProducts,
+      debtorTrustRows,
     ] = await Promise.all([
       prisma.trader.count({ where: { OR: [{ id: traderId }, { ownerTraderId: traderId }] } }),
       prisma.sale.count({ where: { traderId, soldAt: { gte: from } } }),
@@ -112,6 +148,7 @@ export const insightsRepository = {
       getDebtorsCountByDay(traderId, from),
       getSavingsCountByDay(traderId, from),
       getTopProductsByProfit(traderId, from),
+      getDebtorTrustRows(traderId),
     ])
 
     return {
@@ -135,6 +172,18 @@ export const insightsRepository = {
         unitsSold: Number(row.unitsSold ?? 0),
         revenue: Number(row.revenue ?? 0),
         estimatedProfit: Number(row.estimatedProfit ?? 0),
+      })),
+      debtorTrustRows: debtorTrustRows.map((row) => ({
+        id: row.id,
+        customerName: row.customerName,
+        phoneNumber: row.phoneNumber,
+        totalOwed: Number(row.totalOwed ?? 0),
+        totalPaid: Number(row.totalPaid ?? 0),
+        balance: Number(row.balance ?? 0),
+        dueDate: row.dueDate,
+        status: row.status,
+        paymentCount: Number(row.paymentCount ?? 0),
+        lastPaymentAt: row.lastPaymentAt,
       })),
       trendRows: {
         sales: salesByDay,

@@ -1,7 +1,11 @@
 import https from 'https'
 import { env } from '../config/env'
 import { AppError } from '../middleware/errorHandler'
-import { initiateFlutterwaveTransfer } from './flutterwave'
+import {
+  initiateFlutterwaveTransfer,
+  initializeFlutterwavePayment,
+  verifyFlutterwaveTransactionByReference,
+} from './flutterwave'
 import { listPaystackBanks, resolvePaystackAccount } from './paystack'
 
 type SavingsBank = {
@@ -26,6 +30,30 @@ type TransferResult = {
   reference: string
   status: string
   message?: string | null
+}
+
+type PaymentRequest = {
+  email: string
+  amount: number
+  reference: string
+  redirectUrl: string
+  customerName: string
+  metadata: Record<string, unknown>
+}
+
+type PaymentResult = {
+  reference: string
+  authorizationUrl: string
+  accessCode: string | null
+}
+
+type PaymentVerificationResult = {
+  transactionId: string | null
+  txRef: string
+  status: string
+  amount: number
+  currency: string
+  paidAt: Date | null
 }
 
 const ensureProxyConfigured = () => {
@@ -120,4 +148,28 @@ export const initiateSavingsPayoutTransfer = async (input: TransferRequest): Pro
   }
 
   return initiateFlutterwaveTransfer(input)
+}
+
+export const initializeSavingsPayment = async (input: PaymentRequest): Promise<PaymentResult> => {
+  if (env.SAVINGS_PAYOUT_PROVIDER === 'PROXY') {
+    return makeProxyRequest<PaymentResult>('POST', '/api/v1/payments', input)
+  }
+
+  return initializeFlutterwavePayment(input)
+}
+
+export const verifySavingsPaymentByReference = async (reference: string): Promise<PaymentVerificationResult> => {
+  if (env.SAVINGS_PAYOUT_PROVIDER === 'PROXY') {
+    const result = await makeProxyRequest<Omit<PaymentVerificationResult, 'paidAt'> & { paidAt: string | null }>(
+      'GET',
+      `/api/v1/payments/${encodeURIComponent(reference)}/verify`,
+    )
+
+    return {
+      ...result,
+      paidAt: result.paidAt ? new Date(result.paidAt) : null,
+    }
+  }
+
+  return verifyFlutterwaveTransactionByReference(reference)
 }

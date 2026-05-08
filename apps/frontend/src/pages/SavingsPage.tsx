@@ -14,6 +14,7 @@ import {
   useSavingsVerificationPreview,
   useUpdateSavingsAccount,
   useUpdateSavingsTarget,
+  useWithdrawSavingsEntry,
 } from '@/hooks/useSavings'
 import type {
   SavingsVerificationConfirmationDTO,
@@ -58,6 +59,44 @@ const payoutStatusTone = (status?: string | null) => {
   }
 }
 
+const isWithdrawalProcessing = (status?: string | null) => {
+  return ['NEW', 'PENDING', 'PROCESSING', 'QUEUED'].includes(String(status ?? '').toUpperCase())
+}
+
+const isReadyToWithdraw = (status?: string | null) => {
+  return String(status ?? '').toUpperCase() === 'READY_TO_WITHDRAW'
+}
+
+const getPayoutLabel = (status?: string | null) => {
+  const normalized = String(status ?? '').toUpperCase()
+  if (normalized === 'SUCCESS') return 'Withdrawn'
+  if (normalized === 'READY_TO_WITHDRAW') return 'Ready'
+  if (isWithdrawalProcessing(normalized)) return 'Processing'
+  if (normalized === 'FAILED') return 'Retry'
+  return 'Not requested'
+}
+
+const LedgerIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M7 4h10a2 2 0 0 1 2 2v14l-3-1.6-3 1.6-3-1.6-3 1.6V6a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    <path d="M9 9h6M9 13h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+)
+
+const VaultIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <rect x="4" y="7" width="16" height="12" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M8 7V6a4 4 0 0 1 8 0v1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <circle cx="12" cy="13" r="2.2" stroke="currentColor" strokeWidth="1.6" />
+  </svg>
+)
+
+const PulseIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M4 13h3l2-5 4 10 2-5h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
 export const SavingsPage = () => {
   const trader = useAuthStore((state) => state.trader)
   const isOwner = trader?.role !== 'SALESPERSON'
@@ -78,6 +117,9 @@ export const SavingsPage = () => {
   const [verifyError, setVerifyError] = useState('')
   const [verifyPreview, setVerifyPreview] = useState<SavingsVerificationPreviewDTO | null>(null)
   const [verificationResult, setVerificationResult] = useState<SavingsVerificationConfirmationDTO | null>(null)
+  const [redirectVerificationHandled, setRedirectVerificationHandled] = useState(false)
+  const [withdrawNotice, setWithdrawNotice] = useState('')
+  const [withdrawError, setWithdrawError] = useState('')
 
   const createSavings = useCreateSavingsEntry()
   const updateTarget = useUpdateSavingsTarget()
@@ -86,6 +128,7 @@ export const SavingsPage = () => {
   const verificationPreview = useSavingsVerificationPreview()
   const initiateVerification = useInitiateSavingsVerification()
   const confirmVerification = useConfirmSavingsVerification()
+  const withdrawSavings = useWithdrawSavingsEntry()
   const { data: listData, isLoading } = useSavingsEntries()
   const { data: todaySummary } = useSavingsTodaySummary()
   const { data: targetProgress } = useSavingsTargetProgress()
@@ -93,6 +136,28 @@ export const SavingsPage = () => {
   const { data: banks = [], isLoading: banksLoading } = useSavingsBanks()
 
   const entries = listData?.pages.flatMap((p) => p.data) ?? []
+  const verifiedTotal = useMemo(
+    () => entries.filter((entry) => entry.status === 'VERIFIED').reduce((sum, entry) => sum + entry.amount, 0),
+    [entries],
+  )
+  const readyToWithdrawTotal = useMemo(
+    () => entries
+      .filter((entry) => entry.status === 'VERIFIED' && isReadyToWithdraw(entry.payoutStatus))
+      .reduce((sum, entry) => sum + entry.amount, 0),
+    [entries],
+  )
+  const processingWithdrawalTotal = useMemo(
+    () => entries
+      .filter((entry) => isWithdrawalProcessing(entry.payoutStatus))
+      .reduce((sum, entry) => sum + entry.amount, 0),
+    [entries],
+  )
+  const withdrawnTotal = useMemo(
+    () => entries
+      .filter((entry) => String(entry.payoutStatus ?? '').toUpperCase() === 'SUCCESS')
+      .reduce((sum, entry) => sum + entry.amount, 0),
+    [entries],
+  )
 
   useEffect(() => {
     if (!isOwner || accountLoading) return
@@ -128,6 +193,51 @@ export const SavingsPage = () => {
       .filter((entry) => new Date(entry.savedAt).getTime() >= start.getTime())
       .reduce((sum, entry) => sum + entry.amount, 0)
   }, [entries])
+
+  useEffect(() => {
+    if (!isOwner || redirectVerificationHandled) return
+
+    const params = new URLSearchParams(window.location.search)
+    const entryId = params.get('savingsVerificationEntryId')
+    const reference = params.get('savingsVerificationReference') ?? params.get('tx_ref')
+    if (!entryId || !reference) return
+
+    setRedirectVerificationHandled(true)
+    setSelectedEntryId(entryId)
+    setVerifyModalOpen(true)
+    setVerifyError('')
+    setVerifyPreview(null)
+    setVerificationResult(null)
+
+    const nextParams = new URLSearchParams(window.location.search)
+    nextParams.delete('savingsVerificationEntryId')
+    nextParams.delete('savingsVerificationReference')
+    nextParams.delete('tx_ref')
+    nextParams.delete('transaction_id')
+    nextParams.delete('status')
+    const nextUrl = `${window.location.pathname}${nextParams.toString() ? `?${nextParams.toString()}` : ''}${window.location.hash}`
+
+    void (async () => {
+      try {
+        const preview = await verificationPreview.mutateAsync(entryId)
+        setVerifyPreview(preview)
+
+        const result = await confirmVerification.mutateAsync({
+          id: entryId,
+          input: { reference },
+        })
+        setVerificationResult(result)
+
+        const refreshedPreview = await verificationPreview.mutateAsync(entryId)
+        setVerifyPreview(refreshedPreview)
+      } catch (error: any) {
+        const message = error?.response?.data?.error?.message ?? 'We could not verify this Flutterwave payment yet.'
+        setVerifyError(message)
+      } finally {
+        window.history.replaceState({}, document.title, nextUrl)
+      }
+    })()
+  }, [confirmVerification, isOwner, redirectVerificationHandled, verificationPreview])
 
   const handleSubmit = async () => {
     await createSavings.mutateAsync({
@@ -221,6 +331,19 @@ export const SavingsPage = () => {
     }
   }
 
+  const handleWithdraw = async (entryId: string) => {
+    setWithdrawNotice('')
+    setWithdrawError('')
+
+    try {
+      const result = await withdrawSavings.mutateAsync(entryId)
+      setWithdrawNotice(result.message)
+    } catch (error: any) {
+      const message = error?.response?.data?.error?.message ?? 'Could not start withdrawal right now.'
+      setWithdrawError(message)
+    }
+  }
+
   return (
     <div className="min-h-screen px-4 pb-8 pt-10 sm:px-5 sm:pt-12 md:px-6 xl:px-8">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
@@ -236,7 +359,100 @@ export const SavingsPage = () => {
           badge="Day close"
         />
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <section className="relative overflow-hidden rounded-[30px] border border-[rgba(232,168,56,0.16)] bg-[#20120d] p-4 shadow-[0_26px_80px_rgba(0,0,0,0.24)] md:p-5">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(78,204,163,0.13),transparent_28%),radial-gradient(circle_at_85%_0%,rgba(232,168,56,0.18),transparent_30%),linear-gradient(135deg,rgba(192,72,24,0.12),transparent_45%)]" />
+          <div className="pointer-events-none absolute inset-0 pattern-dots opacity-25" />
+
+          <div className="relative grid grid-cols-1 gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="rounded-[26px] border border-white/10 bg-[rgba(17,10,7,0.62)] p-4 backdrop-blur-[7px] sm:p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2 text-[#4ecca3]">
+                    <VaultIcon />
+                    <p className="font-ui text-xs font-bold uppercase tracking-[0.12em]">Savings wallet</p>
+                  </div>
+                  <h2 className="mt-3 font-display text-[2.45rem] font-bold leading-[0.9] text-primary wonky sm:text-[3rem]">
+                    {fmt(verifiedTotal)}
+                  </h2>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-secondary">
+                    Verified savings now sit in your TradeBook ledger. Withdraw when Flutterwave payout funds are available.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[#4ecca3]/20 bg-[rgba(78,204,163,0.1)] px-3.5 py-3 text-left sm:min-w-[170px]">
+                  <p className="label-base mb-1">Ready to withdraw</p>
+                  <p className="font-display text-xl font-bold text-[#4ecca3] wonky">{fmt(readyToWithdrawTotal)}</p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {[
+                  { label: 'Today saved', value: fmt(todaySummary?.total ?? 0), tone: 'text-[#4ecca3]', icon: <PulseIcon /> },
+                  { label: 'This week', value: fmt(thisWeekTotal), tone: 'text-[#f0bc5a]', icon: <LedgerIcon /> },
+                  { label: 'This month', value: fmt(thisMonthTotal), tone: 'text-primary', icon: <VaultIcon /> },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-2xl border border-white/10 bg-[rgba(35,21,16,0.78)] p-3.5">
+                    <div className={`mb-2 flex items-center gap-2 ${item.tone}`}>
+                      {item.icon}
+                      <p className="label-base">{item.label}</p>
+                    </div>
+                    <p className={`font-display text-xl font-bold wonky ${item.tone}`}>{item.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              <div className="rounded-[26px] border border-white/10 bg-[rgba(35,21,16,0.78)] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-ui text-sm font-bold text-primary">Withdrawal pipeline</p>
+                    <p className="mt-1 text-xs leading-5 text-secondary">Track what is ready, processing, and already withdrawn.</p>
+                  </div>
+                  <span className="rounded-full border border-[#e8a838]/25 bg-[#2d1b14] px-3 py-1 text-[10px] font-ui font-bold uppercase tracking-[0.08em] text-[#f0bc5a]">
+                    Live ledger
+                  </span>
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <div className="rounded-2xl bg-[#1a100c] p-3">
+                    <p className="label-base mb-1">Ready</p>
+                    <p className="font-display text-base font-bold text-[#4ecca3] wonky">{fmt(readyToWithdrawTotal)}</p>
+                  </div>
+                  <div className="rounded-2xl bg-[#1a100c] p-3">
+                    <p className="label-base mb-1">Moving</p>
+                    <p className="font-display text-base font-bold text-[#f0bc5a] wonky">{fmt(processingWithdrawalTotal)}</p>
+                  </div>
+                  <div className="rounded-2xl bg-[#1a100c] p-3">
+                    <p className="label-base mb-1">Out</p>
+                    <p className="font-display text-base font-bold text-primary wonky">{fmt(withdrawnTotal)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[26px] border border-white/10 bg-[rgba(35,21,16,0.78)] p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="font-ui text-sm font-bold text-primary">Savings destination</p>
+                    <p className="mt-1 text-xs leading-5 text-secondary">
+                      {savingsAccount ? `${savingsAccount.bankName} - ${savingsAccount.accountNumber}` : 'No payout destination has been saved yet.'}
+                    </p>
+                  </div>
+                  {isOwner ? (
+                    <button className="btn-secondary px-4 py-2 text-sm" onClick={() => setAccountModalOpen(true)}>
+                      {savingsAccount ? 'Update' : 'Set up'}
+                    </button>
+                  ) : null}
+                </div>
+                {savingsAccount ? (
+                  <p className="mt-3 truncate rounded-2xl border border-white/10 bg-[#1a100c] px-3 py-2 font-ui text-sm font-bold text-primary">
+                    {savingsAccount.accountName}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="hidden grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-[#231510] px-4 py-3">
             <p className="label-base mb-1">Today</p>
             <p className="font-display text-2xl font-bold text-[#4ecca3] wonky">{fmt(todaySummary?.total ?? 0)}</p>
@@ -251,12 +467,12 @@ export const SavingsPage = () => {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/10 bg-[#231510] p-4 md:p-5">
+        <div className="hidden rounded-3xl border border-white/10 bg-[#231510] p-4 md:p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="font-ui text-sm font-bold text-primary">Savings account for verification</p>
               <p className="mt-1 text-xs text-secondary">
-                Verified savings will move money to this account once the payment interface is connected.
+                Verified Flutterwave savings payments will be paid out to this account.
               </p>
             </div>
             {isOwner ? (
@@ -290,12 +506,14 @@ export const SavingsPage = () => {
           )}
         </div>
 
-        <div className="rounded-3xl border border-white/10 bg-[#231510] p-4 md:p-5">
+        <div className="relative overflow-hidden rounded-3xl border border-[#e8a838]/20 bg-[#231510] p-4 md:p-5">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(232,168,56,0.13),transparent_34%),linear-gradient(135deg,rgba(78,204,163,0.06),transparent_44%)]" />
+          <div className="relative">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="font-ui text-sm font-bold text-primary">Savings target</p>
               <p className="mt-1 text-xs text-secondary">
-                Set a target and track how close this business is to hitting it. Entries below will now be tagged as declared, reconciled, or verified.
+                Set the ambition, then let the ledger keep score.
               </p>
             </div>
             {targetProgress?.target ? (
@@ -376,10 +594,17 @@ export const SavingsPage = () => {
           ) : (
             <p className="mt-3 text-xs text-secondary">Only the business owner can update savings targets.</p>
           )}
+          </div>
         </div>
 
-        <div className="rounded-3xl border border-white/10 bg-[#231510] p-4 md:p-5">
-          <p className="font-ui text-sm font-bold text-primary">Record savings</p>
+        <div className="relative overflow-hidden rounded-3xl border border-[#4ecca3]/20 bg-[#231510] p-4 md:p-5">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(78,204,163,0.12),transparent_30%),linear-gradient(135deg,rgba(35,21,16,0.1),rgba(196,98,45,0.09))]" />
+          <div className="relative">
+          <div className="flex items-center gap-2 text-[#4ecca3]">
+            <LedgerIcon />
+            <p className="font-ui text-sm font-bold text-primary">Record savings</p>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-secondary">Capture the amount first, then verify it when the money is actually received.</p>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <input
               type="number"
@@ -418,12 +643,32 @@ export const SavingsPage = () => {
           {!isOwner ? (
             <p className="mt-2 text-xs text-secondary">Salesperson can only save for today.</p>
           ) : null}
+          </div>
         </div>
 
-        <div className="rounded-3xl border border-white/10 bg-[#231510]">
-          <div className="border-b border-white/10 px-4 py-3.5">
-            <p className="font-ui text-sm font-bold text-primary">Recent savings records</p>
+        <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#231510] shadow-[0_18px_60px_rgba(0,0,0,0.18)]">
+          <div className="relative overflow-hidden border-b border-white/10 px-4 py-4">
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(196,98,45,0.18),rgba(232,168,56,0.08),transparent)]" />
+            <div className="relative flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="label-base mb-1">Ledger trail</p>
+                <p className="font-ui text-sm font-bold text-primary">Recent savings records</p>
+              </div>
+              <p className="text-xs text-secondary">{entries.length} entr{entries.length === 1 ? 'y' : 'ies'} captured</p>
+            </div>
           </div>
+
+          {withdrawNotice ? (
+            <div className="mx-4 mt-4 rounded-2xl border border-[#4ecca3]/25 bg-[rgba(78,204,163,0.12)] p-3 text-sm text-[#b8f0dd]">
+              {withdrawNotice}
+            </div>
+          ) : null}
+
+          {withdrawError ? (
+            <div className="mx-4 mt-4 rounded-2xl border border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.08)] p-3 text-sm text-[#fca5a5]">
+              {withdrawError}
+            </div>
+          ) : null}
 
           {isLoading ? (
             <div className="space-y-2 p-4">
@@ -433,31 +678,58 @@ export const SavingsPage = () => {
           ) : entries.length === 0 ? (
             <p className="px-4 py-6 text-sm text-secondary">No savings records yet.</p>
           ) : (
-            <div className="divide-y divide-white/5">
+            <div className="grid grid-cols-1 gap-3 p-4">
               {entries.slice(0, 20).map((entry) => (
-                <div key={entry.id} className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-ui text-sm font-semibold text-primary">
-                        {new Date(entry.savedAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </p>
-                      <span className={`rounded-full border px-2.5 py-1 text-[11px] font-ui font-bold uppercase tracking-[0.08em] ${statusClasses[entry.status]}`}>
-                        {statusLabel[entry.status]}
-                      </span>
+                <div
+                  key={entry.id}
+                  className="group relative overflow-hidden rounded-[22px] border border-white/10 bg-[#1f130e] p-3.5 transition-all duration-150 hover:-translate-y-[1px] hover:border-[#e8a838]/25 sm:p-4"
+                >
+                  <div className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-[#4ecca3] via-[#e8a838] to-[#c04818]" />
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 flex-1 pl-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-ui text-sm font-semibold text-primary">
+                          {new Date(entry.savedAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-ui font-bold uppercase tracking-[0.08em] ${statusClasses[entry.status]}`}>
+                          {statusLabel[entry.status]}
+                        </span>
+                        {entry.status === 'VERIFIED' ? (
+                          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-ui font-bold uppercase tracking-[0.08em] ${payoutStatusTone(entry.payoutStatus)}`}>
+                            {getPayoutLabel(entry.payoutStatus)}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-xs text-secondary sm:truncate">{entry.note || 'No note added'}</p>
                     </div>
-                    <p className="text-xs text-secondary sm:truncate">{entry.note || 'No note'}</p>
-                  </div>
-                  <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-end">
-                    <p className="font-display text-lg font-bold text-[#4ecca3] wonky">{fmt(entry.amount)}</p>
-                    {isOwner && entry.status !== 'VERIFIED' ? (
-                      <button
-                        type="button"
-                        className="rounded-full border border-[#e8a838]/30 bg-[#3a2319] px-3 py-1.5 text-[11px] font-ui font-bold uppercase tracking-[0.08em] text-[#f0bc5a]"
-                        onClick={() => void openVerifyModal(entry.id)}
-                      >
-                        Verify
-                      </button>
-                    ) : null}
+                    <div className="flex flex-col items-start gap-2 sm:items-end">
+                      <p className="font-display text-2xl font-bold text-[#4ecca3] wonky">{fmt(entry.amount)}</p>
+                      <div className="flex flex-wrap gap-2 sm:justify-end">
+                        {isOwner && entry.status !== 'VERIFIED' ? (
+                          <button
+                            type="button"
+                            className="rounded-full border border-[#e8a838]/30 bg-[#3a2319] px-3 py-1.5 text-[11px] font-ui font-bold uppercase tracking-[0.08em] text-[#f0bc5a]"
+                            onClick={() => void openVerifyModal(entry.id)}
+                          >
+                            Verify
+                          </button>
+                        ) : null}
+                        {isOwner && entry.status === 'VERIFIED' && String(entry.payoutStatus ?? '').toUpperCase() !== 'SUCCESS' ? (
+                          <button
+                            type="button"
+                            className="rounded-full border border-[#4ecca3]/30 bg-[rgba(78,204,163,0.12)] px-3 py-1.5 text-[11px] font-ui font-bold uppercase tracking-[0.08em] text-[#4ecca3] disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={withdrawSavings.isPending || isWithdrawalProcessing(entry.payoutStatus)}
+                            onClick={() => void handleWithdraw(entry.id)}
+                          >
+                            {isWithdrawalProcessing(entry.payoutStatus)
+                              ? 'Processing'
+                              : withdrawSavings.isPending
+                                ? 'Sending...'
+                                : 'Withdraw'}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -633,7 +905,7 @@ export const SavingsPage = () => {
 
                 {verifyPreview.activeAttempt ? (
                   <div className="rounded-2xl border border-[#e8a838]/25 bg-[#2d1b14] p-4">
-                    <p className="font-ui text-sm font-bold text-[#f0bc5a]">Paystack payment session</p>
+                    <p className="font-ui text-sm font-bold text-[#f0bc5a]">Flutterwave payment session</p>
                     <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <div>
                         <p className="text-xs text-secondary">Exact amount</p>
@@ -649,11 +921,11 @@ export const SavingsPage = () => {
                       </div>
                     </div>
                     <div className="mt-4 rounded-2xl border border-white/10 bg-[#20130e] p-3">
-                      <p className="text-xs text-secondary">Paystack email</p>
+                      <p className="text-xs text-secondary">Payment email</p>
                       <p className="mt-1 break-all font-ui text-sm font-bold text-primary">{verifyPreview.activeAttempt.paystackEmail}</p>
                     </div>
                     <p className="mt-3 text-sm leading-6 text-secondary">
-                      Open Paystack, complete the payment with bank transfer, USSD, card, or bank, and then come back here. TradeBook will verify the payment and trigger payout to the saved savings account.
+                      Open Flutterwave, complete the payment with bank transfer, USSD, card, or bank, and then come back here. TradeBook will verify the payment and make this saving ready for withdrawal.
                     </p>
                   </div>
                 ) : null}
@@ -669,7 +941,7 @@ export const SavingsPage = () => {
                       <div>
                         <p className="label-base mb-1">Payout progress</p>
                         <p className="text-sm leading-6 text-secondary">
-                          This shows whether TradeBook has started the Kora payout after Paystack verification.
+                          This shows whether a withdrawal has started after payment verification.
                         </p>
                       </div>
                       <span className={`rounded-full border px-2.5 py-1 text-[11px] font-ui font-bold uppercase tracking-[0.08em] ${payoutStatusTone(verifyPreview.entry.payoutStatus)}`}>
@@ -737,7 +1009,7 @@ export const SavingsPage = () => {
                       className="btn-secondary w-full sm:w-auto"
                       onClick={() => window.open(verifyPreview.activeAttempt!.paymentUrl, '_blank', 'noopener,noreferrer')}
                     >
-                      Open Paystack
+                      Open Flutterwave
                     </button>
                   ) : null}
                   {verifyPreview.activeAttempt ? (

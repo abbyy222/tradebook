@@ -4,7 +4,13 @@ import express from 'express'
 import helmet from 'helmet'
 import { z } from 'zod'
 import { env } from './config/env'
-import { listFlutterwaveBanks, resolveFlutterwaveAccount, initiateFlutterwaveTransfer } from './utils/flutterwave'
+import {
+  listFlutterwaveBanks,
+  resolveFlutterwaveAccount,
+  initiateFlutterwaveTransfer,
+  initializeFlutterwavePayment,
+  verifyFlutterwaveTransactionByReference,
+} from './utils/flutterwave'
 import { postJson } from './utils/http'
 
 const app = express()
@@ -41,6 +47,15 @@ const initiateTransferSchema = z.object({
   narration: z.string().trim().min(4),
 })
 
+const initializePaymentSchema = z.object({
+  email: z.string().trim().email(),
+  amount: z.number().positive(),
+  reference: z.string().trim().min(8),
+  redirectUrl: z.string().url(),
+  customerName: z.string().trim().min(2),
+  metadata: z.record(z.string(), z.unknown()),
+})
+
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
@@ -65,6 +80,18 @@ app.post('/api/v1/accounts/resolve', requireGatewayToken, async (req, res) => {
 app.post('/api/v1/transfers', requireGatewayToken, async (req, res) => {
   const input = initiateTransferSchema.parse(req.body)
   const result = await initiateFlutterwaveTransfer(input)
+  res.status(200).json({ data: result, error: null })
+})
+
+app.post('/api/v1/payments', requireGatewayToken, async (req, res) => {
+  const input = initializePaymentSchema.parse(req.body)
+  const result = await initializeFlutterwavePayment(input)
+  res.status(200).json({ data: result, error: null })
+})
+
+app.get('/api/v1/payments/:reference/verify', requireGatewayToken, async (req, res) => {
+  const reference = z.string().trim().min(8).parse(req.params.reference)
+  const result = await verifyFlutterwaveTransactionByReference(reference)
   res.status(200).json({ data: result, error: null })
 })
 

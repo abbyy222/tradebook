@@ -26,6 +26,14 @@ type FlutterwaveTransferResponse = {
   message?: string
 }
 
+type FlutterwavePaymentInitializeResponse = {
+  status: string
+  data?: {
+    link?: string
+  }
+  message?: string
+}
+
 type FlutterwaveVerifyTransactionResponse = {
   status: string
   data?: {
@@ -34,6 +42,7 @@ type FlutterwaveVerifyTransactionResponse = {
     status?: string
     amount?: number | string
     currency?: string
+    created_at?: string
   }
   message?: string
 }
@@ -146,6 +155,42 @@ export const initiateFlutterwaveTransfer = async (input: {
   }
 }
 
+export const initializeFlutterwavePayment = async (input: {
+  email: string
+  amount: number
+  reference: string
+  redirectUrl: string
+  customerName: string
+  metadata: Record<string, unknown>
+}) => {
+  const response = await makeFlutterwaveRequest<FlutterwavePaymentInitializeResponse>('POST', '/v3/payments', {
+    tx_ref: input.reference,
+    amount: input.amount,
+    currency: 'NGN',
+    redirect_url: input.redirectUrl,
+    customer: {
+      email: input.email,
+      name: input.customerName,
+    },
+    customizations: {
+      title: 'TradeBook Savings Verification',
+      description: 'Verify daily savings and trigger payout to your saved savings account.',
+    },
+    meta: input.metadata,
+  })
+
+  const paymentUrl = response.data?.link?.trim()
+  if (!paymentUrl) {
+    throw new AppError(response.message || 'Could not initialize Flutterwave payment', 400, 'FLW_PAYMENT_INIT_FAILED')
+  }
+
+  return {
+    reference: input.reference,
+    authorizationUrl: paymentUrl,
+    accessCode: null,
+  }
+}
+
 export const verifyFlutterwaveTransactionByReference = async (txRef: string) => {
   const response = await makeFlutterwaveRequest<FlutterwaveVerifyTransactionResponse>(
     'GET',
@@ -162,5 +207,6 @@ export const verifyFlutterwaveTransactionByReference = async (txRef: string) => 
     status: String(response.data.status ?? 'UNKNOWN').toLowerCase(),
     amount: Number(response.data.amount ?? 0),
     currency: String(response.data.currency ?? ''),
+    paidAt: response.data.created_at ? new Date(response.data.created_at) : null,
   }
 }

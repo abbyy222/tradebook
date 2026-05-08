@@ -40,9 +40,21 @@ const pool =
   globalForPrisma.pool ??
   new Pool({
     connectionString: env.DATABASE_URL,
+    max: 5,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 10_000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
   })
 
 const adapter = new PrismaPg(pool)
+
+pool.on('error', (error) => {
+  logger.warn({
+    event: 'postgres_pool_error',
+    error: error.message,
+  })
+})
 
 export const prisma =
   globalForPrisma.prisma ??

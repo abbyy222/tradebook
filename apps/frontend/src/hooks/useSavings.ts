@@ -245,6 +245,19 @@ export const useConfirmSavingsVerification = () => {
   })
 }
 
+export const useWithdrawSavingsEntry = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => savingsApi.withdraw(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: savingsKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: savingsKeys.todaySummary() })
+      queryClient.invalidateQueries({ queryKey: savingsKeys.target() })
+    },
+  })
+}
+
 export const useCreateSavingsEntry = () => {
   const queryClient = useQueryClient()
 

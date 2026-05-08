@@ -63,6 +63,116 @@ const SignalCard = ({
   )
 }
 
+const SmartWarningCard = ({
+  warning,
+}: {
+  warning: {
+    severity: 'GOOD' | 'WATCH' | 'RISK'
+    title: string
+    message: string
+    action: string
+  }
+}) => {
+  const tone = {
+    GOOD: {
+      border: 'border-[#4ecca3]/25',
+      bg: 'bg-[rgba(78,204,163,0.08)]',
+      text: 'text-[#92f0cf]',
+      dot: 'bg-[#4ecca3]',
+    },
+    WATCH: {
+      border: 'border-[#e8a838]/25',
+      bg: 'bg-[rgba(232,168,56,0.08)]',
+      text: 'text-[#f6d27d]',
+      dot: 'bg-[#e8a838]',
+    },
+    RISK: {
+      border: 'border-[#f87171]/25',
+      bg: 'bg-[rgba(248,113,113,0.08)]',
+      text: 'text-[#ffb4b4]',
+      dot: 'bg-[#f87171]',
+    },
+  }[warning.severity]
+
+  return (
+    <div className={`rounded-[24px] border ${tone.border} ${tone.bg} p-4`}>
+      <div className="flex items-start gap-3">
+        <span className={`mt-1 h-2.5 w-2.5 rounded-full ${tone.dot}`} />
+        <div className="min-w-0">
+          <p className={`font-ui text-sm font-bold ${tone.text}`}>{warning.title}</p>
+          <p className="mt-1 text-sm leading-6 text-secondary">{warning.message}</p>
+          <p className="mt-3 rounded-2xl border border-white/10 bg-[#160d0a] px-3 py-2 text-xs leading-5 text-primary">
+            {warning.action}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const MarketInsightCard = ({
+  insight,
+}: {
+  insight: {
+    title: string
+    message: string
+    metricLabel: string
+    metricValue: string
+  }
+}) => (
+  <div className="relative overflow-hidden rounded-[26px] border border-white/10 bg-[#1c120e] p-4">
+    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(232,168,56,0.12),transparent_34%)]" />
+    <div className="relative">
+      <div className="mb-3 inline-flex rounded-full border border-[#e8a838]/25 bg-[#e8a838]/10 px-2.5 py-1 text-[10px] font-ui font-bold uppercase tracking-[0.1em] text-[#f6d27d]">
+        {insight.metricLabel}: {insight.metricValue}
+      </div>
+      <p className="font-ui text-base font-bold text-primary">{insight.title}</p>
+      <p className="mt-2 text-sm leading-6 text-secondary">{insight.message}</p>
+    </div>
+  </div>
+)
+
+const DebtorTrustCard = ({
+  debtor,
+}: {
+  debtor: {
+    customerName: string
+    balance: number
+    score: number
+    risk: 'LOW' | 'MEDIUM' | 'HIGH'
+    daysOverdue: number
+    recommendation: string
+  }
+}) => {
+  const tone = debtor.risk === 'LOW'
+    ? { text: 'text-[#92f0cf]', border: 'border-[#4ecca3]/25', fill: '#4ecca3' }
+    : debtor.risk === 'MEDIUM'
+      ? { text: 'text-[#f6d27d]', border: 'border-[#e8a838]/25', fill: '#e8a838' }
+      : { text: 'text-[#ffb4b4]', border: 'border-[#f87171]/25', fill: '#f87171' }
+
+  return (
+    <div className={`rounded-[24px] border ${tone.border} bg-[#1c120e] p-4`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-ui text-sm font-bold text-primary">{debtor.customerName}</p>
+          <p className="mt-1 text-xs text-secondary">{fmtMoney(debtor.balance)} still outstanding</p>
+        </div>
+        <div className="text-right">
+          <p className={`font-display text-3xl font-bold wonky ${tone.text}`}>{debtor.score}</p>
+          <p className="label-base">trust</p>
+        </div>
+      </div>
+      <div className="mt-3 h-2 rounded-full bg-white/8">
+        <div className="h-2 rounded-full" style={{ width: `${debtor.score}%`, background: tone.fill }} />
+      </div>
+      <p className="mt-3 text-xs leading-5 text-secondary">
+        {debtor.daysOverdue > 0 ? `${debtor.daysOverdue} day${debtor.daysOverdue === 1 ? '' : 's'} overdue. ` : ''}
+        {debtor.recommendation}
+      </p>
+    </div>
+  )
+}
+
 export const InsightsPage = () => {
   const trader = useAuthStore((state) => state.trader)
   const isOwner = trader?.role !== 'SALESPERSON'
@@ -174,6 +284,87 @@ export const InsightsPage = () => {
           </div>
         ) : (
           <>
+            <section className="grid grid-cols-1 gap-3 xl:grid-cols-[0.85fr_1.15fr]">
+              <div className="relative overflow-hidden rounded-[28px] border border-[#e8a838]/20 bg-[#1c120e] p-5">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(232,168,56,0.16),transparent_34%),linear-gradient(135deg,rgba(196,98,45,0.12),transparent_45%)]" />
+                <div className="relative">
+                  <p className="label-base mb-2">Daily Close Ritual</p>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="font-display text-3xl font-bold leading-[0.95] text-primary wonky">
+                        {business.dayCloseRitual.title}
+                      </h2>
+                      <p className="mt-2 text-sm leading-6 text-secondary">{business.dayCloseRitual.message}</p>
+                    </div>
+                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-[#e8a838]/25 bg-[#231510]">
+                      <span className="font-display text-2xl font-bold text-[#f6d27d] wonky">
+                        {business.dayCloseRitual.readinessPercent}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-1 gap-2">
+                    {business.dayCloseRitual.checks.map((check) => (
+                      <div key={check.label} className="rounded-2xl border border-white/10 bg-[#160d0a] px-3.5 py-3">
+                        <div className="flex items-start gap-3">
+                          <span className={`mt-1 h-2.5 w-2.5 rounded-full ${check.complete ? 'bg-[#4ecca3]' : 'bg-[#e8a838]'}`} />
+                          <div>
+                            <p className="font-ui text-sm font-bold text-primary">{check.label}</p>
+                            <p className="mt-0.5 text-xs leading-5 text-secondary">{check.message}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-white/10 bg-[#1c120e] p-5">
+                <SectionTitle
+                  eyebrow="Smart Warnings"
+                  title="What TradeBook Wants You To Notice"
+                  note="These warnings translate raw records into clear action points before problems become expensive."
+                />
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {business.smartWarnings.map((warning) => (
+                    <SmartWarningCard key={warning.id} warning={warning} />
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <SectionTitle
+                eyebrow="Market Reading"
+                title="Human Insights, Not Just Charts"
+                note="TradeBook turns sales, product, and cashflow movement into plain-language business readings."
+              />
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {business.marketInsights.map((insight) => (
+                  <MarketInsightCard key={insight.id} insight={insight} />
+                ))}
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <SectionTitle
+                eyebrow="Credit Intelligence"
+                title="Debtor Trust Score"
+                note="A simple confidence signal for deciding who deserves credit, who needs reminders, and who should pause."
+              />
+              {business.debtorTrustScores.length === 0 ? (
+                <div className="rounded-[28px] border border-white/10 bg-[#1c120e] px-5 py-5">
+                  <p className="text-sm text-secondary">No active debtor risk right now. That is a clean place to be.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  {business.debtorTrustScores.slice(0, 4).map((debtor) => (
+                    <DebtorTrustCard key={debtor.debtorId} debtor={debtor} />
+                  ))}
+                </div>
+              )}
+            </section>
+
             <section className="space-y-3">
               <SectionTitle
                 eyebrow="Margin View"

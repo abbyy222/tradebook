@@ -156,6 +156,16 @@ savingsRouter.post('/:id/verify/confirm', enforceModuleWritable('SAVINGS'), asyn
   }
 })
 
+savingsRouter.post('/:id/withdraw', enforceModuleWritable('SAVINGS'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    const result = await savingsService.withdrawSavingsEntry(id, req.trader!.traderId, req.trader!.role)
+    res.status(200).json({ data: result, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
 savingsRouter.patch('/target', enforceModuleWritable('SAVINGS'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = updateSavingsTargetSchema.parse(req.body)
